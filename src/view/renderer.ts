@@ -13,6 +13,9 @@ import { applyCameraPose, cameraPose } from './camera';
 import type { PrizeVisualSpec } from './prizes';
 import { applyFrame, createSceneGraph, updateAim, type SceneGraph, type SceneStats } from './scene';
 import type { ReticleResult } from './aim';
+import type { ShotClass } from './classify';
+import { createEffects, type Effects, type EffectsHud } from './effects';
+import { createDomHud, type DomHud } from './hud';
 
 export interface ThreeRendererDeps {
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
@@ -22,6 +25,16 @@ export interface ThreeRendererDeps {
   readonly pixelRatio?: number;
   /** Cork radius from the live tuning; reticle pick proxies are inflated by it. */
   readonly corkRadius?: number;
+  /** Translates `fx.*` i18n keys for the off-screen arrows / chain banner (UI/QA's translator). */
+  readonly translate?: (key: string, params?: Record<string, string | number>) => string;
+  /** Replaces the default DOM HUD (tests). `false` disables it. */
+  readonly hud?: EffectsHud | false;
+  /**
+   * Called from present(), after settlement, with the pure classification of the
+   * confirmed summary. The app may play the miss / nearMiss UiCue from here so
+   * it can never fire before the shot has settled (AC27).
+   */
+  readonly onSettled?: (cls: ShotClass, summary: ShotSummary) => void;
 }
 
 export interface ThreeRenderer extends Renderer {
@@ -48,6 +61,20 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   let last: ReticleResult | null = null;
   let disposed = false;
 
+  const domHud: DomHud | null = deps.hud === undefined ? createDomHud(canvas, deps.translate ? { translate: deps.translate } : {}) : null;
+  const hud: EffectsHud | undefined = deps.hud === false ? undefined : (deps.hud ?? domHud ?? undefined);
+  const fx: Effects = createEffects({
+    layer: graph.effectsLayer,
+    layout,
+    shopkeeperParts: graph.booth.shopkeeper,
+    prizeObject: (id) => graph.prizes.get(id)?.mesh ?? null,
+    projectilePosition: (id) => graph.projectiles.get(id)?.position ?? null,
+    camera: () => camera,
+    size: () => ({ width, height }),
+    ...(hud ? { hud } : {}),
+    ...(deps.onSettled ? { onClassified: deps.onSettled } : {}),
+  });
+
   return {
     graph,
     render(frame: SimulationFrame, view: ViewState): void {
@@ -55,11 +82,13 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       applyFrame(graph, frame);
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height), width / height);
       last = updateAim(graph, view);
+      fx.handleEvents(frame.events, frame.simTimeSec);
+      fx.update(frame.simTimeSec);
       webgl.render(graph.scene, camera);
     },
-    present(_summary: ShotSummary, _options: PresentOptions): Promise<void> {
-      // Task 12 adds result effects. Skipping is presentation-only.
-      return Promise.resolve();
+    present(summary: ShotSummary, options: PresentOptions): Promise<void> {
+      // Settle effects. Skipping is presentation-only: it never changes what happened.
+      return fx.present(summary, options);
     },
     resize(w: number, h: number): void {
       if (disposed) return;
@@ -72,6 +101,8 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      fx.dispose();
+      domHud?.dispose();
       graph.dispose();
       webgl.dispose();
     },
