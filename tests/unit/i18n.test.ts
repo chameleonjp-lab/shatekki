@@ -154,11 +154,10 @@ describe('content (100 prizes, 100 sets, 100 hints)', () => {
     expect(HINT_IS_PROTOTYPE).toBe(true);
     expect(candidates.sets.every((s) => s.hint_ja === null)).toBe(true);
   });
-  it('locales without content translation fall back to English and are reported as follow-up', () => {
-    expect(prizeName('fr', 'P002')).toBe(prizeName('en', 'P002'));
+  it('all 15 locales are covered, no follow-up (see i18n-content.test.ts)', () => {
     const cov = contentCoverage();
-    expect(cov.complete).toEqual(['ja', 'en']);
-    expect(cov.followUp).toHaveLength(13);
+    expect(cov.complete).toHaveLength(15);
+    expect(cov.followUp).toHaveLength(0);
   });
   it('changing language does not change ids (ids are stable keys)', () => {
     expect(PRIZE_IDS[0]).toBe('P001');
