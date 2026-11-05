@@ -10,7 +10,7 @@
  * this value and nothing else: there is NO hidden extra offset.
  */
 import type { AimAngles, BoothLayout, RunState, TuningConfig, Vec3 } from '../contracts';
-import { BOOTH_LAYOUT } from '../contracts';
+import { BOOTH_LAYOUT, aimDirection, muzzlePosition } from '../contracts';
 
 const TAU = Math.PI * 2;
 
@@ -73,26 +73,12 @@ export function effectiveAim(state: SwayInput & Pick<RunState, 'aim'>, tuning: T
   return { yaw: state.aim.yaw + s.yaw, pitch: state.aim.pitch + s.pitch };
 }
 
-/** Muzzle position for a stand position. */
+/** Muzzle position for a stand position (shared convention in src/contracts/aim.ts). */
 export function muzzleAt(standX: number, layout: BoothLayout = BOOTH_LAYOUT): Vec3 {
-  return { x: standX, y: layout.camera.muzzle.y, z: layout.camera.muzzle.z };
+  return muzzlePosition(layout, standX);
 }
 
-/**
- * Unit direction for an aim. Zero aim points from the muzzle to the aim target
- * (both at the stand x); yaw turns about +y (positive = right), pitch about the
- * horizontal axis (positive = up), added to the zero-aim elevation.
- */
+/** Unit direction for an aim (shared convention in src/contracts/aim.ts). */
 export function aimToDirection(standX: number, aim: AimAngles, layout: BoothLayout = BOOTH_LAYOUT): Vec3 {
-  const m = muzzleAt(standX, layout);
-  const t = layout.camera.aimTarget;
-  const dx = 0; // aim target shares the stand x
-  const dy = t.y - m.y;
-  const dz = t.z - m.z;
-  const baseYaw = Math.atan2(dx, -dz);
-  const basePitch = Math.atan2(dy, Math.hypot(dx, dz));
-  const yaw = baseYaw + aim.yaw;
-  const pitch = basePitch + aim.pitch;
-  const cp = Math.cos(pitch);
-  return { x: Math.sin(yaw) * cp, y: Math.sin(pitch), z: -Math.cos(yaw) * cp };
+  return aimDirection(layout, standX, aim);
 }

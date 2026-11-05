@@ -269,7 +269,11 @@ function buildHidden(t: HiddenTargetGeometry, mat: THREE.Material): THREE.Mesh {
 
 // ----------------------------------------------------------------------- main
 
-export function buildBooth(layout: BoothLayout): BoothBuild {
+/**
+ * @param pickInflate collision proxies are grown by this much (the cork radius) so a
+ *   ray along the cork centre meets them exactly where the swept sphere would.
+ */
+export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
   const lit = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
@@ -314,7 +318,8 @@ export function buildBooth(layout: BoothLayout): BoothBuild {
   const proxies = new THREE.Group();
   proxies.name = 'collision-proxies';
   const addProxy = (id: string, b: Box3) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(...size(b)), proxyMat);
+    const [sx, sy, sz] = size(b);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx + 2 * pickInflate, sy + 2 * pickInflate, sz + 2 * pickInflate), proxyMat);
     m.position.set(...pos(b));
     m.name = `proxy:${id}`;
     m.updateMatrixWorld(true);

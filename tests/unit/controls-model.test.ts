@@ -13,7 +13,10 @@ function state(over: Partial<RunState> = {}): RunState {
     playerName: null, seed: 1, ...over,
   };
 }
-const view = (over: Partial<ViewState> = {}): ViewState => ({ phase: 'position', standX: 0, effectiveAim: { yaw: 0, pitch: 0 }, loadingBar: null, paused: false, ...over });
+const view = (over: Partial<ViewState> = {}): ViewState => ({
+  phase: 'position', standX: 0, effectiveAim: { yaw: 0, pitch: 0 }, loadingBar: null, paused: false,
+  ballistic: { speed: 11, gravity: 5.9, fixedStepSec: 1 / 120, bulletType: 'standard' }, ...over,
+});
 
 describe('minimal controls model (Task 07)', () => {
   it('maps each phase to a panel mode with a defined hint', () => {

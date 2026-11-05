@@ -1,5 +1,6 @@
 /** Projectile state and damage / impulse formulas (Task 05, shot-pipeline.md §2). */
 import type { BulletType, LoadResult, ProjectileId, TuningConfig, Vec3 } from '../contracts';
+import { ballisticFor } from '../contracts';
 
 export interface Projectile {
   readonly id: ProjectileId;
@@ -21,7 +22,7 @@ export function reflectionLimitFor(p: Pick<Projectile, 'bulletType'>, tuning: Tu
 }
 
 export function initialSpeed(bulletType: BulletType, tuning: TuningConfig): number {
-  return tuning.cork.speed * tuning.bulletTypes[bulletType].speed;
+  return ballisticFor(tuning, bulletType).speed;
 }
 
 /** damage = baseDamage x load x bullet x power x (speed / initial speed), speed ratio capped at 1. */

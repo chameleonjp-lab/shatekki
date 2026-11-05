@@ -83,7 +83,8 @@ const toBox = (b: { center: { x: number; y: number; z: number }; halfExtents: { 
 // -------------------------------------------------------------------- booth
 
 describe('view: booth matches BOOTH_LAYOUT', () => {
-  const graph = createSceneGraph({ layout: BOOTH_LAYOUT, resolvePrize });
+  // corkRadius 0: exact layout boxes (the app inflates them by the cork radius; see the next test).
+  const graph = createSceneGraph({ layout: BOOTH_LAYOUT, resolvePrize, corkRadius: 0 });
 
   it('keeps one exact invisible proxy box per layout collider, at the layout position', () => {
     const L = BOOTH_LAYOUT;
@@ -385,7 +386,7 @@ describe('view: reticle shows exactly the aimed direction', () => {
   });
 
   it('puts the reticle exactly on origin + direction * distance, on the first geometry hit', () => {
-    const g = createSceneGraph({ layout: L, resolvePrize });
+    const g = createSceneGraph({ layout: L, resolvePrize, corkRadius: 0 });
     applyFrame(g, frame([]));
     for (const aim of [{ yaw: 0, pitch: 0 }, { yaw: 0.15, pitch: -0.1 }, { yaw: -0.3, pitch: 0.3 }]) {
       const standX = 0.2;
@@ -398,6 +399,19 @@ describe('view: reticle shows exactly the aimed direction', () => {
     // straight ahead with an empty shelf: the back wall inner face
     const straight = computeReticle(L, 0, { yaw: 0, pitch: 0 }, g.pickTargets());
     expect(straight.point.z).toBeCloseTo(-2.45, 6);
+    g.dispose();
+  });
+
+  it('inflates pick proxies by the cork radius so the reticle marks the cork centre at contact', () => {
+    const r = 0.011;
+    const g = createSceneGraph({ layout: L, resolvePrize, corkRadius: r });
+    applyFrame(g, frame([]));
+    const straight = computeReticle(L, 0, { yaw: 0, pitch: 0 }, g.pickTargets());
+    expect(straight.point.z).toBeCloseTo(-2.45 + r, 6);
+    const wall = g.booth.proxies.getObjectByName('proxy:back-wall')!;
+    const size = worldBox(wall).getSize(new THREE.Vector3());
+    const back = L.surfaces.find((x) => x.id === 'back-wall')!;
+    expect(size.z).toBeCloseTo(back.box.halfExtents.z * 2 + 2 * r, 6);
     g.dispose();
   });
 

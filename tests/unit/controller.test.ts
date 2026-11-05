@@ -15,7 +15,12 @@ import {
 } from '../../src/contracts';
 
 // Fakes only: these tests check the controller's wiring, not game rules.
-const tuning = { valueStatus: 'prototype' } as unknown as TuningConfig;
+const tuning = {
+  valueStatus: 'prototype',
+  cork: { speed: 11, gravityScale: 0.6 },
+  bulletTypes: { standard: { speed: 1 }, heavy: { speed: 0.85 }, bouncy: { speed: 1 } },
+  limits: { fixedStepSec: 1 / 120 },
+} as unknown as TuningConfig;
 const catalog = { rulesVersion: 'test', prizes: new Map(), sets: new Map() } as RuntimeCatalog;
 
 function baseState(over: Partial<RunState> = {}): RunState {

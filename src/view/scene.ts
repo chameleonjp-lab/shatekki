@@ -8,7 +8,7 @@
  *  - the view never writes into the sim and never derives points.
  */
 import * as THREE from 'three';
-import type { BoothLayout, ImpactTarget, PrizeTypeId, SimulationFrame, ViewState } from '../contracts';
+import type { BoothLayout, CollisionShape, ImpactTarget, PrizeTypeId, SimulationFrame, ViewState } from '../contracts';
 import { aimDirection, computeReticle, muzzlePosition, type ReticleResult } from './aim';
 import { Kit, ROT_X, mergeParts } from './assets/kit';
 import { C } from './assets/prize-recipes';
@@ -18,12 +18,23 @@ import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec
 export interface SceneGraphDeps {
   readonly layout: BoothLayout;
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
+  /**
+   * Cork radius (m). Reticle pick proxies (layout boxes and prize colliders) are
+   * inflated by it, so the reticle marks where the sim's swept-sphere cork
+   * really makes contact. Defaults to the prototype radius.
+   */
+  readonly corkRadius?: number;
 }
+
+/** Prototype cork radius (src/catalog/config.ts); the app passes the live tuning value. */
+export const DEFAULT_PICK_CORK_RADIUS = 0.011;
 
 export interface PrizeNode {
   readonly instanceId: string;
   typeId: string;
   mesh: THREE.Mesh;
+  /** Invisible collider-shaped pick proxy (shape inflated by the cork radius). */
+  proxy: THREE.Mesh;
 }
 
 interface Flash {
@@ -50,7 +61,7 @@ export interface SceneGraph {
   readonly reticle: THREE.Group;
   readonly prizes: Map<string, PrizeNode>;
   readonly projectiles: Map<string, THREE.Group>;
-  /** Raycast targets for the reticle: exact layout boxes + visible prize meshes. */
+  /** Raycast targets for the reticle: layout boxes + prize collider shapes, both inflated by the cork radius. */
   pickTargets(): THREE.Object3D[];
   stats(): SceneStats;
   dispose(): void;
@@ -60,6 +71,9 @@ export interface SceneGraph {
 
 interface GraphInternals {
   readonly resolvePrize: SceneGraphDeps['resolvePrize'];
+  readonly proxyLayer: THREE.Group;
+  readonly proxyMaterial: THREE.Material;
+  readonly pickInflate: number;
   readonly factory: PrizeVisualFactory;
   readonly flashes: Flash[];
   readonly handledEvents: Set<string>;
@@ -136,11 +150,26 @@ function buildFlashPool(layer: THREE.Group): Flash[] {
   return out;
 }
 
+/** Collider-shaped pick geometry (Rapier cylinders/capsules are along y, like three.js). */
+function pickProxyGeometry(shape: CollisionShape, inflate: number): THREE.BufferGeometry {
+  switch (shape.kind) {
+    case 'box':
+      return new THREE.BoxGeometry(2 * (shape.halfExtents.x + inflate), 2 * (shape.halfExtents.y + inflate), 2 * (shape.halfExtents.z + inflate));
+    case 'cylinder':
+      return new THREE.CylinderGeometry(shape.radius + inflate, shape.radius + inflate, 2 * (shape.halfHeight + inflate), 16);
+    case 'capsule':
+      return new THREE.CapsuleGeometry(shape.radius + inflate, 2 * shape.halfHeight, 4, 12);
+    case 'ball':
+      return new THREE.SphereGeometry(shape.radius + inflate, 16, 12);
+  }
+}
+
 export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const { layout } = deps;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1d1424); // dusk indigo; the stall fills the view
-  const booth = buildBooth(layout);
+  const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
+  const booth = buildBooth(layout, pickInflate);
   scene.add(booth.group, booth.proxies);
   for (const l of booth.lights) scene.add(l);
 
@@ -154,8 +183,15 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const reticle = buildReticle();
   scene.add(prizeLayer, projectileLayer, effectsLayer, gun, reticle);
 
+  const proxyLayer = new THREE.Group();
+  proxyLayer.name = 'prize-pick-proxies';
+  scene.add(proxyLayer);
+
   const internals: GraphInternals = {
     resolvePrize: deps.resolvePrize,
+    proxyLayer,
+    proxyMaterial: new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
+    pickInflate,
     factory: createPrizeVisualFactory(),
     flashes: buildFlashPool(effectsLayer),
     handledEvents: new Set(),
@@ -184,7 +220,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     internals,
     pickTargets() {
       const out: THREE.Object3D[] = [...booth.proxies.children];
-      for (const n of prizes.values()) if (n.mesh.visible) out.push(n.mesh);
+      for (const n of prizes.values()) if (n.mesh.visible) out.push(n.proxy);
       return out;
     },
     stats() {
@@ -204,6 +240,8 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     },
     dispose() {
       booth.dispose();
+      for (const n of prizes.values()) n.proxy.geometry.dispose();
+      internals.proxyMaterial.dispose();
       internals.factory.dispose();
       internals.corkGeo.dispose();
       internals.trailGeo.dispose();
@@ -278,21 +316,30 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
       const mesh = it.factory.createMesh(spec);
       mesh.name = `prize:${id}`;
       mesh.userData = { instanceId: id, typeId: p.typeId };
+      const proxy = new THREE.Mesh(pickProxyGeometry(spec.shape, it.pickInflate), it.proxyMaterial);
+      proxy.name = `pick:${id}`;
       if (node) {
         graph.prizeLayer.remove(node.mesh); // transformed: same individual, new look
+        it.proxyLayer.remove(node.proxy);
+        node.proxy.geometry.dispose();
         node.mesh = mesh;
+        node.proxy = proxy;
         node.typeId = p.typeId;
       } else {
-        node = { instanceId: id, typeId: p.typeId, mesh };
+        node = { instanceId: id, typeId: p.typeId, mesh, proxy };
         graph.prizes.set(id, node);
         created++;
       }
       graph.prizeLayer.add(mesh);
+      it.proxyLayer.add(proxy);
     }
     const m = node.mesh;
     m.position.set(p.position.x, p.position.y, p.position.z);
     m.quaternion.set(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
     m.updateMatrixWorld(true);
+    node.proxy.position.copy(m.position);
+    node.proxy.quaternion.copy(m.quaternion);
+    node.proxy.updateMatrixWorld(true);
     const show = !p.collected;
     if (!show && m.visible) hidden++;
     m.visible = show;
@@ -300,6 +347,8 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
   for (const [id, node] of graph.prizes) {
     if (!seen.has(id)) {
       graph.prizeLayer.remove(node.mesh);
+      it.proxyLayer.remove(node.proxy);
+      node.proxy.geometry.dispose();
       graph.prizes.delete(id);
       removed++;
     }
@@ -368,11 +417,11 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
 const GUN_PHASES = new Set(['position', 'loading', 'aiming']);
 
 /** Place the gun and the 3D reticle for the effective aim. Returns the reticle ray result. */
-export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'>): ReticleResult {
+export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic'>>): ReticleResult {
   const { layout } = graph;
   graph.prizeLayer.updateMatrixWorld(true);
   graph.booth.proxies.updateMatrixWorld(true);
-  const r = computeReticle(layout, view.standX, view.effectiveAim, graph.pickTargets());
+  const r = computeReticle(layout, view.standX, view.effectiveAim, graph.pickTargets(), 6, view.ballistic);
 
   const m = muzzlePosition(layout, view.standX);
   const dir = aimDirection(layout, view.standX, view.effectiveAim);

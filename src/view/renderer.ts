@@ -20,6 +20,8 @@ export interface ThreeRendererDeps {
   readonly layout?: BoothLayout;
   /** Defaults to window.devicePixelRatio (capped at 2). */
   readonly pixelRatio?: number;
+  /** Cork radius from the live tuning; reticle pick proxies are inflated by it. */
+  readonly corkRadius?: number;
 }
 
 export interface ThreeRenderer extends Renderer {
@@ -38,7 +40,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   webgl.shadowMap.enabled = false;
   webgl.outputColorSpace = THREE.SRGBColorSpace;
 
-  const graph = createSceneGraph({ layout, resolvePrize: deps.resolvePrize });
+  const graph = createSceneGraph({ layout, resolvePrize: deps.resolvePrize, ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}) });
   const camera = new THREE.PerspectiveCamera(60, 0.5, 0.05, 30);
   let width = Math.max(1, canvas.clientWidth || 402);
   let height = Math.max(1, canvas.clientHeight || 874);

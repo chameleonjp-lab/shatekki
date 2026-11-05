@@ -10,6 +10,7 @@
  *  - Presentation skipping never changes the sim or settlement.
  */
 import {
+  ballisticFor,
   parseCommand,
   type AimAngles,
   type BoothLayout,
@@ -106,6 +107,7 @@ export class GameController {
       effectiveAim: this.deps.rules.effectiveAim(s, this.deps.tuning),
       loadingBar: s.phase === 'loading' ? this.deps.rules.loadingBarValue(s, this.deps.tuning) : null,
       paused: s.pauseReasons.length > 0,
+      ballistic: ballisticFor(this.deps.tuning, s.bulletType),
     };
   }
 

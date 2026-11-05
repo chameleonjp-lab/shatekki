@@ -4,6 +4,7 @@
  */
 import type { ShotSummary, SimEvent, SimulationFrame } from './events';
 import type { AimAngles, FinalResult, Phase } from './game';
+import type { BallisticSpec } from './aim';
 
 /** What the camera/HUD needs besides the physics frame. */
 export interface ViewState {
@@ -14,6 +15,8 @@ export interface ViewState {
   /** 0..1 loading bar position while loading. */
   readonly loadingBar: number | null;
   readonly paused: boolean;
+  /** Cork speed/gravity for the next shot, so the reticle shows where the cork really goes. */
+  readonly ballistic: BallisticSpec;
 }
 
 export interface PresentOptions {

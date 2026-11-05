@@ -10,7 +10,7 @@ export const CONTACT_DEDUPE_SEC = 0.05;
 export const TANGENTIAL_KEEP = 0.9;
 /** A cork slower than this after a bounce has stopped. */
 export const CORK_STOP_SPEED = 0.25;
-export const GRAVITY = 9.81;
+export { GRAVITY_MPS2 as GRAVITY } from '../contracts';
 
 /** Multiplier on the cork's restitution per material (1 = baseline wood). */
 const BOUNCE: Readonly<Record<SurfaceMaterial | PrizeMaterial, number>> = {
