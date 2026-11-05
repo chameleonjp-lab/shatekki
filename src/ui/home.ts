@@ -98,6 +98,8 @@ export interface HomeDeps {
   readonly onStart: (playerName: string | null) => void;
   readonly onNameChange: (draft: string) => void;
   readonly onAudioChange: (audio: AudioSettings) => void;
+  /** Open the set book (図鑑). The button is shown only when provided. */
+  readonly onOpenSetBook?: () => void;
   /** Defaults to window.open. */
   readonly open?: OpenWindow;
   readonly writeText?: WriteText | undefined;
@@ -127,15 +129,24 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
   const rankingNote = el('span', { class: 'btn-note' });
   const share = el('button', { class: 'btn x-share', attrs: { type: 'button' } });
   const settingsBtn = el('button', { class: 'btn', attrs: { type: 'button' } });
+  const bookBtn = el('button', { class: 'btn', attrs: { type: 'button' } });
   const shareStatus = el('p', { class: 'note', attrs: { role: 'status' } });
   const manual = el('textarea', { class: 'manual-copy', attrs: { readonly: 'true', rows: '4' } });
+  // Stable hooks for browser automation (never used by game logic).
+  start.dataset.testid = 'home-start';
+  nameInput.dataset.testid = 'home-name';
+  howto.dataset.testid = 'home-howto';
+  rankingBtn.dataset.testid = 'home-ranking';
+  share.dataset.testid = 'home-share';
+  settingsBtn.dataset.testid = 'home-settings';
+  bookBtn.dataset.testid = 'home-setbook';
 
   const overlays = el('div', { class: 'overlays' });
   const col = el('main', { class: 'scr-col' }, [
     title, tagline, proto,
     el('div', { class: 'name-block' }, [nameLabel, el('div', { class: 'input-row' }, [nameInput, counter]), explain, fixed, nameErr]),
     best,
-    el('div', { class: 'btn-grid' }, [howto, el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]), share, settingsBtn]),
+    el('div', { class: 'btn-grid' }, [howto, el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]), share, settingsBtn, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
     shareStatus, manual,
   ]);
   const startBar = el('div', { class: 'sticky-bar' }, [start]);
@@ -173,6 +184,7 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
     setHidden(rankingNote, vm.ranking.note === null);
     setText(share, vm.shareLabel);
     setText(settingsBtn, vm.settingsLabel);
+    setText(bookBtn, translate(deps.i18n.locale, 'setbook.title'));
     if (howtoWrap) renderHowto();
   }
 
@@ -226,6 +238,7 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
   });
   howto.addEventListener('click', openHowto);
   settingsBtn.addEventListener('click', openSettings);
+  bookBtn.addEventListener('click', () => deps.onOpenSetBook?.());
   rankingBtn.addEventListener('click', () => {
     const url = vm.ranking.url;
     if (url) open(url);

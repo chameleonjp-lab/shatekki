@@ -239,6 +239,8 @@ export interface ResultDeps {
   readonly onRetrySubmit: () => void;
   /** Reload the top 30. */
   readonly onRetryTop: () => void;
+  /** Open the set book (図鑑). The button is shown only when provided. */
+  readonly onOpenSetBook?: () => void;
   readonly open?: OpenWindow;
   readonly writeText?: WriteText | undefined;
 }
@@ -282,6 +284,17 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   const topMsg = el('p', { class: 'note', attrs: { role: 'status' } });
   const topRetry = el('button', { class: 'btn', attrs: { type: 'button' } });
   const topList = el('ol', { class: 'top-list' });
+  const bookBtn = el('button', { class: 'btn', attrs: { type: 'button' } });
+  // Stable hooks for browser automation (never used by game logic).
+  heroValue.dataset.testid = 'result-score';
+  retry.dataset.testid = 'result-retry';
+  home.dataset.testid = 'result-home';
+  rankingBtn.dataset.testid = 'result-ranking';
+  share.dataset.testid = 'result-share';
+  submitMsg.dataset.testid = 'result-submit';
+  topMsg.dataset.testid = 'result-top';
+  bookBtn.dataset.testid = 'result-setbook';
+  chainValue.dataset.testid = 'result-chain';
 
   const heroSec = el('section', { class: 'sec hero' }, [heroLabel, el('div', { class: 'hero-row' }, [heroValue, heroUnit]), newBest, best, prevBest, rank]);
   const actionsSec = el('section', { class: 'sec actions' }, [
@@ -292,7 +305,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   const col = el('main', { class: 'scr-col' }, [
     title, notice, heroSec, actionsSec,
     el('section', { class: 'sec' }, [prizesTitle, prizesBody]),
-    el('section', { class: 'sec' }, [setsTitle, setsBody]),
+    el('section', { class: 'sec' }, [setsTitle, setsBody, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
     el('section', { class: 'sec' }, [chainTitle, chainValue, shots]),
     el('section', { class: 'sec' }, [bdTitle, bdBody, bdNote]),
     el('section', { class: 'sec' }, [submitMsg, storageWarn, submitRetry]),
@@ -323,6 +336,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     setText(rank, vm.rankText ?? '');
     setHidden(rank, vm.rankText === null);
     setText(retry, vm.actions.retry.label);
+    setText(bookBtn, translate(deps.i18n.locale, 'setbook.title'));
     setText(home, vm.actions.home.label);
     setText(rankingBtn, vm.actions.ranking.label);
     rankingBtn.disabled = !vm.actions.ranking.enabled;
@@ -384,6 +398,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   });
   submitRetry.addEventListener('click', () => deps.onRetrySubmit());
   topRetry.addEventListener('click', () => deps.onRetryTop());
+  bookBtn.addEventListener('click', () => deps.onOpenSetBook?.());
 
   const unsub = deps.i18n.subscribe(refresh);
   refresh();
