@@ -1,33 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { PROTOTYPE_TUNING } from '../../src/catalog/config';
-import { PROTOTYPE_CATALOG } from '../../src/catalog/runtime-config';
-import { createRun } from '../../src/core/state';
-import { reduceGame, tickRun, type GameContext } from '../../src/core/transitions';
+import { tickRun } from '../../src/core/transitions';
+import { T, newRun, send, tick, toAiming } from './helpers';
 import { aimToDirection, effectiveAim } from '../../src/core/aim';
-import { BOOTH_LAYOUT, mintId, type GameCommand, type RunState } from '../../src/contracts';
-
-const T = PROTOTYPE_TUNING;
-const ctx: GameContext = { tuning: T };
-
-export function newRun(seed = 1): RunState {
-  return createRun({ runId: mintId.run('run-test'), seed, tuning: T, playerName: null }, PROTOTYPE_CATALOG);
-}
-const send = (s: RunState, c: GameCommand): RunState => reduceGame(s, c, ctx);
-function tick(s: RunState, sec: number): RunState {
-  let out = s;
-  let left = sec;
-  while (left > 1e-9) {
-    const dt = Math.min(0.05, left);
-    out = tickRun(out, dt, T);
-    left -= dt;
-  }
-  return out;
-}
-export function toAiming(s: RunState): RunState {
-  let out = send(s, { type: 'CONFIRM_POSITION' });
-  out = tick(out, 0.595);
-  return send(out, { type: 'STOP_LOAD' });
-}
+import { BOOTH_LAYOUT, mintId } from '../../src/contracts';
 
 describe('createRun', () => {
   it('starts with 10 ammo, 9 distinct prizes in the 9 slots, phase position', () => {
