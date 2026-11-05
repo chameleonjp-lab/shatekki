@@ -14,6 +14,9 @@ import { PROTOTYPE_TUNING } from './catalog/config';
 import { PROTOTYPE_CATALOG } from './catalog/runtime-config';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
+import { createProfileStore, createRunStore, STORAGE_KEYS, type RestoreResult, type RunStore } from './persistence';
+import { finalResult } from './core/result';
+import type { KeyValueStorage } from './contracts';
 import { controlsModel } from './ui/controls/model';
 import { t } from './ui/controls/strings';
 
@@ -51,6 +54,44 @@ function newSeed(win: Window): number {
 }
 
 /**
+ * localStorage can be missing or throw (private mode, blocked site data). The
+ * stores treat a throwing storage as "unavailable" and keep the game running
+ * in memory (persistence-design.md §5).
+ */
+function browserStorage(win: Window): KeyValueStorage {
+  let ls: Storage | null = null;
+  try {
+    ls = win.localStorage;
+  } catch {
+    ls = null;
+  }
+  const fail = (): never => {
+    throw new Error('storage unavailable');
+  };
+  return {
+    getItem: (k) => (ls ? ls.getItem(k) : fail()),
+    setItem: (k, v) => (ls ? ls.setItem(k, v) : fail()),
+    removeItem: (k) => (ls ? ls.removeItem(k) : fail()),
+  };
+}
+
+/** Boot-screen notice for what was found in storage. */
+function restoreNotice(r: RestoreResult): string {
+  switch (r.kind) {
+    case 'resume':
+      return '前回のプレイの続きから遊べます。';
+    case 'abandoned':
+      return '前回は撃っている途中で中断されたため、そのプレイは記録されません。';
+    case 'ended':
+      return '前回のプレイは終わっています。';
+    case 'quarantined':
+      return '保存データを読めなかったため、新しく始めます（データは別の場所に残しています）。';
+    case 'none':
+      return '';
+  }
+}
+
+/**
  * Heavy modules (Rapier physics with its embedded wasm, three.js renderer) are
  * split into lazy chunks so the first screen appears quickly on a phone. The
  * download starts right after boot and is awaited when the player starts.
@@ -68,6 +109,13 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const tuning: TuningConfig = PROTOTYPE_TUNING;
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
+
+  const storage = browserStorage(win);
+  const runStore: RunStore = createRunStore(storage, newRunId(win), { catalog, tuning, layout: BOOTH_LAYOUT });
+  const profile = createProfileStore(storage);
+  let restore: RestoreResult = runStore.load();
+  // An abandoned run is shown once and never resumed or ranked (decision 27).
+  if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
 
   const canvas = doc.createElement('canvas');
   canvas.className = 'stage';
@@ -87,10 +135,25 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   start.className = 'btn btn-primary boot-start';
   start.dataset.testid = 'btn-start';
   start.textContent = 'はじめる';
+  const fresh = doc.createElement('button');
+  fresh.type = 'button';
+  fresh.className = 'btn boot-start';
+  fresh.dataset.testid = 'btn-new';
+  fresh.textContent = 'はじめから';
   const status = doc.createElement('p');
   status.className = 'boot-status';
   status.dataset.testid = 'boot-status';
-  boot.append(title, note, start, status);
+  status.textContent = restoreNotice(restore);
+  if (restore.kind === 'resume') start.textContent = '続きから';
+  fresh.hidden = restore.kind !== 'resume';
+  boot.append(title, note, start, fresh, status);
+
+  const stale = doc.createElement('div');
+  stale.className = 'rotate-overlay';
+  stale.dataset.testid = 'stale-overlay';
+  stale.setAttribute('role', 'alert');
+  stale.hidden = true;
+  stale.textContent = 'このプレイは別のタブで続いています。このタブでは操作できません。';
 
   const rotate = doc.createElement('div');
   rotate.className = 'rotate-overlay';
@@ -99,7 +162,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   rotate.hidden = true;
   rotate.textContent = t('rotate');
 
-  root.append(canvas, ui, boot, rotate);
+  root.append(canvas, ui, boot, rotate, stale);
 
   let reasons: PauseReason[] = [];
   let controller: GameController | null = null;
@@ -141,8 +204,20 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const beginRun = (): RunState =>
     CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: null }, catalog);
 
-  const startGame = async () => {
+  const isStale = () => runStore.status().conflict || runStore.isStale();
+  const markStale = () => {
+    if (!isStale()) return false;
+    stale.hidden = false;
+    controller?.dispatch({ type: 'PAUSE', reason: 'manual' });
+    return true;
+  };
+  win.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === STORAGE_KEYS.run) markStale();
+  });
+
+  const startGame = async (resume: boolean) => {
     start.disabled = true;
+    fresh.disabled = true;
     status.textContent = '準備中…';
     try {
       const { sim, view } = await loadHeavyModules();
@@ -164,15 +239,46 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         renderer = null;
         status.textContent = '3D表示を開始できませんでした。お使いのブラウザでは表示できない可能性があります。';
       }
-      const makeController = () =>
-        new GameController({ rules: CORE_RULES, world, renderer, catalog, tuning, layout: BOOTH_LAYOUT, onChange }, beginRun());
-      controller = makeController();
+      const makeController = (initial: RunState) =>
+        new GameController(
+          {
+            rules: CORE_RULES,
+            world,
+            renderer,
+            catalog,
+            tuning,
+            layout: BOOTH_LAYOUT,
+            onChange,
+            // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
+            onShotFired: (s) => {
+              runStore.saveAfterFire(s);
+              markStale();
+            },
+            onCommandApplied: (cmd, s) => {
+              if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
+            },
+            onShotSettled: (summary, s) => {
+              runStore.saveStable(s);
+              if (summary.newlyCompletedSets.length > 0) profile.discoverSets(summary.newlyCompletedSets);
+              if (s.phase === 'ended') profile.recordRunEnd(finalResult(s));
+            },
+          },
+          initial,
+        );
+      const newRun = () => {
+        const s = beginRun();
+        runStore.saveStable(s);
+        return s;
+      };
+      const initial = resume && restore.kind === 'resume' ? restore.state : newRun();
+      restore = { kind: 'none' };
+      controller = makeController(initial);
       panel = mountControls(ui, {
-        dispatch: (cmd) => controller?.dispatch(cmd) ?? false,
+        dispatch: (cmd) => (markStale() ? false : (controller?.dispatch(cmd) ?? false)),
         currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
         currentStandX: () => controller?.current.standX ?? 0,
         onRetry: () => {
-          controller = makeController();
+          controller = makeController(newRun());
           controller.setEnvironmentPause(reasons);
           onChange(controller.snapshot());
         },
@@ -187,9 +293,11 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       console.error('start failed', err);
       status.textContent = '開始できませんでした。ページを再読み込みしてください。';
       start.disabled = false;
+      fresh.disabled = false;
     }
   };
-  start.addEventListener('click', () => void startGame());
+  start.addEventListener('click', () => void startGame(true));
+  fresh.addEventListener('click', () => void startGame(false));
   // Begin downloading the heavy chunks in the background; a failure surfaces on start.
   void loadHeavyModules().catch(() => {
     heavyModules = null;

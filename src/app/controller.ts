@@ -65,6 +65,8 @@ export interface ControllerDeps {
   readonly onShotSettled?: (summary: ShotSummary, state: RunState) => void;
   /** Called right after a FIRE is accepted, before the sim starts (checkpoint hook, Task 10). */
   readonly onShotFired?: (state: RunState) => void;
+  /** Called after any command the rules accepted (e.g. checkpoint after STOP_LOAD). */
+  readonly onCommandApplied?: (command: GameCommand, state: RunState) => void;
 }
 
 /** Largest dt a single frame may advance. Longer gaps (tab hidden, debugger) are not caught up. */
@@ -134,6 +136,7 @@ export class GameController {
         chooseTransform: this.deps.rules.transformChooser(after, this.deps.catalog),
       });
     }
+    this.deps.onCommandApplied?.(command, after);
     this.emit();
     return true;
   }
