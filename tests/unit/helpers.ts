@@ -90,6 +90,30 @@ export function makeRequest(over: Partial<ShotRequest> & { direction: Vec3 }, sh
 }
 export const shotCtx: ShotContext = { runId: mintId.run('run-test'), chooseTransform: () => null };
 
+/** A synthetic record for core-only tests: collects the given instances, everything else stays put. */
+export function syntheticRecord(state: RunState, collectIds: readonly string[], over: Partial<ShotRecord> = {}): ShotRecord {
+  const flight = state.inFlight!;
+  const collected = state.shelf.prizes.filter((p) => collectIds.includes(p.instanceId)).map((p) => ({ instanceId: p.instanceId, typeId: p.typeId }));
+  return {
+    runId: state.runId,
+    shotId: flight.shotId,
+    collected,
+    prizeOutcomes: [],
+    deviceActivations: [],
+    firstHitCandidates: [],
+    transforms: [],
+    endedByLimit: false,
+    remainingPrizes: state.shelf.prizes.filter((p) => !collectIds.includes(p.instanceId)),
+    simTimeSec: 1.5,
+    ...over,
+  };
+}
+
+/** Fire from a fresh state (position -> loading -> aiming -> FIRE). */
+export function fired(state: RunState): RunState {
+  return send(toAiming(state), { type: 'FIRE' });
+}
+
 export interface TimedEvent {
   readonly t: number;
   readonly event: SimEvent;

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { tickRun } from '../../src/core/transitions';
-import { T, newRun, send, tick, toAiming } from './helpers';
+import { resolveShot } from '../../src/core/settlement';
+import { CAT, T, fired, newRun, send, syntheticRecord, tick, toAiming } from './helpers';
 import { aimToDirection, effectiveAim } from '../../src/core/aim';
-import { BOOTH_LAYOUT, mintId } from '../../src/contracts';
+import { BOOTH_LAYOUT, isLedgerEntryConsistent, mintId, type RunState } from '../../src/contracts';
 
 describe('createRun', () => {
   it('starts with 10 ammo, 9 distinct prizes in the 9 slots, phase position', () => {
@@ -200,5 +201,104 @@ describe('time and pause', () => {
     const p = send(a, { type: 'PAUSE', reason: 'hidden' });
     const later = tickRun(tickRun(p, 0.1, T), 0.1, T);
     expect(later.clocks).toEqual(a.clocks);
+  });
+});
+
+describe('settlement and the end of the run', () => {
+  const resolve = (s: RunState, ids: readonly string[], over = {}) => resolveShot(s, syntheticRecord(s, ids, over), CAT, T);
+
+  it('resolves exactly one shot: ledger is consistent, in-flight cleared, back to position with the stand kept', () => {
+    let s = newRun(2);
+    s = send(s, { type: 'SET_POSITION', x: 0.3 });
+    const f = fired(s);
+    const target = f.shelf.prizes[4]!;
+    const { state, summary } = resolve(f, [target.instanceId]);
+    expect(state.phase).toBe('position');
+    expect(state.inFlight).toBeNull();
+    expect(state.standX).toBe(0.3);
+    expect(state.ammo).toBe(9);
+    expect(summary.chainCount).toBe(1);
+    expect(summary.collected[0]?.instanceId).toBe(target.instanceId);
+    expect(isLedgerEntryConsistent(summary.ledger)).toBe(true);
+    expect(summary.ledger.prizePoints).toBe(CAT.prizes.get(target.typeId)!.baseScore);
+    expect(state.score).toBe(summary.ledger.scoreAfter);
+    expect(state.ledger).toHaveLength(1);
+    expect(state.maxChain).toBe(1);
+    expect(state.collectedTypeIds).toEqual([target.typeId]);
+  });
+
+  it('rejects a second resolve of the same record (no double scoring) and a mismatched shot id', () => {
+    const f = fired(newRun(2));
+    const rec = syntheticRecord(f, [f.shelf.prizes[0]!.instanceId]);
+    const first = resolveShot(f, rec, CAT, T);
+    expect(() => resolveShot(first.state, rec, CAT, T)).toThrow();
+    expect(() => resolveShot(f, { ...rec, shotId: mintId.shot(9) }, CAT, T)).toThrow();
+  });
+
+  it('the same instance in the record twice, or already collected, is scored once', () => {
+    const f = fired(newRun(2));
+    const p = f.shelf.prizes[0]!;
+    const rec = syntheticRecord(f, [p.instanceId]);
+    const dup = { ...rec, collected: [...rec.collected, ...rec.collected] };
+    const { state, summary } = resolveShot(f, dup, CAT, T);
+    expect(summary.chainCount).toBe(1);
+    expect(state.collected).toHaveLength(1);
+    expect(state.score).toBe(CAT.prizes.get(p.typeId)!.baseScore);
+  });
+
+  it('max chain is the number collected in one shot (decision 29), the best over the run', () => {
+    let s = fired(newRun(3));
+    const three = s.shelf.prizes.slice(0, 3).map((p) => p.instanceId);
+    s = resolve(s, three).state;
+    expect(s.maxChain).toBe(3);
+    s = fired(s);
+    s = resolve(s, [s.shelf.prizes[0]!.instanceId]).state;
+    expect(s.maxChain).toBe(3);
+  });
+
+  it('collecting every prize does not end the game; the shelf is refilled to 9', () => {
+    const f = fired(newRun(4));
+    const all = f.shelf.prizes.map((p) => p.instanceId);
+    const { state, summary } = resolve(f, all);
+    expect(summary.chainCount).toBe(9);
+    expect(state.phase).toBe('position');
+    expect(summary.runEnded).toBe(false);
+    expect(state.shelf.prizes).toHaveLength(9);
+    for (const p of state.shelf.prizes) expect(all).not.toContain(p.instanceId);
+  });
+
+  it('the run ends only after the last shot is resolved with 0 ammo', () => {
+    const s: RunState = { ...newRun(5), ammo: 1 };
+    const f = fired(s);
+    expect(f.ammo).toBe(0);
+    expect(f.phase).toBe('resolving'); // not ended yet: the last shot is still to be settled
+    const { state, summary } = resolve(f, [f.shelf.prizes[0]!.instanceId]);
+    expect(state.phase).toBe('ended');
+    expect(summary.runEnded).toBe(true);
+    expect(state.score).toBeGreaterThan(0);
+    expect(state.shelf.prizes).toHaveLength(8); // no refill after the end
+    expect(send(state, { type: 'FIRE' })).toBe(state);
+  });
+
+  it('plays all 10 shots then ends, with a consistent ledger', () => {
+    let s = newRun(6);
+    for (let i = 1; i <= 10; i++) {
+      const f = fired(s);
+      expect(f.shotsFired).toBe(i);
+      const r = resolve(f, i % 2 ? [f.shelf.prizes[0]!.instanceId] : []);
+      expect(isLedgerEntryConsistent(r.summary.ledger)).toBe(true);
+      s = r.state;
+      expect(s.phase).toBe(i < 10 ? 'position' : 'ended');
+    }
+    expect(s.ammo).toBe(0);
+    expect(s.shotsFired).toBe(10);
+    expect(s.ledger).toHaveLength(10);
+  });
+
+  it('advances the motion clock by the shot time so moving prizes continue their phase', () => {
+    const f = fired(newRun(7));
+    const before = f.clocks.motionSec;
+    const { state } = resolve(f, [], { simTimeSec: 2.25 });
+    expect(state.clocks.motionSec).toBeCloseTo(before + 2.25);
   });
 });
