@@ -12,8 +12,7 @@ import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
 import { PROTOTYPE_TUNING } from './catalog/config';
 import { PROTOTYPE_CATALOG } from './catalog/runtime-config';
-import { createShotWorld } from './sim/world';
-import { createThreeRenderer, type ThreeRenderer } from './view';
+import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
 import { controlsModel } from './ui/controls/model';
 import { t } from './ui/controls/strings';
@@ -49,6 +48,18 @@ function newSeed(win: Window): number {
   if (win.crypto?.getRandomValues) win.crypto.getRandomValues(buf);
   else buf[0] = Math.floor(Math.random() * 0xffffffff);
   return buf[0]! >>> 0;
+}
+
+/**
+ * Heavy modules (Rapier physics with its embedded wasm, three.js renderer) are
+ * split into lazy chunks so the first screen appears quickly on a phone. The
+ * download starts right after boot and is awaited when the player starts.
+ */
+type HeavyModules = { sim: typeof import('./sim/world'); view: typeof import('./view') };
+let heavyModules: Promise<HeavyModules> | null = null;
+function loadHeavyModules(): Promise<HeavyModules> {
+  heavyModules ??= Promise.all([import('./sim/world'), import('./view')]).then(([sim, view]) => ({ sim, view }));
+  return heavyModules;
 }
 
 export function createApp(root: HTMLElement, win: Window): AppHandle {
@@ -134,10 +145,11 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     start.disabled = true;
     status.textContent = '準備中…';
     try {
-      const world = await createShotWorld(BOOTH_LAYOUT, catalog, tuning);
+      const { sim, view } = await loadHeavyModules();
+      const world = await sim.createShotWorld(BOOTH_LAYOUT, catalog, tuning);
       worldDispose = () => world.dispose();
       try {
-        renderer = createThreeRenderer(canvas, {
+        renderer = view.createThreeRenderer(canvas, {
           layout: BOOTH_LAYOUT,
           corkRadius: tuning.cork.radius,
           resolvePrize: (typeId) => {
@@ -178,6 +190,10 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     }
   };
   start.addEventListener('click', () => void startGame());
+  // Begin downloading the heavy chunks in the background; a failure surfaces on start.
+  void loadHeavyModules().catch(() => {
+    heavyModules = null;
+  });
 
   if (e2e) {
     const probe: E2eProbe = {
