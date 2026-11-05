@@ -56,11 +56,14 @@ const BUILDERS: Record<ShopkeeperPart, Builder> = {
     k.sph(C.darkRed, 0.012, [c.x, base + 0.105, c.z]);
   },
   fan: (k, g) => {
-    const { center: c } = g.box;
-    k.cyl(C.red, 0.07, 0.07, 0.014, [c.x, c.y + 0.02, c.z], ROT_Z, 12);
-    k.cyl(C.white, 0.045, 0.045, 0.017, [c.x, c.y + 0.02, c.z], ROT_Z, 12);
-    k.tor(C.gold, 0.07, 0.006, [c.x, c.y + 0.02, c.z], [0, Math.PI / 2, 0]);
-    k.box(C.lightBrown, 0.014, 0.06, 0.022, [c.x, c.y - 0.055, c.z]);
+    // The disc faces along the thin axis of the layout box (x or z).
+    const { center: c, halfExtents: h } = g.box;
+    const facesZ = h.z <= h.x;
+    const discRot = facesZ ? ROT_X : ROT_Z;
+    k.cyl(C.red, 0.07, 0.07, 0.014, [c.x, c.y + 0.02, c.z], discRot, 12);
+    k.cyl(C.white, 0.045, 0.045, 0.017, [c.x, c.y + 0.02, c.z], discRot, 12);
+    k.tor(C.gold, 0.07, 0.006, [c.x, c.y + 0.02, c.z], facesZ ? [0, 0, 0] : [0, Math.PI / 2, 0]);
+    k.box(C.lightBrown, facesZ ? 0.022 : 0.014, 0.06, facesZ ? 0.014 : 0.022, [c.x, c.y - 0.055, c.z]);
   },
 };
 

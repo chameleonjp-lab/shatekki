@@ -427,7 +427,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const splitCork = (a: ActiveShot, p: Projectile, normal: Vec3): boolean => {
     const alive = a.projectiles.filter((q) => !q.ended && q !== p).length;
     if (p.generation >= tuning.limits.maxSplitGeneration || alive + 2 > tuning.limits.maxSimultaneousCorks) return false;
-    p.ended = true; // replaced, not a limit: no projectileEnded event, the spawn events carry parentId
+    endProjectile(a, p, 'split'); // replaced, not a limit; the spawn events carry parentId
     const [va, vb] = splitVelocities(p.velocity, normal, tuning.devices.splitSpreadRad);
     for (const velocity of [va, vb]) {
       const child: Projectile = {

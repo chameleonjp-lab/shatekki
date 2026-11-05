@@ -65,7 +65,8 @@ export interface ProjectileSpawnedEvent {
   readonly bulletType: BulletType;
 }
 
-export type ProjectileEndReason = 'stopped' | 'outOfBounds' | 'reflectionLimit' | 'timeLimit';
+/** 'split': replaced by two child corks at a split plate (children carry parentId). */
+export type ProjectileEndReason = 'stopped' | 'outOfBounds' | 'reflectionLimit' | 'timeLimit' | 'split';
 
 export interface ProjectileEndedEvent {
   readonly type: 'projectileEnded';
