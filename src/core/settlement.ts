@@ -1,8 +1,10 @@
 /**
- * Shot settlement (Task 06, minimal; Task 09 extends it with sets, tricks,
- * first hits and penalties). Turns the sim's ShotRecord into the confirmed
- * state: collected prizes (each instance once), ledger, max chain, in-flight
- * marker cleared, end check, and replenishment if the run continues.
+ * Shot settlement (Task 06 + Task 09). Turns the sim's ShotRecord into the
+ * confirmed state: collected prizes (each instance once), sets (once per run),
+ * tricks, first hits, penalties, the ledger (gains and nominal penalty combined,
+ * then floor 0: decision 28), bonus ammo (granted BEFORE the end check, so a
+ * last shot that earns ammo continues: AC18), the next bullet type, max chain,
+ * in-flight marker cleared, end check, and replenishment if the run continues.
  *
  * Nothing is scored from what the screen showed; only the record counts.
  */
@@ -13,14 +15,16 @@ import type {
   PrizeTypeId,
   RunState,
   RuntimeCatalog,
-  ScoreLedgerEntry,
   ShotRecord,
   ShotSummary,
   SlotId,
   TuningConfig,
 } from '../contracts';
 import { BOOTH_LAYOUT } from '../contracts';
+import { completedSetsFor } from '../catalog/sets';
+import { deviceEffects, grantBonusAmmo, nextBulletType } from './gimmicks';
 import { replenish } from './replenish';
+import { buildLedgerEntry, firstHitItems, prizeItems, trickItems } from './scoring';
 
 export interface SettlementResult {
   readonly state: RunState;
@@ -47,30 +51,7 @@ export function resolveShot(
     collectedNow.push({ instanceId: c.instanceId, typeId: c.typeId, shotId: record.shotId });
   }
 
-  const items: LedgerItem[] = collectedNow.map((c) => {
-    const cfg = catalog.prizes.get(c.typeId);
-    if (!cfg) throw new RangeError(`resolveShot: unknown prize type ${c.typeId}`);
-    return { kind: 'prize', refId: c.instanceId, points: cfg.baseScore };
-  });
-  const prizePoints = items.reduce((a, i) => a + i.points, 0);
-  const ledgerEntry: ScoreLedgerEntry = {
-    shotId: record.shotId,
-    scoreBefore: state.score,
-    prizePoints,
-    trickPoints: 0,
-    setPoints: 0,
-    firstHitPoints: 0,
-    nominalPenalty: 0,
-    appliedPenalty: 0,
-    scoreAfter: state.score + prizePoints,
-    items,
-  };
-
-  // Slots whose placed prize was just collected become refill targets (decision 01/30).
-  const collectedIds = new Set(collectedNow.map((c) => c.instanceId));
-  const emptied: SlotId[] = state.shelf.prizes.filter((p) => collectedIds.has(p.instanceId)).map((p) => p.homeSlot);
-  const remaining = record.remainingPrizes.filter((p) => !already.has(p.instanceId) && !p.collected);
-
+  // Sets use the distinct kinds collected so far in this run (kind at collection time).
   const typeSeen = new Set<PrizeTypeId>(state.collectedTypeIds);
   const collectedTypeIds = [...state.collectedTypeIds];
   for (const c of collectedNow) {
@@ -79,9 +60,27 @@ export function resolveShot(
       collectedTypeIds.push(c.typeId);
     }
   }
+  const newSets = completedSetsFor(catalog, typeSeen, state.completedSets);
+  const effects = deviceEffects(record.deviceActivations, tuning);
+  const firstHits = firstHitItems(record.firstHitCandidates, state.firstHitsScored, tuning);
+
+  const items: LedgerItem[] = [
+    ...prizeItems(collectedNow, catalog),
+    ...trickItems(collectedNow, record.prizeOutcomes, record.shotId, tuning),
+    ...newSets.map((id): LedgerItem => ({ kind: 'set', refId: id, points: catalog.sets.get(id)!.bonusScore })),
+    ...firstHits.items,
+    ...effects.penalties.map((p): LedgerItem => ({ kind: 'penalty', refId: p.deviceId, points: p.points })),
+  ];
+  const ledgerEntry = buildLedgerEntry(record.shotId, state.score, items);
+
+  // Slots whose placed prize was just collected become refill targets (decision 01/30).
+  const collectedIds = new Set(collectedNow.map((c) => c.instanceId));
+  const emptied: SlotId[] = state.shelf.prizes.filter((p) => collectedIds.has(p.instanceId)).map((p) => p.homeSlot);
+  const remaining = record.remainingPrizes.filter((p) => !already.has(p.instanceId) && !p.collected);
 
   const motionSec = state.clocks.motionSec + record.simTimeSec;
-  const ammoAfter = state.ammo;
+  const bonusGranted = grantBonusAmmo(effects.bonusAmmoRequested, state.bonusAmmoTotal, tuning);
+  const ammoAfter = state.ammo + bonusGranted;
   const runEnded = ammoAfter <= 0;
 
   const base: RunState = {
@@ -90,6 +89,12 @@ export function resolveShot(
     ledger: [...state.ledger, ledgerEntry],
     collected: [...state.collected, ...collectedNow],
     collectedTypeIds,
+    completedSets: [...state.completedSets, ...newSets],
+    firstHitsScored: [...state.firstHitsScored, ...firstHits.keys],
+    ammo: ammoAfter,
+    bonusAmmoTotal: state.bonusAmmoTotal + bonusGranted,
+    // a bullet-type device changes the NEXT shot only (prototype); otherwise back to the standard cork
+    bulletType: effects.bulletTypeChanged ? nextBulletType(flight.request.bulletType, tuning) : 'standard',
     maxChain: Math.max(state.maxChain, collectedNow.length),
     inFlight: null,
     load: null,
@@ -116,9 +121,9 @@ export function resolveShot(
     shotNumber: flight.shotNumber,
     collected: collectedNow,
     chainCount: collectedNow.length,
-    newlyCompletedSets: [],
-    bonusAmmoRequested: 0,
-    bonusAmmoGranted: 0,
+    newlyCompletedSets: newSets,
+    bonusAmmoRequested: effects.bonusAmmoRequested,
+    bonusAmmoGranted: bonusGranted,
     devicesActivated: [...new Set(record.deviceActivations.map((d) => d.deviceId))],
     transforms: record.transforms,
     ledger: ledgerEntry,
