@@ -128,6 +128,8 @@ export function resolveShot(
     transforms: record.transforms,
     ledger: ledgerEntry,
     endedByLimit: record.endedByLimit,
+    prizeOutcomes: record.prizeOutcomes,
+    touchedFirstHitTargets: [...new Set(record.firstHitCandidates)],
     ammoAfter,
     runEnded,
   };

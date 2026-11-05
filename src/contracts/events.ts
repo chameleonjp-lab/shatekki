@@ -11,6 +11,7 @@ import type { DeviceId, EventId, PrizeInstanceId, PrizeTypeId, ProjectileId, Run
 import type { Quat, Vec3 } from './geometry';
 import type { DeviceKind, ShopkeeperPart, SurfaceMaterial } from './layout';
 import type { PrizeMaterial } from './catalog';
+import type { FirstHitKey, PrizeOutcome } from './sim';
 
 export const EVENTS_VERSION = 1;
 
@@ -238,6 +239,14 @@ export interface ShotSummary {
   readonly ledger: ScoreLedgerEntry;
   /** Whether the reflection/time limit ended the flight and the finite fall grace was used (decision 33). */
   readonly endedByLimit: boolean;
+  /**
+   * Per-prize contact outcome of this shot (from the sim record). Used only to
+   * classify the presentation (success / near miss / miss) AFTER settlement;
+   * never for points.
+   */
+  readonly prizeOutcomes: readonly PrizeOutcome[];
+  /** Shopkeeper parts / hidden targets touched this shot (reactions repeat; points only once per run). */
+  readonly touchedFirstHitTargets: readonly FirstHitKey[];
   readonly ammoAfter: number;
   readonly runEnded: boolean;
 }
