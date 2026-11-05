@@ -1,6 +1,6 @@
 # shatekki — 屋台の射的ゲーム 要件・実装計画
 
-2026年11月6日更新。確定したルールと実装計画の資料一式です。ゲーム本体はまだ実装していません。正式な公開タイトルは未確定です。
+2026年11月6日更新。確定したルールと実装計画の資料一式です。2026年11月5日（UTC）からClaude Codeによる実装を始めました。進み具合は[タスク台帳](docs/architecture/task-ledger.md)にまとめています。正式な公開タイトルは未確定です。
 
 ## 読む順番
 
@@ -26,3 +26,7 @@ Claudeは初期実装と美術・演出・音、ChatGPTは要件・仕様管理�
 [Issue #2](https://github.com/chameleonjp-lab/shatekki/issues/2)に初期資料を記録し、[PR #3](https://github.com/chameleonjp-lab/shatekki/pull/3)でファイル化、[PR #4](https://github.com/chameleonjp-lab/shatekki/pull/4)で27〜33を反映、[PR #5](https://github.com/chameleonjp-lab/shatekki/pull/5)でClaude向け計画を追加しました。いずれもマージ済みです。
 
 今回の検証修正は新しいPRで提出します。mainを直接変更せず、マージは利用者が行います。ゲーム実装、Claudeチーム起動、追加課金、DB変更、本番公開・実験場への新規掲載は行いません。元の要件書・決定記録・確認項目・候補データの内容は維持しています。
+
+## 開発の始め方（実装者向け）
+
+Node 22で `npm ci` を実行し、`npm run check`（型検査・単体試験・統合試験・ビルド）と `npm run test:e2e`（Chromiumでのブラウザ自動試験）で確認します。ブラウザ自動試験はiPhoneの画面幅をまねたもので、Safari実機の確認ではありません。技術選定と調査の結果は[実装の基準記録](docs/architecture/implementation-baseline.md)、一射の処理順は[一射の処理設計](docs/architecture/shot-pipeline.md)にあります。

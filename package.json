@@ -1,0 +1,34 @@
+{
+  "name": "shatekki",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "屋台の射的ゲーム（公開タイトル未確定）",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:unit": "node scripts/run-vitest.mjs unit",
+    "test:integration": "node scripts/run-vitest.mjs integration",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:integration",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.21.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.3",
+    "@types/three": "0.186.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "4.1.12"
+  }
+}
