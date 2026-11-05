@@ -410,3 +410,25 @@ describe('settings and audio preferences', () => {
     expect(vm.note).toBe(translate('de', 'settings.langNote'));
   });
 });
+
+describe('result breakdown formatting (Opus integration fix)', () => {
+  it('shows a zero penalty as 0, not -0', async () => {
+    const { resultViewModel } = await import('../../src/ui/result');
+    const vm = resultViewModel(
+      {
+        result: {
+          runId: 'r' as never, rulesVersion: 't', valueStatus: 'prototype', status: 'completed', score: 0, shotsFired: 10,
+          collected: [], completedSets: [], maxChain: 0, ledger: [], playerName: null,
+        },
+        selfBestBefore: null,
+        submit: null,
+        top: { state: 'idle' } as never,
+        links: { canonicalUrl: null, labDetailUrl: null },
+      },
+      'ja',
+    );
+    const penalty = vm.breakdown.rows.find((r) => r.kind === 'penalty');
+    expect(penalty?.pointsText).not.toMatch(/^-\s*0$/);
+    expect(Object.is(penalty?.points, -0)).toBe(false);
+  });
+});

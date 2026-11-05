@@ -3,7 +3,7 @@
  * the DOM, WebGL, WebAudio, storage, or network directly; app.ts wires these.
  */
 import type { ShotSummary, SimEvent, SimulationFrame } from './events';
-import type { AimAngles, FinalResult, Phase } from './game';
+import type { AimAngles, FinalResult, LoadTier, Phase } from './game';
 import type { BallisticSpec } from './aim';
 
 /** What the camera/HUD needs besides the physics frame. */
@@ -39,7 +39,14 @@ export interface AudioSettings {
 
 /** UI-only cues that are not simulation events. */
 export type UiCue =
-  | { readonly type: 'ui'; readonly cue: 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus' };
+  | {
+      readonly type: 'ui';
+      readonly cue: 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus';
+      /** loadStop: the load quality, so the stop sound can differ. */
+      readonly tier?: LoadTier;
+      /** collect: prizes collected in the shot (chain count). */
+      readonly count?: number;
+    };
 
 export interface AudioEngine {
   /** Must be callable from a user gesture to unlock/resume the audio context. */

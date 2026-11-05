@@ -119,6 +119,17 @@ export const JA = {
   'setbook.requires': '必要な景品',
   'setbook.thisRun': '今回成立',
   'setbook.close': '閉じる',
+  'fx.offscreen.prize': '景品',
+  'fx.offscreen.collect': '獲得！',
+  'fx.offscreen.shopkeeper': '店主',
+  'fx.offscreen.hidden': '隠れた的',
+  'fx.offscreen.device.split': '分裂板',
+  'fx.offscreen.device.power': '威力2倍',
+  'fx.offscreen.device.transform': '景品が変わる',
+  'fx.offscreen.device.penalty': '減点札',
+  'fx.offscreen.device.ammo': '弾+2',
+  'fx.offscreen.device.bulletType': '弾が変わる',
+  'fx.chain': '{count}個連鎖！',
 } as const;
 
 export type UiKey = keyof typeof JA;

@@ -47,3 +47,6 @@
 .book-item { background: #2b1a12; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; } .book-item.found { border: 1px solid #ffcf40; } .book-title { font-weight: 700; overflow-wrap: anywhere; }
 .badge { align-self: flex-start; background: #2f6b3a; border-radius: 999px; padding: 2px 8px; font-size: .75rem; }
 [hidden] { display: none !important; }
+
+/* The result celebration layer sits inside .scr-result behind the content. */
+.scr-result > .scr-col { position: relative; z-index: 1; }

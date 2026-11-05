@@ -120,7 +120,8 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
     { kind: 'trick', label: t('bd.trick'), points: trick, pointsText: pts(trick) },
     { kind: 'set', label: t('bd.set'), points: set, pointsText: pts(set) },
     { kind: 'firstHit', label: t('bd.firstHit'), points: firstHit, pointsText: pts(firstHit) },
-    { kind: 'penalty', label: t('bd.penalty'), points: -applied, pointsText: pts(-applied) },
+    // A zero penalty is shown as 0, never as "-0".
+    { kind: 'penalty', label: t('bd.penalty'), points: applied === 0 ? 0 : -applied, pointsText: pts(applied === 0 ? 0 : -applied) },
   ];
   const reconciled = prize + trick + set + firstHit - applied === result.score;
 

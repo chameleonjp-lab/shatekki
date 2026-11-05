@@ -38,7 +38,8 @@ import {
   type RunStore,
 } from './persistence';
 import { finalResult } from './core/result';
-import { createI18n, LANGUAGE_STORAGE_KEY, type I18n } from './i18n';
+import { createI18n, LANGUAGE_STORAGE_KEY, type I18n, type UiKey } from './i18n';
+import { JA as UI_KEYS } from './i18n/locales/ja';
 import { mountHome } from './ui/home';
 import { mountResult } from './ui/result';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
@@ -46,6 +47,8 @@ import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
 import { publicLinks } from './ranking/config';
 import { normalizePlayerName } from './ranking/name';
+import { createAudioEngine } from './audio';
+import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
 export interface AppHandle {
   readonly root: HTMLElement;
@@ -165,6 +168,16 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const i18n: I18n = createI18n(languageStorage, win.navigator.languages ?? [win.navigator.language]);
   setControlsLocale(i18n.locale);
 
+  // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
+  // created/resumed from a user gesture; failures never stop the game.
+  const audio = createAudioEngine();
+  let audioSettings: AudioSettings = settingsStore.load().audio;
+  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) =>
+    audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  const unlockAudio = () => void audio.unlock().catch(() => undefined);
+  root.addEventListener('pointerdown', unlockAudio, { capture: true });
+  root.addEventListener('keydown', unlockAudio, { capture: true });
+
   // ------------------------------------------------------------ layers
   const canvas = doc.createElement('canvas');
   canvas.className = 'stage';
@@ -244,6 +257,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   };
 
   const clearScreen = () => {
+    stopCelebration?.();
+    stopCelebration = null;
     rankingUnsub?.();
     rankingUnsub = null;
     screenHandle?.dispose();
@@ -255,6 +270,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     reasons = environmentPauseReasons(snapshot(win));
     rotate.hidden = !reasons.includes('landscape');
     root.dataset.pause = reasons.join(' ');
+    if (reasons.length > 0) audio.silence(); // nothing piles up while hidden / rotated (AC36)
     controller?.setEnvironmentPause(reasons);
   };
   const onResize = () => {
@@ -297,10 +313,34 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     raf = win.requestAnimationFrame(loop);
   };
 
+  const playCommandCue = (cmd: GameCommand) => {
+    const s = controller?.current;
+    switch (cmd.type) {
+      case 'CONFIRM_POSITION':
+        return cue('loadStart');
+      case 'STOP_LOAD':
+        return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
+      case 'FIRE':
+        return cue('fire');
+      case 'PAUSE':
+        audio.silence();
+        return cue('cancel');
+      case 'RESUME':
+        return cue('confirm');
+      default:
+        return undefined;
+    }
+  };
+
   const mountPanel = () => {
     panel?.dispose();
     panel = mountControls(ui, {
-      dispatch: (cmd) => (markStale() ? false : (controller?.dispatch(cmd) ?? false)),
+      dispatch: (cmd) => {
+        if (markStale() || !controller) return false;
+        const ok = controller.dispatch(cmd);
+        if (ok) playCommandCue(cmd as GameCommand);
+        return ok;
+      },
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
       onRetry: () => void startRun({ name: runName }),
@@ -317,6 +357,12 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       renderer = view.createThreeRenderer(canvas, {
         layout: BOOTH_LAYOUT,
         corkRadius: tuning.cork.radius,
+        translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
+        // Miss / near-miss are decided only after settlement (AC27).
+        onSettled: (cls) => {
+          if (cls === 'miss') cue('miss');
+          else if (cls === 'nearMiss') cue('nearMiss');
+        },
         resolvePrize: (typeId) => {
           const p = catalog.prizes.get(typeId);
           if (!p) throw new Error(`unknown prize ${typeId}`);
@@ -336,7 +382,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const onRunEnded = (state: RunState) => {
     const result = finalResult(state);
     const selfBestBefore = profile.load().bestScore;
-    profile.recordRunEnd(result);
+    const { newBest } = profile.recordRunEnd(result);
+    cue('runEnd');
     const fireSaveFailed = runStore.status().fireSaveFailed;
     runStore.clear();
     // A run whose pre-shot save failed cannot prove a lost shot on reload: never submit it (persistence-design §5).
@@ -344,7 +391,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     // Let the last settle presentation play briefly before the result screen.
     win.setTimeout(() => {
       if (disposed || controller?.current.runId !== state.runId) return;
-      showResult(result, selfBestBefore);
+      showResult(result, selfBestBefore, newBest);
     }, 900);
   };
 
@@ -358,6 +405,9 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         tuning,
         layout: BOOTH_LAYOUT,
         onChange,
+        onSimEvents: (events) => {
+          for (const e of events) audio.handle(e, audioSettings);
+        },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
           runStore.saveAfterFire(s);
@@ -367,7 +417,14 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
           if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
-          if (summary.newlyCompletedSets.length > 0) profile.discoverSets(summary.newlyCompletedSets);
+          if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
+          if (summary.newlyCompletedSets.length > 0) {
+            cue('setComplete');
+            const fresh = profile.discoverSets(summary.newlyCompletedSets);
+            if (fresh.length > 0) cue('setDiscovered');
+          }
+          if (summary.ledger.nominalPenalty > 0) cue('penalty');
+          if (summary.bonusAmmoGranted > 0) cue('ammoBonus');
           if (s.phase === 'ended') onRunEnded(s);
           else runStore.saveStable(s);
         },
@@ -443,12 +500,17 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       {
         i18n,
         links,
-        onStart: (name) => void startRun({ name: normalizePlayerName(name) }),
+        onStart: (name) => {
+          cue('start');
+          void startRun({ name: normalizePlayerName(name) });
+        },
         onNameChange: (draft) => {
           nameStore.set(draft);
         },
-        onAudioChange: (audio) => {
-          settingsStore.save({ audio });
+        onAudioChange: (next) => {
+          audioSettings = settingsStore.save({ audio: next }).audio;
+          if (!audioSettings.enabled || audioSettings.volume <= 0) audio.silence();
+          else cue('select');
         },
         onOpenSetBook: openSetBook,
       },
@@ -456,9 +518,12 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     );
   };
 
-  const showResult = (result: FinalResult, selfBestBefore: number | null) => {
+  let stopCelebration: (() => void) | null = null;
+  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false) => {
     clearScreen();
     setScreen('result');
+    cue('resultShow');
+    if (newBest) cue('newBest');
     const handle = mountResult(
       screens,
       {
@@ -472,6 +537,12 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links },
     );
     screenHandle = handle;
+    void loadHeavyModules().then(({ view }) => {
+      if (screen !== 'result') return;
+      const reducedMotion = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      const host = screens.querySelector<HTMLElement>('.scr-result') ?? screens;
+      stopCelebration = view.playResultCelebration(host, { newBest, sets: result.completedSets.length, reducedMotion });
+    });
     rankingUnsub = ranking.subscribe(() => handle.update({ submit: ranking.getStatus(result.runId), top: ranking.getTop() }));
     void ranking.fetchTop().catch(() => undefined);
   };
@@ -535,6 +606,9 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       win.removeEventListener('online', retryRanking);
       doc.removeEventListener('visibilitychange', updateEnv);
       unsubLocale();
+      audio.silence();
+      root.removeEventListener('pointerdown', unlockAudio, { capture: true });
+      root.removeEventListener('keydown', unlockAudio, { capture: true });
       clearScreen();
       bookHandle?.dispose();
       panel?.dispose();
