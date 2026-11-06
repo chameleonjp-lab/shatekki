@@ -63,11 +63,13 @@ describe('a whole run through core and sim', () => {
     expect(a.s.score).toBe(b.s.score);
   });
 
-  it('collected prizes are unique instances and the score equals the sum of their base scores', async () => {
+  it('collected prizes are unique instances; prize points equal their base scores and the score is the ledger total (tricks, sets, first hits and penalties are itemised)', async () => {
     const { s } = await playRun(5, (n) => (n % 3) * 0.02 - 0.02);
     const ids = s.collected.map((c) => c.instanceId);
     expect(new Set(ids).size).toBe(ids.length);
     const sum = s.collected.reduce((a, c) => a + PROTOTYPE_CATALOG.prizes.get(c.typeId)!.baseScore, 0);
-    expect(s.score).toBe(sum);
+    expect(s.ledger.reduce((a, e) => a + e.prizePoints, 0)).toBe(sum);
+    expect(s.score).toBe(s.ledger[s.ledger.length - 1]!.scoreAfter);
+    for (const e of s.ledger) expect(isLedgerEntryConsistent(e)).toBe(true);
   });
 });

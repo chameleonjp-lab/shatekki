@@ -14,7 +14,7 @@ import type { DeviceId, SlotId } from './ids';
 import { mintId, slotIdOf } from './ids';
 import type { Box3, Vec3 } from './geometry';
 
-export const LAYOUT_VERSION = 'layout-v1-prototype';
+export const LAYOUT_VERSION = 'layout-v1.1-prototype';
 
 export type SurfaceMaterial = 'wood' | 'cloth' | 'paper' | 'metal' | 'plastic';
 
@@ -153,18 +153,20 @@ const DEVICES: readonly DeviceGeometry[] = [
   { deviceId: mintId.device('dev-split-1'), kind: 'split', box: box(-0.82, 1.62, BACK_Z + 0.01, 0.1, 0.1, 0.01), faceNormal: { x: 0, y: 0, z: 1 }, directlyReachable: true },
   { deviceId: mintId.device('dev-power-1'), kind: 'power', box: box(-SIDE_X + 0.01, 1.3, -1.25, 0.01, 0.12, 0.14), faceNormal: { x: 1, y: 0, z: 0 }, directlyReachable: true },
   { deviceId: mintId.device('dev-transform-1'), kind: 'transform', box: box(0, 2.08, -2.25, 0.06, 0.06, 0.06), faceNormal: { x: 0, y: -1, z: 0 }, directlyReachable: false },
-  { deviceId: mintId.device('dev-penalty-1'), kind: 'penalty', box: box(0.82, 0.95, BACK_Z + 0.01, 0.08, 0.1, 0.01), faceNormal: { x: 0, y: 0, z: 1 }, directlyReachable: true },
+  { deviceId: mintId.device('dev-penalty-1'), kind: 'penalty', box: box(-0.82, 0.95, BACK_Z + 0.01, 0.08, 0.1, 0.01), faceNormal: { x: 0, y: 0, z: 1 }, directlyReachable: true },
   { deviceId: mintId.device('dev-ammo-1'), kind: 'ammo', box: box(SIDE_X - 0.01, 2.0, -1.8, 0.01, 0.09, 0.09), faceNormal: { x: -1, y: 0, z: 0 }, directlyReachable: false },
   { deviceId: mintId.device('dev-bullet-1'), kind: 'bulletType', box: box(-SIDE_X + 0.01, 0.62, -1.6, 0.01, 0.09, 0.09), faceNormal: { x: 1, y: 0, z: 0 }, directlyReachable: true },
 ];
 
-const SHOPKEEPER_X = 0.86;
-const SHOPKEEPER_Z = -1.25;
+// The shopkeeper stands in the right back corner beside the top shelf so the
+// default portrait view shows them (requirements §5 "屋台の端に店主"). Layout v1.1.
+const SHOPKEEPER_X = 0.8;
+const SHOPKEEPER_Z = -2.18;
 const SHOPKEEPER: readonly ShopkeeperPartGeometry[] = [
   { part: 'feet', box: box(SHOPKEEPER_X, 0.06, SHOPKEEPER_Z, 0.12, 0.06, 0.1) },
   { part: 'body', box: box(SHOPKEEPER_X, 0.86, SHOPKEEPER_Z, 0.13, 0.74, 0.1) },
   { part: 'hat', box: box(SHOPKEEPER_X, 1.67, SHOPKEEPER_Z, 0.15, 0.06, 0.15) },
-  { part: 'fan', box: box(SHOPKEEPER_X - 0.14, 1.12, SHOPKEEPER_Z + 0.08, 0.01, 0.1, 0.09) },
+  { part: 'fan', box: box(SHOPKEEPER_X - 0.05, 1.15, SHOPKEEPER_Z + 0.12, 0.09, 0.1, 0.01) },
 ];
 
 const HIDDEN: readonly HiddenTargetGeometry[] = [

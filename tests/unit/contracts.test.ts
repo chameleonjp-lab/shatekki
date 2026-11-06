@@ -235,3 +235,28 @@ describe('ledger invariant (decision 28: floor 0 per shot, nothing carried over)
     expect(isLedgerEntryConsistent(next)).toBe(true);
   });
 });
+
+describe('layout v1.1: shopkeeper placement', () => {
+  const L = BOOTH_LAYOUT;
+  const overlaps = (a: { center: { x: number; y: number; z: number }; halfExtents: { x: number; y: number; z: number } }, b: typeof a) =>
+    Math.abs(a.center.x - b.center.x) < a.halfExtents.x + b.halfExtents.x &&
+    Math.abs(a.center.y - b.center.y) < a.halfExtents.y + b.halfExtents.y &&
+    Math.abs(a.center.z - b.center.z) < a.halfExtents.z + b.halfExtents.z;
+
+  it('no shopkeeper part overlaps a shelf board, a slot, a device or the walls', () => {
+    const solids = [
+      ...L.surfaces.filter((s) => s.id !== 'floor').map((s) => s.box),
+      ...L.slots.map((s) => s.occupancyBox),
+      ...L.devices.map((d) => d.box),
+    ];
+    for (const part of L.shopkeeper) for (const b of solids) expect(overlaps(part.box, b), part.part).toBe(false);
+  });
+
+  it('no device sits directly behind the shopkeeper body (it would be unreachable and hidden)', () => {
+    const body = L.shopkeeper.find((p) => p.part === 'body')!.box;
+    for (const d of L.devices) {
+      const behind = d.box.center.z < body.center.z && Math.abs(d.box.center.x - body.center.x) < body.halfExtents.x + d.box.halfExtents.x;
+      expect(behind, d.deviceId).toBe(false);
+    }
+  });
+});

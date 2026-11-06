@@ -8,6 +8,7 @@ import { reduceGame, tickRun } from '../core/transitions';
 import { effectiveAim } from '../core/aim';
 import { loadingBarValue } from '../core/loading';
 import { resolveShot } from '../core/settlement';
+import { createTransformChooser } from '../core/gimmicks';
 
 export const CORE_RULES: RulesApi = {
   createRun: (config, catalog) => createRun(config, catalog),
@@ -16,6 +17,6 @@ export const CORE_RULES: RulesApi = {
   effectiveAim: (state, tuning) => effectiveAim(state, tuning),
   loadingBarValue: (state, tuning) => loadingBarValue(state.clocks.loadingSec, tuning),
   resolveShot: (state, record, catalog, tuning) => resolveShot(state, record, catalog, tuning),
-  // Task 08 replaces this with the run's transform rule (O08). No transforms until then.
-  transformChooser: () => () => null,
+  // Prototype transform rule (O08): deterministic from (seed, shotId).
+  transformChooser: (state, catalog) => createTransformChooser(state, catalog),
 };

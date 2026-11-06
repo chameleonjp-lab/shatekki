@@ -8,11 +8,13 @@
  * - Corks are swept spheres (castShape) advanced in fixed steps, so a fast cork
  *   cannot tunnel through a thin board.
  * - No points are computed here. The ShotRecord reports what happened.
- * - Stages: flight -> transform (no-op until Task 08) -> settle -> grace.
+ * - Stages: flight -> transform (reserved transforms, decision 32) -> settle -> grace (decision 33).
+ * - Devices (Task 08): each acts once per shot across the original and split corks; ordinary reflection repeats.
  */
 import RAPIER from '@dimforge/rapier3d-compat';
 import type {
   BoothLayout,
+  DeviceActivation,
   DeviceKind,
   EventId,
   FirstHitKey,
@@ -25,6 +27,7 @@ import type {
   PrizeInstanceState,
   PrizeOutcome,
   PrizeRuntimeConfig,
+  PrizeTransformedEvent,
   PrizeTypeId,
   ProjectileEndReason,
   ProjectileFrame,
@@ -47,6 +50,7 @@ import type {
   Vec3,
 } from '../contracts';
 import { mintId } from '../contracts';
+import { nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
   CONTACT_DEDUPE_SEC,
@@ -117,6 +121,12 @@ interface ActiveShot {
   endedByLimit: boolean;
   collected: { instanceId: PrizeInstanceId; typeId: PrizeTypeId }[];
   firstHit: FirstHitKey[];
+  /** Devices that already acted in this shot, shared by the original and all split corks (decision 31). */
+  usedDevices: Set<string>;
+  activations: DeviceActivation[];
+  transformReserved: boolean;
+  transforms: PrizeTransformedEvent[];
+  nextProjectileIndex: number;
 }
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
@@ -274,12 +284,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   };
 
   // ---- cork hits
-  const targetImpact = (t: Target): ImpactTarget => {
+  const targetImpact = (t: Target, activated: boolean): ImpactTarget => {
     switch (t.t) {
       case 'surface':
         return { kind: 'surface', surfaceId: t.id, material: t.material };
       case 'device':
-        return { kind: 'device', deviceId: t.deviceId, deviceKind: t.kind, activated: false };
+        return { kind: 'device', deviceId: t.deviceId, deviceKind: t.kind, activated };
       case 'shopkeeper':
         return { kind: 'shopkeeper', part: t.part };
       case 'hidden':
@@ -360,20 +370,23 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const continuing = last !== undefined && simTime - last <= CONTACT_DEDUPE_SEC;
     p.lastContact.set(key, simTime);
 
+    let splitNow = false;
     if (!continuing) {
       const reflectionIndex = p.reflections;
+      const activated = target.t === 'device' && !a.usedDevices.has(target.deviceId);
       emit((eventId, shotId) => ({
         type: 'impact',
         eventId,
         runId: a.runId,
         shotId,
         projectileId: p.id,
-        target: targetImpact(target),
+        target: targetImpact(target, activated),
         point,
         normal: n,
         speed,
         reflectionIndex,
       }));
+      if (target.t === 'device' && activated) splitNow = activateDevice(a, p, target.deviceId, target.kind);
       if (target.t === 'prize') hitPrize(a, p, live.get(target.id)!, point, speed, dir);
       if (target.t === 'shopkeeper') a.firstHit.push(`shopkeeper:${target.part}`);
       if (target.t === 'hidden') a.firstHit.push(`hidden:${target.targetId}`);
@@ -384,8 +397,65 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     p.velocity = reflectVelocity(p.velocity, n, e, TANGENTIAL_KEEP);
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
-    if (len(p.velocity) < CORK_STOP_SPEED) endProjectile(a, p, 'stopped');
-    else if (p.reflections >= reflectionLimitFor(p, tuning)) endProjectile(a, p, 'reflectionLimit');
+    const wouldStop = len(p.velocity) < CORK_STOP_SPEED;
+    const wouldHitLimit = p.reflections >= reflectionLimitFor(p, tuning);
+    if (splitNow && !wouldStop && !wouldHitLimit && splitCork(a, p, n)) return;
+    if (wouldStop) endProjectile(a, p, 'stopped');
+    else if (wouldHitLimit) endProjectile(a, p, 'reflectionLimit');
+  };
+
+  /** Record the activation and apply what happens at once. Returns true when the cork should split. */
+  const activateDevice = (a: ActiveShot, p: Projectile, deviceId: DeviceActivation['deviceId'], kind: DeviceKind): boolean => {
+    a.usedDevices.add(deviceId);
+    a.activations.push({ deviceId, kind, projectileId: p.id });
+    emit((eventId, shotId) => ({ type: 'deviceActivated', eventId, shotId, deviceId, deviceKind: kind, projectileId: p.id }));
+    switch (kind) {
+      case 'power':
+        p.powerMultiplier = nextPowerMultiplier(p.powerMultiplier, tuning);
+        return false;
+      case 'transform':
+        a.transformReserved = true; // applied after the flight ends (decision 32)
+        return false;
+      case 'split':
+        return true;
+      default:
+        return false; // penalty / ammo / bulletType: the run applies them at settlement
+    }
+  };
+
+  /** Replace `p` by two corks (generation + 1). Ammo is untouched. False when the limits forbid it. */
+  const splitCork = (a: ActiveShot, p: Projectile, normal: Vec3): boolean => {
+    const alive = a.projectiles.filter((q) => !q.ended && q !== p).length;
+    if (p.generation >= tuning.limits.maxSplitGeneration || alive + 2 > tuning.limits.maxSimultaneousCorks) return false;
+    endProjectile(a, p, 'split'); // replaced, not a limit; the spawn events carry parentId
+    const [va, vb] = splitVelocities(p.velocity, normal, tuning.devices.splitSpreadRad);
+    for (const velocity of [va, vb]) {
+      const child: Projectile = {
+        id: mintId.projectile(a.shotId, a.nextProjectileIndex++),
+        generation: p.generation + 1,
+        position: p.position,
+        velocity,
+        bulletType: p.bulletType,
+        powerMultiplier: p.powerMultiplier,
+        reflections: p.reflections,
+        spawnedAtSec: p.spawnedAtSec,
+        ended: false,
+        lastContact: new Map(p.lastContact),
+      };
+      a.projectiles.push(child);
+      emit((eventId, shotId) => ({
+        type: 'projectileSpawned',
+        eventId,
+        shotId,
+        projectileId: child.id,
+        parentId: p.id,
+        generation: child.generation,
+        position: child.position,
+        velocity: child.velocity,
+        bulletType: child.bulletType,
+      }));
+    }
+    return true;
   };
 
   const inBounds = (v: Vec3): boolean => {
@@ -507,9 +577,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       shotId: a.shotId,
       collected: a.collected,
       prizeOutcomes: [...outcomes.values()],
-      deviceActivations: [],
+      deviceActivations: a.activations,
       firstHitCandidates: a.firstHit,
-      transforms: [],
+      transforms: a.transforms,
       endedByLimit: a.endedByLimit,
       remainingPrizes: remaining,
       simTimeSec: a.elapsed,
@@ -518,10 +588,72 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     active = null;
   };
 
+  /** Decision 32: after the flight, before settlement. Never collected or mounted prizes. */
+  const applyTransform = (a: ActiveShot): void => {
+    if (!a.transformReserved) return;
+    const candidates: PrizeInstanceState[] = [...live.values()]
+      .filter((p) => !p.mounted)
+      .map((p) => {
+        const t = p.body.translation();
+        const r = p.body.rotation();
+        return { ...p.src, hp: p.hp, pose: { position: vec(t), rotation: { x: r.x, y: r.y, z: r.z, w: r.w } }, mounted: false, collected: false };
+      });
+    const choice = a.context.chooseTransform(candidates);
+    if (!choice) return;
+    const lp = live.get(choice.instanceId);
+    const newCfg = catalog.prizes.get(choice.toTypeId);
+    if (!lp || lp.mounted || !newCfg || newCfg.typeId === lp.src.typeId) return;
+    const fromTypeId = lp.src.typeId;
+    const hpBefore = lp.hp;
+    const maxHpBefore = lp.src.maxHp;
+    const hpAfter = transformedHp(hpBefore, maxHpBefore, newCfg.maxHp);
+    const t = lp.body.translation();
+    const r = lp.body.rotation();
+    const rotation = { x: r.x, y: r.y, z: r.z, w: r.w };
+    const lin = lp.body.linvel();
+    const ang = lp.body.angvel();
+    // keep the bottom of the bounding box where it was, so a new shape neither sinks into nor floats above the board
+    const oldHalf = prizeAabb(lp.cfg.shape, { position: vec(t), rotation }).halfExtents.y;
+    const newHalf = prizeAabb(newCfg.shape, { position: vec(t), rotation }).halfExtents.y;
+    const position = { x: t.x, y: t.y + (newHalf - oldHalf), z: t.z };
+    targets.delete(lp.collider.handle);
+    world.removeRigidBody(lp.body);
+    const { body, collider } = createPrizeBody(world, newCfg, { position, rotation }, false);
+    body.setLinvel(lin, true);
+    body.setAngvel(ang, true);
+    targets.set(collider.handle, { t: 'prize', id: lp.src.instanceId });
+    lp.body = body;
+    lp.collider = collider;
+    lp.cfg = newCfg;
+    lp.src = { ...lp.src, typeId: newCfg.typeId, maxHp: newCfg.maxHp };
+    lp.hp = hpAfter;
+    lp.baseFriction = newCfg.friction;
+    lp.hpZeroApplied = false;
+    if (hpAfter <= 0) applyHpZero(lp);
+    emit((eventId, shotId) => {
+      const ev: PrizeTransformedEvent = {
+        type: 'prizeTransformed',
+        eventId,
+        shotId,
+        instanceId: lp.src.instanceId,
+        fromTypeId,
+        toTypeId: newCfg.typeId,
+        hpBefore,
+        maxHpBefore,
+        hpAfter,
+        maxHpAfter: newCfg.maxHp,
+      };
+      a.transforms.push(ev);
+      return ev;
+    });
+  };
+
   const advanceStage = (a: ActiveShot, dt: number): void => {
     if (a.stage === 'flight') {
       if (a.projectiles.every((p) => p.ended)) {
-        setStage(a, 'transform'); // Task 08 applies reserved transforms here
+        setStage(a, 'transform');
+        applyTransform(a);
+        a.quietSec = 0;
         setStage(a, 'settle');
       }
       return;
@@ -589,6 +721,11 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       endedByLimit: false,
       collected: [],
       firstHit: [],
+      usedDevices: new Set(),
+      activations: [],
+      transformReserved: false,
+      transforms: [],
+      nextProjectileIndex: 1,
     };
     active = a;
     const speed = initialSpeed(request.bulletType, tuning);

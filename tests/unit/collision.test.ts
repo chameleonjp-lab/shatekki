@@ -125,7 +125,7 @@ describe('ShotWorld corks', () => {
     expect(imp.length).toBeLessThanOrEqual(T.limits.maxReflectionsPerCork + 1);
   });
 
-  it('device plates reflect with activated:false and shopkeeper / hidden contacts become first-hit candidates', () => {
+  it('the first contact with a device activates it (Task 08); shopkeeper / hidden contacts become first-hit candidates', () => {
     const dev = BOOTH_LAYOUT.devices.find((d) => d.kind === 'split')!;
     const toDev = ballisticDir(muzzle, { x: dev.box.center.x, y: dev.box.center.y, z: dev.box.center.z + dev.box.halfExtents.z });
     const run = runShot(world, makeRequest({ direction: toDev }), 1 / 60);
@@ -133,9 +133,9 @@ describe('ShotWorld corks', () => {
     expect(hit).toBeDefined();
     if (hit?.e.target.kind === 'device') {
       expect(hit.e.target.deviceKind).toBe('split');
-      expect(hit.e.target.activated).toBe(false);
+      expect(hit.e.target.activated).toBe(true);
     }
-    expect(run.record.deviceActivations).toEqual([]);
+    expect(run.record.deviceActivations.map((d) => d.kind)).toEqual(['split']);
 
     const hat = BOOTH_LAYOUT.shopkeeper.find((p) => p.part === 'hat')!;
     const run2 = runShot(world, makeRequest({ direction: ballisticDir(muzzle, hat.box.center) }), 1 / 60);
