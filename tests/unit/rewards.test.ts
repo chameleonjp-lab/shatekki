@@ -325,3 +325,32 @@ describe('saves, E1 best shot', () => {
     expect(bestShotOf({ ledger: [e(1, 0, 40), e(2, 40, 80)], collected: [...c(1, 1), ...c(2, 1)] })!.shotNumber).toBe(1);
   });
 });
+
+describe('A2-A4 in settlement (plan T4a)', () => {
+  it('A4: one deposit per shot; the second shot with a deposit pays +4 once', () => {
+    const s0 = start(full, 21);
+    const one = settleShot(full, fire(full, s0), { contacts: { piggyDeposit: true } });
+    expect(one.summary.rewards!.some((o) => o.id === 'A4')).toBe(false);
+    expect((one.state as ExpandedRunState).expansion.rewards!.piggyDeposits).toEqual([1]);
+    const two = settleShot(full, fire(full, one.state as ExpandedRunState), { contacts: { piggyDeposit: true } });
+    expect(two.summary.rewards!.find((o) => o.id === 'A4')).toMatchObject({ offered: 4, granted: 4, shotNumber: 2 });
+    const three = settleShot(full, fire(full, two.state as ExpandedRunState), { contacts: { piggyDeposit: true } });
+    expect(three.summary.rewards!.some((o) => o.id === 'A4')).toBe(false);
+  });
+
+  it('A2 pays once for a chime after a reflection; A3 pays once for a won prize that passed the tray', () => {
+    const s0 = start(full, 22);
+    const a = settleShot(full, fire(full, s0), { contacts: { chimeAfterReflection: true } });
+    expect(a.summary.rewards!.find((o) => o.id === 'A2')).toMatchObject({ offered: 2, granted: 2 });
+    const b = settleShot(full, fire(full, a.state as ExpandedRunState), { contacts: { chimeAfterReflection: true } });
+    expect(b.summary.rewards!.some((o) => o.id === 'A2')).toBe(false);
+    const st = b.state as ExpandedRunState;
+    const id = notBag(st)[0]!;
+    // a prize in the tray that was not won pays nothing; won, it pays once
+    const missed = settleShot(full, fire(full, st), { contacts: { seesawInstances: [id as never] } });
+    expect(missed.summary.rewards!.some((o) => o.id === 'A3')).toBe(false);
+    const won = settleShot(full, fire(full, st), { collect: [id], contacts: { seesawInstances: [id as never] } });
+    expect(won.summary.rewards!.find((o) => o.id === 'A3')).toMatchObject({ offered: 2, granted: 2 });
+    expect(won.state.collected.filter((c) => c.instanceId === id)).toHaveLength(1);
+  });
+});
