@@ -43,6 +43,7 @@ const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
   fr: /2 types/,
   de: /2 Sorten/,
   ko: /2종류/,
+  ru: /2 вида/,
 };
 const BAD = /\bTODO\b|FIXME|XXX|xxx|\?\?\?|[Ll]orem|undefined|\[object/; // case-sensitive TODO: Spanish "todo/todos" is a word
 const pairRows = pairs as { id: string; name_ja: string; prizeIds: string[]; designNote_ja: string }[];
