@@ -92,6 +92,7 @@ test('the overview shows 3 × 12 and the stand reaches both ends (display only)'
 
 test('a cork on the shopkeeper asks one question; one answer continues the game (CH-AC question flow)', async ({ page }) => {
   test.setTimeout(90_000);
+  await page.clock.install({ time: new Date('2026-11-06T00:00:00Z') });
   await start(page);
   await shootShopkeeper(page);
   const panel = page.getByTestId('shopkeeper-question');
@@ -113,12 +114,20 @@ test('a cork on the shopkeeper asks one question; one answer continues the game 
   await page.waitForTimeout(1500);
   expect(await probe(page, 'phase')).toBe('resolving');
   await expect(panel).toBeVisible();
+  // Freeze time at the question barrier, before the result card's five-second timer exists.
+  // Slow CI assertions must not consume the card's lifetime before the dismissal click.
+  await page.clock.pauseAt(new Date('2026-11-06T01:00:00Z'));
   await b.click();
   await a.click({ force: true, timeout: 2000 }).catch(() => undefined);
   await expect(panel).toBeHidden({ timeout: 20_000 });
   // After the shot settles, the result lines say what the answer did (text only, no raw keys).
   const results = page.getByTestId('effect-results');
-  await expect(results).toBeVisible({ timeout: 30_000 });
+  // Drive the real simulation frame by frame until settlement, then leave time paused
+  // while checking the card. Polling stops as soon as it is visible, before auto-hide.
+  await expect.poll(async () => {
+    await page.clock.runFor(100);
+    return results.isVisible();
+  }, { timeout: 30_000, intervals: [0] }).toBe(true);
   const resultText = (await results.textContent()) ?? '';
   expect(resultText).toContain('店主の答え');
   expect(resultText).not.toMatch(/exp\.|fxres\.|\bFX\d{3}\b|\{\w+\}/);
