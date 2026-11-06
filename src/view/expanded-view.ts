@@ -125,12 +125,12 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       }
     }
 
-    // ---- remember what each mounted individual first looked like (FX097)
+    // ---- the kind whose motion each mount really runs (FX097): the sim reports it after a transform
     const present = new Set<string>();
     for (const p of frame.prizes) {
       const id = p.instanceId as string;
       present.add(id);
-      if (!firstKind.has(id)) firstKind.set(id, p.typeId);
+      firstKind.set(id, p.motionTypeId ?? p.typeId);
     }
     for (const id of [...firstKind.keys()]) if (!present.has(id)) firstKind.delete(id);
 

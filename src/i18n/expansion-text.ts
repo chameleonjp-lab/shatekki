@@ -1,53 +1,59 @@
 /**
  * Display text for the expanded-gameplay content keys (`exp.*`, see `expKey` in
  * src/catalog/expanded-config.ts): 200 questions, 400 choices, 6 group labels,
- * 100 effect names, 20 series labels/symbols, 300 pair names.
+ * 100 effect names and result lines, 20 series labels/symbols, 300 pair names
+ * and hints.
  *
- * The long content translations (13 languages) are NOT written yet. Until they
- * are, every locale reads the Japanese source from data/expansion-v2 (the
- * proposal's original wording), and a key with no source at all (e.g. effect
- * result lines, which have no Japanese source yet) resolves to ''. A missing
- * translation never shows a raw key to the player.
+ * Text comes from src/i18n/expanded-content.ts: the locale, then English, then
+ * the Japanese source in data/expansion-v2. Locales whose content is still
+ * pending therefore show English. Unknown keys resolve to '' so a raw key is
+ * never shown to the player.
  */
 import type { Locale } from './locales';
-import questions from '../../data/expansion-v2/questions.json';
-import groups from '../../data/expansion-v2/groups.json';
-import effects from '../../data/expansion-v2/effects.json';
-import series from '../../data/expansion-v2/series.json';
-import pairSets from '../../data/expansion-v2/pair-sets.json';
-
-let ja: Map<string, string> | null = null;
-
-function japanese(): Map<string, string> {
-  if (ja) return ja;
-  const m = new Map<string, string>();
-  for (const q of questions) {
-    m.set(`exp.q.${q.id}`, q.text_ja);
-    m.set(`exp.q.${q.id}.A`, q.A.text_ja);
-    m.set(`exp.q.${q.id}.B`, q.B.text_ja);
-  }
-  for (const g of groups) m.set(`exp.group.${g.id}`, g.label_ja);
-  for (const e of effects) m.set(`exp.fx.${e.id}.name`, e.name_ja);
-  for (const s of series) {
-    m.set(`exp.series.${s.id}.label`, s.name_ja);
-    m.set(`exp.series.${s.id}.symbol`, s.symbol_ja);
-  }
-  for (const p of pairSets) m.set(`exp.pair.${p.id}.name`, p.name_ja);
-  ja = m;
-  return m;
-}
+import {
+  choiceText,
+  effectName,
+  effectResult,
+  groupLabel,
+  pairHint,
+  pairName,
+  questionText,
+  seriesLabel,
+  seriesSymbol,
+} from './expanded-content';
 
 /** True for the content keys this module knows about. */
 export function isExpansionKey(key: string): boolean {
   return key.startsWith('exp.');
 }
 
-/**
- * Text of a content key in `locale`. Translations are added later; today every
- * locale falls back to the Japanese source. Returns '' when there is none.
- */
-export function expansionText(_locale: Locale, key: string): string {
-  return japanese().get(key) ?? '';
+const KEY = /^exp\.(q|group|fx|series|pair)\.([A-Z]+\d*)(?:\.(A|B|name|result|label|symbol|hint))?$/;
+
+/** Text of a content key in `locale` (locale → en → ja source). Returns '' for an unknown key. */
+export function expansionText(locale: Locale, key: string, params?: Readonly<Record<string, string | number>>): string {
+  const m = KEY.exec(key);
+  if (!m) return '';
+  const [, kind, id, part] = m as unknown as [string, string, string, string | undefined];
+  const out = (() => {
+    switch (kind) {
+      case 'q':
+        return part === 'A' || part === 'B' ? choiceText(locale, id, part) : part === undefined ? questionText(locale, id) : '';
+      case 'group':
+        return part === undefined ? groupLabel(locale, id) : '';
+      case 'fx':
+        if (part === 'name') return effectName(locale, id);
+        if (part === 'result') return effectResult(locale, id, typeof params?.n === 'number' ? { n: params.n } : {});
+        return '';
+      case 'series':
+        return part === 'label' ? seriesLabel(locale, id) : part === 'symbol' ? seriesSymbol(locale, id) : '';
+      case 'pair':
+        return part === 'name' ? pairName(locale, id) : part === 'hint' ? pairHint(locale, id) : '';
+      default:
+        return '';
+    }
+  })();
+  // The resolvers fall back to the id itself; never show a bare id as text.
+  return out === id ? '' : out;
 }
 
 /**
@@ -59,5 +65,5 @@ export function createExpansionTranslator(
   locale: () => Locale,
   ui: (key: string, params?: Readonly<Record<string, string | number>>) => string,
 ): (key: string, params?: Readonly<Record<string, string | number>>) => string {
-  return (key, params) => (isExpansionKey(key) ? expansionText(locale(), key) : ui(key, params));
+  return (key, params) => (isExpansionKey(key) ? expansionText(locale(), key, params) : ui(key, params));
 }

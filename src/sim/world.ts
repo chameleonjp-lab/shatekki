@@ -247,6 +247,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       maxHp: p.src.maxHp,
       mounted: p.mounted,
       collected: false,
+      ...(p.src.motionTypeId !== undefined ? { motionTypeId: p.src.motionTypeId } : {}),
     };
   };
 

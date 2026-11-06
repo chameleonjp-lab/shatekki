@@ -166,6 +166,8 @@ export interface PrizeFrame {
   readonly maxHp: number;
   readonly mounted: boolean;
   readonly collected: boolean;
+  /** Expanded rules: the kind whose periodic motion the mount still runs after a transform (absent = typeId). */
+  readonly motionTypeId?: PrizeTypeId;
 }
 
 export interface ProjectileFrame {

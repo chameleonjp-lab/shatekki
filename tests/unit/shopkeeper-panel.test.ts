@@ -250,13 +250,20 @@ describe('question content from the expanded catalog', () => {
     expect(questionContentFor(exp, { shotId: SHOT, questionId: 'Q999' as QuestionId }, (k) => tr(k))).toBeNull();
   });
 
-  it('falls back to Japanese for every locale and never returns a raw key for known content', () => {
+  it('uses the locale, then English, then the Japanese source, and never returns a raw key for known content', () => {
+    expect(expansionText('ja', 'exp.series.SER01.label')).toBe('お菓子屋さん');
+    expect(expansionText('ja', 'exp.series.SER01.symbol')).toBe('[菓]');
+    expect(expansionText('en', 'exp.series.SER01.label')).toBe('Sweet Shop');
+    expect(expansionText('en', 'exp.series.SER01.symbol')).toBe('[Sweets]');
     for (const loc of LOCALES) {
-      expect(expansionText(loc, 'exp.series.SER01.label')).toBe('お菓子屋さん');
-      expect(expansionText(loc, 'exp.series.SER01.symbol')).toBe('[菓]');
+      const label = expansionText(loc, 'exp.series.SER01.label');
+      expect(label.length, loc).toBeGreaterThan(0);
+      expect(label).not.toMatch(/^exp\.|^SER01$/);
+      expect(expansionText(loc, 'exp.q.Q001.A').length, loc).toBeGreaterThan(0);
+      expect(expansionText(loc, 'exp.fx.FX001.result', { n: 1 })).not.toContain('{n}');
     }
-    expect(expansionText('en', 'exp.fx.FX093.name')).toBe('耐久の見取り図');
     expect(expansionText('en', 'exp.unknown')).toBe('');
+    expect(expansionText('en', 'exp.q.Q999')).toBe('');
     expect(tr('shopq.title')).toBe(UI_STRINGS.ja['shopq.title']);
   });
 });
