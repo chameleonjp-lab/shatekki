@@ -11,6 +11,7 @@ import questionsJa from '../../data/expansion-v2/questions.json';
 import seriesJa from '../../data/expansion-v2/series.json';
 import { EN_CONTENT } from './expanded/en';
 import { ES_CONTENT } from './expanded/es';
+import { FR_CONTENT } from './expanded/fr';
 import { PT_BR_CONTENT } from './expanded/pt-BR';
 import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
 import { JA_SUPPLEMENT } from './expanded/ja';
@@ -35,7 +36,7 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   es: { status: 'complete', content: ES_CONTENT },
   'pt-BR': { status: 'complete', content: PT_BR_CONTENT },
   'zh-Hans': { status: 'complete', content: ZH_HANS_CONTENT },
-  fr: PENDING,
+  fr: { status: 'complete', content: FR_CONTENT },
   de: PENDING,
   ko: PENDING,
   ru: PENDING,

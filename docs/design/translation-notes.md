@@ -55,8 +55,18 @@ Code: `src/i18n/expanded/` (types, `ja.ts`, `en.ts` + parts), resolver `src/i18n
 
 - Status (open item O16 style): all texts are machine-produced by Claude, **not reviewed by a native speaker**. The ja
   pair hints and result lines are written here (not in the data) and are prototypes like the existing set hints (O02).
-- Done: ja (source texts from `data/expansion-v2/*_ja` + written hints/results/lines) and en, complete for every field.
-- Pending (fall back to English until filled): es, pt-BR, zh-Hans, fr, de, ko, ru, it, zh-Hant, id, tr, vi, th.
+- Done: ja (source texts from `data/expansion-v2/*_ja` + written hints/results/lines), en, and (batch 2) es, pt-BR, zh-Hans,
+  fr, all complete for every field (300 pair names/hints, 200 questions x text/A/B, 6 groups, 100 effect names/results, 20 series
+  labels/symbols, 4 lines). Machine-produced by Claude from the Japanese meaning with English as a cross-check; **not native-reviewed**.
+  Prize and set vocabulary follows the existing per-locale prize names (es "Set de ...", pt-BR "Kit de ...", zh-Hans "...套装",
+  fr "Lot ..."); the ammo word follows the UI (es corcho, pt-BR rolha, zh-Hans 弹, fr bouchon). Series symbols are short bracketed
+  words, unique per series (es `[Dulces]`, pt-BR `[Doces]`, zh-Hans `[糖果]`, fr `[Bonbons]`). The unit test applies the same
+  completeness, placeholder, symbol and hint checks (hint names neither prize of the pair via that locale's `prizeName`, says
+  "2 tipos" (es, pt-BR) / "2种" / "2 types") to every complete locale.
+- Wording to review first with a native reader: the verbs for the two ammo-effect pairs "chip" and "push" (ja 削る/押す) in all
+  four languages (es astillar/empujar, pt-BR lascar/empurrar, zh-Hans 削/推, fr entamer/pousser), the dango / ramune / onigiri
+  loanwords kept as is, and the pair clues that stay close to the designer note.
+- Pending (fall back to English until filled): de, ko, ru, it, zh-Hant, id, tr, vi, th.
   `contentCoverage()` lists per-locale counts; a pending locale may hold partial content, a complete one must hold all.
 - Hints: a gentle scene/category clue plus "needs 2 kinds"; they never name both prizes and never paste the designer note.
   Some clues are close to the scene in the designer note and may still be easy to guess; review before release.
