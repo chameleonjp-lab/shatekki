@@ -2,13 +2,15 @@
 
 状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（Task 17）。
 
-基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`
+基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`（作業開始時）→ 現在 `eb3fd2a`（#7マージ後）
+
+**PRの状態（2026-11-06 00:30 UTC）**：#7（P0）はmainへマージ済み。#8〜#10は積み重ねの元ブランチへマージされ、mainには未反映。#8〜#10の内容とTask 17は、すべて #11（`feat/p6-acceptance` → main、CI成功）に含まれる。#12は重複のため閉じた。以下の表の「PR_OPEN」は、#11のマージ待ちを指す。
 
 | Task | 内容 | 担当（実モデル） | 状態 | ブランチ／PR | 試験の証拠 | 阻害・次の作業 |
 |---|---|---|---|---|---|---|
-| 00 | 調査・制約確認 | Opus（claude-opus-5-5） | PR_OPEN | `feat/p0-foundation-contracts` | `docs/architecture/implementation-baseline.md` | マージ待ち |
-| 01 | 起動・試験基盤 | Opus | PR_OPEN | 同上 | typecheck／unit 30件／integration 5件／build／e2e 6件（Chromium） | CIの初回実行結果をPRで確認 |
-| 02 | 契約と所有境界 | Opus | PR_OPEN | 同上 | `tests/unit/contracts.test.ts` | — |
+| 00 | 調査・制約確認 | Opus（claude-opus-5-5） | MERGED（#7） | `feat/p0-foundation-contracts` | `docs/architecture/implementation-baseline.md` | マージ待ち |
+| 01 | 起動・試験基盤 | Opus | MERGED（#7） | 同上 | typecheck／unit 30件／integration 5件／build／e2e 6件（Chromium） | CIの初回実行結果をPRで確認 |
+| 02 | 契約と所有境界 | Opus | MERGED（#7） | 同上 | `tests/unit/contracts.test.ts` | — |
 | 03 | 候補検査・抽選・設定 | Game（claude-sonnet-5-5） | PR_OPEN | `feat/p1-game`→`feat/p1-integration` | unit/catalog 11・unit/draw 16 | 100景品・100セットの値はすべて試作 |
 | 04 | 一射の状態と弾数 | Game（claude-sonnet-5-5） | PR_OPEN | 同上 | unit/shot-flow 26 | — |
 | 05 | 物理・命中 | Game（claude-sonnet-5-5） | PR_OPEN | 同上 | unit/collision 14 | 仕掛けの効果はTask 08 |
