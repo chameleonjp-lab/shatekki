@@ -17,7 +17,7 @@ const KEYS = Object.keys(JA) as UiKey[];
 const PLACEHOLDER = /\{(\w+)\}/g;
 const placeholders = (s: string) => [...s.matchAll(PLACEHOLDER)].map((m) => m[1]).sort();
 
-// Strings that may legitimately equal the English text (loanwords / symbols).
+// Strings that may legitimately equal the English text (brand / loanwords / symbols).
 const SAME_AS_EN_ALLOWED: Record<string, readonly string[]> = {
   'pt-BR': ['home.ranking', 'rank.title', 'setbook.undiscovered', 'unit.pieces'],
   it: ['result.home', 'bd.set'],
@@ -25,7 +25,7 @@ const SAME_AS_EN_ALLOWED: Record<string, readonly string[]> = {
   de: ['hud.bonus', 'home.name.label', 'home.name.placeholder', 'btn.pause', 'bd.trick', 'bd.set', 'rank.col.name'],
   'zh-Hans': ['setbook.undiscovered', 'unit.pieces'],
   'zh-Hant': ['setbook.undiscovered', 'unit.pieces'],
-  '*': ['setbook.undiscovered', 'unit.pieces', 'unit.points', 'hud.score', 'bd.total', 'rank.title', 'settings.volume'],
+  '*': ['app.title', 'setbook.undiscovered', 'unit.pieces', 'unit.points', 'hud.score', 'bd.total', 'rank.title', 'settings.volume'],
 };
 
 describe('locales', () => {

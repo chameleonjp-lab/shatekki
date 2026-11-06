@@ -49,10 +49,10 @@ describe('no secrets in the shipped code', () => {
     for (const k of keys) expect(k.startsWith('sb_publishable_'), k).toBe(true);
   });
 
-  it('the shipped game config leaves slug / canonical URL / lab URL null until approved (O14)', () => {
+  it('the published game keeps ranking and lab disabled while sharing its own URL', () => {
     const text = readFileSync(join(ROOT, 'src/ranking/config.ts'), 'utf8');
     expect(text).toMatch(/gameSlug: null,/);
-    expect(text).toMatch(/canonicalUrl: null,/);
+    expect(text).toContain("canonicalUrl: 'https://chameleonjp-lab.github.io/shatekki/'");
     expect(text).toMatch(/labDetailUrl: null,/);
   });
 

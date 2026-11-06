@@ -25,11 +25,14 @@ export interface ResultInput {
   submit: RankingSubmitStatus | null;
   top: TopState;
   links: PublicLinks;
+  /** False during private/offline publication. Defaults to a configured ranking link. */
+  rankingAvailable?: boolean;
 }
 
 export type BreakdownKind = 'prize' | 'trick' | 'set' | 'firstHit' | 'penalty';
 
 export interface ResultViewModel {
+  readonly rankingAvailable: boolean;
   readonly title: string;
   readonly abandonedNotice: string | null;
   readonly hero: { readonly label: string; readonly value: string; readonly unit: string };
@@ -79,7 +82,10 @@ const NOT_ELIGIBLE_KEYS: Readonly<Record<string, UiKey>> = {
 
 export function resultViewModel(input: ResultInput, locale: Locale): ResultViewModel {
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
-  const { result, submit, top } = input;
+  const { result } = input;
+  const rankingAvailable = input.rankingAvailable ?? input.links.labDetailUrl !== null;
+  const submit = rankingAvailable ? input.submit : null;
+  const top: TopState = rankingAvailable ? input.top : { state: 'unavailable' };
   const completed = result.status === 'completed';
 
   // ---- self best (a lower score never lowers it; abandoned never counts)
@@ -178,6 +184,7 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
 
   const links = input.links;
   return {
+    rankingAvailable,
     title: t('result.title'),
     abandonedNotice: completed ? null : t('result.abandoned'),
     hero: { label: t('result.score'), value: formatInteger(locale, result.score), unit: t('hud.score') },
@@ -210,9 +217,9 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
       home: { label: t('result.home') },
       ranking: {
         label: t('home.ranking'),
-        enabled: links.labDetailUrl !== null,
-        url: links.labDetailUrl,
-        note: links.labDetailUrl === null ? t('home.ranking.soon') : null,
+        enabled: rankingAvailable && links.labDetailUrl !== null,
+        url: rankingAvailable ? links.labDetailUrl : null,
+        note: rankingAvailable && links.labDetailUrl === null ? t('home.ranking.soon') : null,
       },
       share: {
         label: t('home.share'),
@@ -288,9 +295,13 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   chainValue.dataset.testid = 'result-chain';
 
   const heroSec = el('section', { class: 'sec hero' }, [heroLabel, el('div', { class: 'hero-row' }, [heroValue, heroUnit]), newBest, best, prevBest, rank]);
+  const rankingBlock = el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]);
+  const submitSec = el('section', { class: 'sec' }, [submitMsg, storageWarn, submitRetry]);
+  const topSec = el('section', { class: 'sec' }, [topTitle, topMsg, topRetry, topList]);
+  const secondaryActions = el('div', { class: 'btn-grid three' }, [home, rankingBlock, share]);
   const actionsSec = el('section', { class: 'sec actions' }, [
     retry,
-    el('div', { class: 'btn-grid three' }, [home, el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]), share]),
+    secondaryActions,
     shareStatus, manual,
   ]);
   const col = el('main', { class: 'scr-col' }, [
@@ -299,8 +310,8 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     el('section', { class: 'sec' }, [setsTitle, setsBody, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
     el('section', { class: 'sec' }, [chainTitle, chainValue, shots]),
     el('section', { class: 'sec' }, [bdTitle, bdBody, bdNote]),
-    el('section', { class: 'sec' }, [submitMsg, storageWarn, submitRetry]),
-    el('section', { class: 'sec' }, [topTitle, topMsg, topRetry, topList]),
+    submitSec,
+    topSec,
   ]);
   const scr = el('div', { class: 'scr scr-result' }, [col]);
   root.appendChild(scr);
@@ -329,6 +340,10 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     setText(retry, vm.actions.retry.label);
     setText(bookBtn, translate(deps.i18n.locale, 'setbook.title'));
     setText(home, vm.actions.home.label);
+    setHidden(rankingBlock, !vm.rankingAvailable);
+    setHidden(submitSec, !vm.rankingAvailable);
+    setHidden(topSec, !vm.rankingAvailable);
+    secondaryActions.classList.toggle('three', vm.rankingAvailable);
     setText(rankingBtn, vm.actions.ranking.label);
     rankingBtn.disabled = !vm.actions.ranking.enabled;
     setText(rankingNote, vm.actions.ranking.note ?? '');
@@ -387,8 +402,8 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
       if (o === 'manual') manual.select();
     });
   });
-  submitRetry.addEventListener('click', () => deps.onRetrySubmit());
-  topRetry.addEventListener('click', () => deps.onRetryTop());
+  submitRetry.addEventListener('click', () => { if (vm.rankingAvailable) deps.onRetrySubmit(); });
+  topRetry.addEventListener('click', () => { if (vm.rankingAvailable) deps.onRetryTop(); });
   bookBtn.addEventListener('click', () => deps.onOpenSetBook?.());
 
   const unsub = deps.i18n.subscribe(refresh);

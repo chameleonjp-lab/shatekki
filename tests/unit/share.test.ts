@@ -37,7 +37,7 @@ describe('share text', () => {
       expect(digits, loc).toContain('12345'.replace(/,/g, '')); // formatted with or without separators
       expect(t, loc).not.toMatch(/[{}]/);
     }
-    expect(buildResultShareText('ja', COUNTS, null)).toBe('屋台の射的ゲーム（通常モード）\n12,345点／景品7個／セット2種／最大連鎖3個');
+    expect(buildResultShareText('ja', COUNTS, null)).toBe('シャテッキ（通常モード）\n12,345点／景品7個／セット2種／最大連鎖3個');
     expect(buildResultShareText('en', COUNTS, null)).toContain('12,345 pts');
   });
 

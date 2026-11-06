@@ -22,8 +22,7 @@ import {
 } from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
-import { PROTOTYPE_TUNING } from './catalog/config';
-import { PROTOTYPE_CATALOG } from './catalog/runtime-config';
+import { RELEASE_CATALOG, RELEASE_TUNING } from './catalog/release-config';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
 import { controlsModel } from './ui/controls/model';
@@ -45,7 +44,7 @@ import { mountResult } from './ui/result';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
 import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
-import { publicLinks } from './ranking/config';
+import { publicLinks, RANKING_CONFIG } from './ranking/config';
 import { normalizePlayerName } from './ranking/name';
 import { createAudioEngine } from './audio';
 import type { AudioSettings, GameCommand, UiCue } from './contracts';
@@ -138,8 +137,8 @@ function loadHeavyModules(): Promise<HeavyModules> {
 
 export function createApp(root: HTMLElement, win: Window): AppHandle {
   const doc = win.document;
-  const catalog: RuntimeCatalog = PROTOTYPE_CATALOG;
-  const tuning: TuningConfig = PROTOTYPE_TUNING;
+  const catalog: RuntimeCatalog = RELEASE_CATALOG;
+  const tuning: TuningConfig = RELEASE_TUNING;
   const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
@@ -152,6 +151,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const nameStore = createPlayerNameStore(storage);
   const ranking = createRankingService({ storage });
   const links = publicLinks();
+  const rankingAvailable = RANKING_CONFIG.gameSlug !== null;
   let restore: RestoreResult = runStore.load();
   // An abandoned or finished run is shown once and never resumed or ranked from here (decision 27).
   if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
@@ -296,7 +296,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   win.addEventListener('storage', onStorage);
 
   // Resend queued ranking results (same submission ids) on load and when back online.
-  const retryRanking = () => void ranking.retryPending().catch(() => undefined);
+  const retryRanking = () => { if (rankingAvailable) void ranking.retryPending().catch(() => undefined); };
   retryRanking();
   win.addEventListener('online', retryRanking);
 
@@ -389,7 +389,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     const fireSaveFailed = runStore.status().fireSaveFailed;
     runStore.clear();
     // A run whose pre-shot save failed cannot prove a lost shot on reload: never submit it (persistence-design §5).
-    if (!fireSaveFailed) void ranking.submit(result).catch(() => undefined);
+    if (rankingAvailable && !fireSaveFailed) void ranking.submit(result).catch(() => undefined);
     // Let the last settle presentation play briefly before the result screen.
     win.setTimeout(() => {
       if (disposed || controller?.current.runId !== state.runId) return;
@@ -444,14 +444,14 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       clearScreen();
       let initial: RunState;
       if (opts.resume) {
-        initial = opts.resume;
+        initial = rankingAvailable ? opts.resume : { ...opts.resume, playerName: null };
         runName = initial.playerName;
       } else {
-        runName = opts.name;
+        runName = rankingAvailable ? opts.name : null;
         initial = CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName }, catalog);
         runStore.saveStable(initial);
       }
-      ranking.beginRun({ runId: initial.runId, playerName: runName, valueStatus: initial.valueStatus });
+      if (rankingAvailable) ranking.beginRun({ runId: initial.runId, playerName: runName, valueStatus: initial.valueStatus });
       controller = makeController(w, initial);
       controller.setEnvironmentPause(reasons);
       setScreen('game');
@@ -490,6 +490,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         sets: setBookEntriesFromCatalog(catalog),
         discovered: profile.load().discoveredSets,
         completedThisRun: last && screen === 'result' ? last.completedSets : [],
+        prototypeHints: isPrototype,
       },
     );
   };
@@ -517,7 +518,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         },
         onOpenSetBook: openSetBook,
       },
-      { nameDraft: nameStore.get() ?? '', selfBest: profile.load().bestScore, audio: settings.audio, prototype: isPrototype },
+      { nameDraft: nameStore.get() ?? '', selfBest: profile.load().bestScore, audio: settings.audio, prototype: isPrototype, rankingAvailable },
     );
   };
 
@@ -537,7 +538,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
         onOpenSetBook: openSetBook,
       },
-      { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links },
+      { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable },
     );
     screenHandle = handle;
     void loadHeavyModules().then(({ view }) => {
@@ -546,8 +547,10 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       const host = screens.querySelector<HTMLElement>('.scr-result') ?? screens;
       stopCelebration = view.playResultCelebration(host, { newBest, sets: result.completedSets.length, reducedMotion });
     });
-    rankingUnsub = ranking.subscribe(() => handle.update({ submit: ranking.getStatus(result.runId), top: ranking.getTop() }));
-    void ranking.fetchTop().catch(() => undefined);
+    if (rankingAvailable) {
+      rankingUnsub = ranking.subscribe(() => handle.update({ submit: ranking.getStatus(result.runId), top: ranking.getTop() }));
+      void ranking.fetchTop().catch(() => undefined);
+    }
   };
 
   // Language changes re-render text only: ids, scoring and the current run are untouched.

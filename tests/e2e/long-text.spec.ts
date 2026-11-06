@@ -1,10 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // Chromium, short portrait screens (not Safari, not a real device).
-// Long translations and a 20-character name must not hide or push out the
+// Long translations must not hide or push out the
 // main buttons, and nothing may scroll sideways.
-
-const LONG_NAME = 'ジュゲムジュゲムゴコウノスリキレカイジャ'.slice(0, 20); // 20 code points
 
 async function setLocale(page: Page, locale: string) {
   await page.goto('/?e2e=1');
@@ -25,11 +23,11 @@ async function inViewport(page: Page, testId: string) {
 }
 
 for (const locale of ['de', 'ru', 'th', 'vi', 'ja'] as const) {
-  test(`${locale}: home start button stays visible with a 20-character name, no sideways scroll`, async ({ page }) => {
+  test(`${locale}: private home start button stays visible, no sideways scroll`, async ({ page }) => {
     await setLocale(page, locale);
     if (locale !== 'ja') await expect(page.getByTestId('home-start')).not.toHaveText('はじめる');
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
-    await page.getByTestId('home-name').fill(LONG_NAME);
+    await expect(page.getByTestId('home-name')).toBeHidden();
     await inViewport(page, 'home-start');
     await expect(page.getByTestId('home-start')).toBeEnabled();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

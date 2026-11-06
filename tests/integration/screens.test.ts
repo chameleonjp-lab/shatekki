@@ -21,9 +21,25 @@ function mem() {
 }
 
 const home = (over: Partial<Parameters<typeof homeViewModel>[0]> = {}, links = NO_LINKS, loc: (typeof LOCALES)[number] = 'ja') =>
-  homeViewModel({ nameDraft: '', selfBest: null, audio: DEFAULT_AUDIO, prototype: false, ...over }, links, loc);
+  homeViewModel({ nameDraft: '', selfBest: null, audio: DEFAULT_AUDIO, prototype: false, rankingAvailable: true, ...over }, links, loc);
 
 describe('home view-model', () => {
+  it('private mode hides public-name and ranking controls and ignores a previously saved name', () => {
+    const vm = home({ nameDraft: '😀'.repeat(21), rankingAvailable: false }, SET_LINKS);
+    expect(vm.name.visible).toBe(false);
+    expect(vm.ranking.visible).toBe(false);
+    expect(vm.ranking.enabled).toBe(false);
+    expect(vm.ranking.url).toBeNull();
+    expect(vm.canStart).toBe(true);
+    expect(vm.startName).toBeNull();
+  });
+
+  it('defaults to private mode until a ranking page is configured', () => {
+    const vm = homeViewModel({ nameDraft: 'たろう', selfBest: null, audio: DEFAULT_AUDIO, prototype: false }, NO_LINKS, 'ja');
+    expect(vm.name.visible).toBe(false);
+    expect(vm.startName).toBeNull();
+  });
+
   it('shows the exact name explanation and lets an empty name start anonymously', () => {
     const vm = home();
     expect(vm.name.explain).toBe('名前を入力すると、名前と記録がランキングに公開されます。空欄でも遊べます。');
@@ -131,11 +147,27 @@ const submitted: RankingSubmitStatus = { state: 'submitted', bestScore: 870, isN
 
 function resultInput(over: Partial<ResultInput> = {}): ResultInput {
   return {
-    result: finalResult(), selfBestBefore: null, submit: null, top: { state: 'idle' } as TopState, links: NO_LINKS, ...over,
+    result: finalResult(), selfBestBefore: null, submit: null, top: { state: 'idle' } as TopState, links: NO_LINKS, rankingAvailable: true, ...over,
   };
 }
 
 describe('result view-model', () => {
+  it('private mode suppresses submit, own rank, top rows, and the ranking link even with stale ranking data', () => {
+    const vm = resultViewModel(resultInput({
+      rankingAvailable: false, links: SET_LINKS, submit: submitted,
+      top: { state: 'ready', fetchedAt: 't', rows: [row(1, 'たろう', 870)] },
+    }), 'ja');
+    expect(vm.rankingAvailable).toBe(false);
+    expect(vm.submit).toBeNull();
+    expect(vm.rankText).toBeNull();
+    expect(vm.top.rows).toEqual([]);
+    expect(vm.top.canRetry).toBe(false);
+    expect(vm.actions.ranking.enabled).toBe(false);
+    expect(vm.actions.ranking.url).toBeNull();
+    expect(vm.hero.value).toBe('870');
+    expect(vm.best.text).toBe('自己ベスト：870点');
+  });
+
   it('shows the total as the hero and puts retry right after it (first screenful), the rest scrolls', () => {
     const vm = resultViewModel(resultInput(), 'ja');
     expect(vm.hero.value).toBe('870');
@@ -289,7 +321,7 @@ describe('result view-model', () => {
 
   it('share text uses the confirmed numbers and adds the URL once when configured', () => {
     const none = resultViewModel(resultInput(), 'ja');
-    expect(none.actions.share.text).toBe('屋台の射的ゲーム（通常モード）\n870点／景品3個／セット1種／最大連鎖2個');
+    expect(none.actions.share.text).toBe('シャテッキ（通常モード）\n870点／景品3個／セット1種／最大連鎖2個');
     const withUrl = resultViewModel(resultInput({ links: SET_LINKS }), 'ja');
     expect(withUrl.actions.share.text.split(SET_LINKS.canonicalUrl).length - 1).toBe(1);
   });

@@ -1,17 +1,8 @@
 /**
- * Ranking / publication configuration.
- *
- * `gameSlug`, `canonicalUrl` and `labDetailUrl` are deliberately null: they do
- * not exist yet. The lab database has no row for this game (public.games was
- * checked read-only: 62 rows, none for 射的) and the official game URL and the
- * lab detail page are undecided. They stay null until the user approves the DB
- * registration and publication (open item O14, plan Task 18). Never guess them
- * and never reuse another game's values. While gameSlug is null the client
- * sends nothing, the Ranking button is disabled ("準備中") and the share text
- * omits the URL.
- *
- * The Supabase URL and publishable key are public by design (they are shipped
- * in every lab game). No privileged or private key may ever appear in src/.
+ * First official publication: gameplay is public, ranking and lab integration
+ * remain disabled by the user's release instruction. No start/end/score/top
+ * requests are allowed while gameSlug is null. The intended Pages URL is set
+ * for canonical/share metadata; publication is verified separately.
  */
 export interface RankingConfig {
   readonly supabaseUrl: string;
@@ -33,9 +24,9 @@ export const RANKING_CONFIG: RankingConfig = {
   supabaseUrl: 'https://mlpnjgezrnhdxsxolyzj.supabase.co',
   publishableKey: 'sb_publishable_drzcy0v97knU6FgjqSgBHw_0A9XPdFM',
   gameSlug: null,
-  canonicalUrl: null,
+  canonicalUrl: 'https://chameleonjp-lab.github.io/shatekki/',
   labDetailUrl: null,
-  clientVersion: 'shatekki-web-0.1.0-prototype',
+  clientVersion: 'shatekki-web-1.0.0',
   timeoutMs: 8000,
   topLimit: 30,
 };
