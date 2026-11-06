@@ -1,0 +1,997 @@
+[
+  {
+    "id": "FX001",
+    "name_ja": "弾を1発もらう",
+    "operation": {
+      "kind": "ammoAdd",
+      "amount": 1
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX002",
+    "name_ja": "弾を2発もらう",
+    "operation": {
+      "kind": "ammoAdd",
+      "amount": 2
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX003",
+    "name_ja": "弾を3発もらう",
+    "operation": {
+      "kind": "ammoAdd",
+      "amount": 3
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX004",
+    "name_ja": "少し削りやすい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 1.25
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX005",
+    "name_ja": "よく削る弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX006",
+    "name_ja": "少し押しやすい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "pushMult": 1.25
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX007",
+    "name_ja": "強く押す弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "pushMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX008",
+    "name_ja": "ほどよい強打",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 1.2,
+        "pushMult": 1.2
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX009",
+    "name_ja": "しっかり強打",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 1.4,
+        "pushMult": 1.4
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX010",
+    "name_ja": "少し速い弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "speedMult": 1.1
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX011",
+    "name_ja": "速い弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "speedMult": 1.2
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX012",
+    "name_ja": "落ち着く照準",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "swayMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX013",
+    "name_ja": "さらに落ち着く照準",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "swayMult": 0.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX014",
+    "name_ja": "少し落ちにくい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "gravityMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX015",
+    "name_ja": "低い山なりの弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "gravityMult": 0.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX016",
+    "name_ja": "跳ねる弾へ変更",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "bulletType": "bouncy"
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX017",
+    "name_ja": "重い弾へ変更",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "bulletType": "heavy"
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX018",
+    "name_ja": "まとまる分裂",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "splitSpreadMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX019",
+    "name_ja": "二方向の弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "launch": {
+          "count": 2,
+          "spreadRad": 0.175
+        }
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX020",
+    "name_ja": "反射の余裕を1回増やす",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "extraReflections": 1
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX021",
+    "name_ja": "弾を1発落とす",
+    "operation": {
+      "kind": "ammoRemove",
+      "amount": 1
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX022",
+    "name_ja": "弾を2発落とす",
+    "operation": {
+      "kind": "ammoRemove",
+      "amount": 2
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX023",
+    "name_ja": "弾を3発落とす",
+    "operation": {
+      "kind": "ammoRemove",
+      "amount": 3
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX024",
+    "name_ja": "削りにくい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX025",
+    "name_ja": "やわらかい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 0.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX026",
+    "name_ja": "押しにくい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "pushMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX027",
+    "name_ja": "軽く押す弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "pushMult": 0.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX028",
+    "name_ja": "控えめな一発",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 0.8,
+        "pushMult": 0.8
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX029",
+    "name_ja": "少し遅い弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "speedMult": 0.9
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX030",
+    "name_ja": "ゆっくりの弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "speedMult": 0.8
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX031",
+    "name_ja": "少し山なりの弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "gravityMult": 1.25
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX032",
+    "name_ja": "山なりの弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "gravityMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX033",
+    "name_ja": "跳ねにくい弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "restitutionMult": 0.85
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX034",
+    "name_ja": "すぐ勢いが落ちる弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "restitutionMult": 0.65
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX035",
+    "name_ja": "少し揺れる照準",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "swayMult": 1.25
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX036",
+    "name_ja": "揺れる照準",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "swayMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX037",
+    "name_ja": "速い装填バー",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "loadPeriodMult": 0.85
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX038",
+    "name_ja": "ゆっくりの装填バー",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "loadPeriodMult": 1.15
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX039",
+    "name_ja": "広がる分裂",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "splitSpreadMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX040",
+    "name_ja": "反射の余裕を2回減らす",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "extraReflections": -2
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX041",
+    "name_ja": "お菓子屋さんの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER01"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX042",
+    "name_ja": "お茶会の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER02"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX043",
+    "name_ja": "夏祭りの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER03"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX044",
+    "name_ja": "昔あそびの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER04"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX045",
+    "name_ja": "身近な動物の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER05"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX046",
+    "name_ja": "動物園の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER06"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX047",
+    "name_ja": "森の景色の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER07"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX048",
+    "name_ja": "海の生き物の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER08"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX049",
+    "name_ja": "旅ののりものの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER09"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX050",
+    "name_ja": "はたらく車の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER10"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX051",
+    "name_ja": "おでかけ道具の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER11"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX052",
+    "name_ja": "宇宙探検の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER12"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX053",
+    "name_ja": "空の景色の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER13"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX054",
+    "name_ja": "花の庭の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER14"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX055",
+    "name_ja": "小さな虫の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER15"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX056",
+    "name_ja": "音楽会の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER16"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX057",
+    "name_ja": "みんなのゲームの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER17"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX058",
+    "name_ja": "朝ごはんとお弁当の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER18"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX059",
+    "name_ja": "軽食屋さんの品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER19"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX060",
+    "name_ja": "おままごと台所の品揃え",
+    "operation": {
+      "kind": "seriesAssortment",
+      "seriesId": "SER20"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX061",
+    "name_ja": "お菓子屋さんを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER01"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX062",
+    "name_ja": "お茶会を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER02"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX063",
+    "name_ja": "夏祭りを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER03"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX064",
+    "name_ja": "昔あそびを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER04"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX065",
+    "name_ja": "身近な動物を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER05"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX066",
+    "name_ja": "動物園を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER06"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX067",
+    "name_ja": "森の景色を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER07"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX068",
+    "name_ja": "海の生き物を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER08"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX069",
+    "name_ja": "旅ののりものを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER09"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX070",
+    "name_ja": "はたらく車を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER10"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX071",
+    "name_ja": "おでかけ道具を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER11"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX072",
+    "name_ja": "宇宙探検を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER12"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX073",
+    "name_ja": "空の景色を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER13"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX074",
+    "name_ja": "花の庭を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER14"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX075",
+    "name_ja": "小さな虫を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER15"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX076",
+    "name_ja": "音楽会を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER16"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX077",
+    "name_ja": "みんなのゲームを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER17"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX078",
+    "name_ja": "朝ごはんとお弁当を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER18"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX079",
+    "name_ja": "軽食屋さんを見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER19"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX080",
+    "name_ja": "おままごと台所を見つける",
+    "operation": {
+      "kind": "seriesOutline",
+      "seriesId": "SER20"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX081",
+    "name_ja": "普通の弾へ戻す",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "bulletType": "standard"
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX082",
+    "name_ja": "次の弾をいつもどおりに",
+    "operation": {
+      "kind": "resetShotModifiers"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX083",
+    "name_ja": "太めのコルク",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "radiusMult": 1.2
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX084",
+    "name_ja": "細めのコルク",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "radiusMult": 0.85
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX085",
+    "name_ja": "寄り添う二方向弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "launch": {
+          "count": 2,
+          "spreadRad": 0.1
+        }
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX086",
+    "name_ja": "三方向の弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "launch": {
+          "count": 3,
+          "spreadRad": 0.175
+        }
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX087",
+    "name_ja": "削ることに寄せた弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 1.5,
+        "pushMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX088",
+    "name_ja": "押すことに寄せた弾",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "damageMult": 0.75,
+        "pushMult": 1.5
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX089",
+    "name_ja": "速いけれど軽い一発",
+    "operation": {
+      "kind": "shotModifiers",
+      "set": {
+        "speedMult": 1.2,
+        "pushMult": 0.75
+      }
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX090",
+    "name_ja": "景品ひとつをおそろいに",
+    "operation": {
+      "kind": "transformCopyType"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX091",
+    "name_ja": "景品ひとつを元の種類へ",
+    "operation": {
+      "kind": "transformRevert"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX092",
+    "name_ja": "取った種類をもうひとつ",
+    "operation": {
+      "kind": "transformToLastCollected"
+    },
+    "timing": "afterFlight"
+  },
+  {
+    "id": "FX093",
+    "name_ja": "耐久の見取り図",
+    "operation": {
+      "kind": "hint",
+      "hint": "hpRatio"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX094",
+    "name_ja": "あと一種類の手がかり",
+    "operation": {
+      "kind": "hint",
+      "hint": "oneMissing"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX095",
+    "name_ja": "今回まだ取っていない景品",
+    "operation": {
+      "kind": "hint",
+      "hint": "notCollectedThisRun"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX096",
+    "name_ja": "同じ種類をまとめて見る",
+    "operation": {
+      "kind": "hint",
+      "hint": "duplicates"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX097",
+    "name_ja": "動きの周期を見る",
+    "operation": {
+      "kind": "hint",
+      "hint": "motionPeriod"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX098",
+    "name_ja": "最初の当たり先の目安",
+    "operation": {
+      "kind": "hint",
+      "hint": "aimPreview"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX099",
+    "name_ja": "飛んだ道筋を見やすくする",
+    "operation": {
+      "kind": "hint",
+      "hint": "trajectory"
+    },
+    "timing": "nextShot"
+  },
+  {
+    "id": "FX100",
+    "name_ja": "照準の角度目盛り",
+    "operation": {
+      "kind": "hint",
+      "hint": "angleTicks"
+    },
+    "timing": "nextShot"
+  }
+]

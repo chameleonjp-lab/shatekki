@@ -1,7 +1,7 @@
 /**
  * Set completion (Task 09; decisions 11-14). Pure and order-free: a set is
- * complete when its three distinct required kinds are all among the kinds
- * collected so far in this run. Collected kinds are never consumed, so one
+ * complete when its distinct required kinds (three for S001-S100, two for the
+ * expanded PAIR001-PAIR300) are all among the kinds collected so far in this run. Collected kinds are never consumed, so one
  * kind may complete several sets; a set that is already completed in this run
  * is not returned again (it scores once per run).
  */

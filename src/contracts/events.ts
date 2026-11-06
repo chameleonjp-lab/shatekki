@@ -174,6 +174,8 @@ export interface ProjectileFrame {
   readonly velocity: Vec3;
   readonly bulletType: BulletType;
   readonly powerMultiplier: number;
+  /** Expanded rules: the cork's real collider radius (FX083/084). Absent = tuning.cork.radius. */
+  readonly radius?: number;
 }
 
 /** Read-only snapshot for drawing. The view must not write back into the sim. */
