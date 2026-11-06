@@ -29,6 +29,8 @@
 | `impact`（背景面） | `hit.<素材>`：wood/cloth/paper/metal/plastic。反射回数>0なら `reflect` も追加 | 同上 | 0。`reflect` 0.06秒 | 同上 |
 | `impact`（装置・作動済み） | 無音（`deviceActivated` が鳴らす） | — | — | 同上 |
 | `impact`（装置・この発で作動済み） | `hit.deviceDull`（普通の小さな反応のみ） | 接触ごと | 0 | 同上 |
+| `impact`（背景マス・この発で作動） | `cell.activate`（短いはじき音。装置の鈍い音ではない） | 拡張版のみ。作動する接触 | 1。0.15秒 | `soundsForSimEvent` |
+| `impact`（背景マス・使用済み） | `hit.deviceDull`（普通の小さな反応のみ） | 拡張版のみ | 0 | 同上 |
 | `impact`（店主） | `shop.hat` / `shop.fan` / `shop.body` / `shop.feet` | 当たるたび（反応は毎回、点は初回のみ＝決定18） | 1。0.12秒 | 同上 |
 | `impact`（隠し的） | `hidden` | 同上 | 1。0.2秒 | 同上 |
 | `prizeContact` | `chainTap`（小さな連鎖音） | 景品同士の接触 | 0。0.08秒 | 同上 |
@@ -71,3 +73,32 @@
 
 - `UiCue` に任意項目を足す：`loadStop` に `tier: 'perfect'|'good'|'normal'|'weak'`、`collect` に `count: number`（連鎖数）。無くても動く（既定音）。engine は型 `UiCueExt` で受ける。
 - `nearMiss`/`miss` は精算後でなければ送らない。`createThreeRenderer` の `onSettled(cls, summary)` が `present()` の中（精算後）で分類結果を返すので、そこで UiCue を送れる。
+
+## 拡張版（D34〜D37）の音
+
+すべて既存の合成方式（発振器＋ノイズ）。音だけに頼らず、画面の結果行・質問パネルが同じ内容を表示する。消音・音量0・ポーズ・非表示は既存の動作に従う（`silence()`、非実行中は捨てる）。**試作値で、実機での試聴は未実施。**
+
+| 音 | 名前（cue） | いつ | 優先度 / 最小間隔 |
+|---|---|---|---|
+| 質問が出た | `questionShown` → `question.show` | 質問パネルを表示した時（1回） | 2 / 0.5 |
+| 回答を受け付けた | `answerAccepted` → `answer.accept` | 回答コマンドが受理された時（従来の `confirm` の代わり） | 2 / 0.1 |
+| 効果：良い | `effectGood` → `effect.good`（上昇3音） | 精算後、結果行の代表が「良い」 | 2 / 0.3 |
+| 効果：リスク | `effectRisky` → `effect.risky`（下降2音） | 同上、「リスク」 | 2 / 0.3 |
+| 効果：どちらでもない | `effectNeutral` → `effect.neutral`（単音の鐘） | 同上、「中立」 | 2 / 0.3 |
+| 品揃えが変わった | `assortmentChanged` → `assortment.change`（きらめく上昇） | FX041〜FX060 が適用された時 | 2 / 0.4 |
+| 縁取りが出た | `outlineShown` → `outline.show`（高い2音のピン） | FX061〜FX080 が適用された時 | 2 / 0.4 |
+| 背景マスが作動 | SimEvent `impact`（`cell`, `activated:true`）→ `cell.activate` | マスに当たって効果が出る接触 | 1 / 0.15 |
+
+### 効果音の選び方（`effectFeel` / `effectCueFor`、`src/audio/sounds.ts`）
+
+効果番号だけで決める（音声側は拡張版のデータを読み込まない）。
+1. FX041〜FX060 = 品揃え、FX061〜FX080 = 縁取り。
+2. それ以外で、実際の弾数が増えた = 良い、減った = リスク。
+3. 弾数が動かない効果は番号帯：FX001〜FX020 は良い（FX016〜FX019 の弾種・分裂・発射形の変更は中立）、FX021〜FX040 はリスク（FX038〜FX039 の装填バー・分裂角の変更は中立）、FX081〜FX100 は中立。
+4. 1発の結果に複数の効果があっても、鳴らす効果音は**1つだけ**（まとめる）。順位は 品揃え > 縁取り > リスク > 良い > 中立。適用されなかった効果（`notApplicable`）は鳴らさない。
+
+### 契約への提案（Opus が適用）
+
+`src/contracts/ports.ts` の `UiCue` の `cue` に次の7つを追加（エンジンは既に受け付けるので、追加後は `ExpansionUiCue` は不要になる）：
+`'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown'`。
+追加されるまでは `cue()` の型が通らないため、app 側は `ExpansionUiCue` を渡す。

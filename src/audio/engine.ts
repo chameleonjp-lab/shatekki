@@ -17,7 +17,7 @@
  *   are exempt from the window budget).
  */
 import type { AudioEngine, AudioSettings, SimEvent, UiCue } from '../contracts';
-import { SOUNDS, soundsForSimEvent, soundsForUiCue, type SoundId, type SoundRequest, type UiCueExt, type Voice } from './sounds';
+import { SOUNDS, soundsForSimEvent, soundsForUiCue, type SoundId, type SoundRequest, type UiCueExt, type Voice, type ExpansionUiCue } from './sounds';
 
 interface ParamLike {
   value: number;
@@ -284,7 +284,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       }
     },
 
-    handle(event: SimEvent | UiCue, settings: AudioSettings): void {
+    handle(event: SimEvent | UiCue | ExpansionUiCue, settings: AudioSettings): void {
       try {
         if (!settings.enabled || !(settings.volume > 0)) {
           if (active.length > 0) silence(); // muted mid-sound: stop at once
