@@ -13,7 +13,7 @@
  * or wrote. A failed write never stops the game: the caller keeps playing in
  * memory and shows the warning from `status()`.
  */
-import type { BoothLayout, Checkpoint, KeyValueStorage, RunState, RuntimeCatalog, TuningConfig } from '../contracts';
+import type { BoothLayout, Checkpoint, ExpansionCatalog, KeyValueStorage, RunState, RuntimeCatalog, TuningConfig } from '../contracts';
 import { BOOTH_LAYOUT, CHECKPOINT_SCHEMA_VERSION } from '../contracts';
 import { planRestore, validateRunState } from '../core/session';
 import { STORAGE_KEYS } from './keys';
@@ -58,6 +58,10 @@ export interface RunStoreOptions {
   readonly catalog: RuntimeCatalog;
   readonly tuning: TuningConfig;
   readonly layout?: BoothLayout;
+  /** Storage key of this run (default: the rules-v1 key). Expanded rules use expandedRunKey(rulesVersion). */
+  readonly key?: string;
+  /** Set for the expanded rules: state schema 2 is validated against it. */
+  readonly expansion?: ExpansionCatalog | null;
   /** ISO time source (tests inject a fixed one). */
   readonly now?: () => string;
 }
@@ -95,6 +99,8 @@ function peekRevision(raw: string): number | null {
 export function createRunStore(storage: KeyValueStorage, tabId: string, options: RunStoreOptions): RunStore {
   const { catalog, tuning } = options;
   const layout = options.layout ?? BOOTH_LAYOUT;
+  const expansion = options.expansion ?? null;
+  const KEY = options.key ?? STORAGE_KEYS.run;
   const now = options.now ?? (() => new Date().toISOString());
   /** Revision this tab last read or wrote; null = this tab expects no saved run. */
   let expected: number | null = null;
@@ -125,7 +131,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
     const cp = e.checkpoint as Checkpoint;
     if (cp.schemaVersion !== CHECKPOINT_SCHEMA_VERSION) return { ok: false, reason: 'schema-version' };
     if (cp.rulesVersion !== catalog.rulesVersion) return { ok: false, reason: `rules-version: saved ${String(cp.rulesVersion)}, current ${catalog.rulesVersion}` };
-    const problem = validateRunState(cp.state, catalog, tuning, layout);
+    const problem = validateRunState(cp.state, catalog, tuning, layout, expansion);
     if (problem !== null) return { ok: false, reason: `invalid-state: ${problem}` };
     if (cp.runId !== cp.state.runId) return { ok: false, reason: 'invalid-state: runId mismatch' };
     if (cp.confirmedShots !== cp.state.ledger.length) return { ok: false, reason: 'invalid-state: confirmedShots mismatch' };
@@ -134,13 +140,13 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
 
   /** Move `raw` to the quarantine key and only then remove it from the run key. */
   function moveAside(raw: string, reason: string): boolean {
-    const ok = quarantine(storage, { atIso: now(), key: STORAGE_KEYS.run, reason, raw });
+    const ok = quarantine(storage, { atIso: now(), key: KEY, reason, raw });
     if (!ok) {
       lastError = `could not quarantine the saved run (${reason}); it was left in place`;
       return false;
     }
     try {
-      storage.removeItem(STORAGE_KEYS.run);
+      storage.removeItem(KEY);
     } catch (e) {
       noteFailure(e);
     }
@@ -150,7 +156,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
   function write(state: RunState): SaveResult {
     let raw: string | null;
     try {
-      raw = storage.getItem(STORAGE_KEYS.run);
+      raw = storage.getItem(KEY);
     } catch (e) {
       return noteFailure(e);
     }
@@ -182,7 +188,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
       },
     };
     try {
-      storage.setItem(STORAGE_KEYS.run, JSON.stringify(envelope));
+      storage.setItem(KEY, JSON.stringify(envelope));
     } catch (e) {
       return noteFailure(e);
     }
@@ -203,7 +209,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
         // drop the old checkpoint (best effort) and exclude this run from the ranking.
         fireSaveFailed = true;
         try {
-          storage.removeItem(STORAGE_KEYS.run);
+          storage.removeItem(KEY);
           expected = null;
         } catch {
           /* the flag still excludes the run */
@@ -221,7 +227,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
       conflict = false;
       let raw: string | null;
       try {
-        raw = storage.getItem(STORAGE_KEYS.run);
+        raw = storage.getItem(KEY);
       } catch (e) {
         noteFailure(e);
         return { kind: 'none' };
@@ -249,7 +255,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
 
     clear() {
       try {
-        const raw = storage.getItem(STORAGE_KEYS.run);
+        const raw = storage.getItem(KEY);
         if (raw !== null) {
           const stored = peekRevision(raw);
           if (stored !== null && stored !== expected) {
@@ -257,7 +263,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
             return false;
           }
         }
-        storage.removeItem(STORAGE_KEYS.run);
+        storage.removeItem(KEY);
       } catch (e) {
         noteFailure(e);
         return false;
@@ -269,7 +275,7 @@ export function createRunStore(storage: KeyValueStorage, tabId: string, options:
 
     isStale() {
       try {
-        const raw = storage.getItem(STORAGE_KEYS.run);
+        const raw = storage.getItem(KEY);
         if (raw === null) return expected !== null;
         return peekRevision(raw) !== expected;
       } catch {
