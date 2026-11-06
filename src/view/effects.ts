@@ -195,6 +195,8 @@ function presetKeyFor(t: ImpactTarget): string {
       return 'shopkeeper';
     case 'hidden':
       return 'hidden';
+    case 'cell':
+      return t.activated ? 'device' : 'deviceInactive';
   }
 }
 
@@ -209,6 +211,9 @@ function offscreenKeyFor(t: ImpactTarget): string | null {
     case 'hidden':
       return 'fx.offscreen.hidden';
     case 'surface':
+      return null;
+    // EG07/EG09 add the off-screen cell notice and its wording.
+    case 'cell':
       return null;
   }
 }

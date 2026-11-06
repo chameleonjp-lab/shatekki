@@ -28,6 +28,7 @@ import {
   type TransformChooser,
   type TuningConfig,
   type ViewState,
+  type ExpansionCatalog,
 } from '../contracts';
 
 export interface RulesApi {
@@ -44,6 +45,8 @@ export interface RulesContext {
   readonly tuning: TuningConfig;
   readonly catalog: RuntimeCatalog;
   readonly layout: BoothLayout;
+  /** Same four items as GameplayBundle. Absent or null = rules-v1. */
+  readonly expansion?: ExpansionCatalog | null;
 }
 
 export interface ControllerSnapshot {

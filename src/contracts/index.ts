@@ -7,3 +7,5 @@ export * from './game';
 export * from './ports';
 export * from './sim';
 export * from './aim';
+export * from './expansion';
+export * from './layout-v2';

@@ -92,10 +92,12 @@ const FLASH_COLOR: Record<ImpactTarget['kind'], number> = {
   device: 0x7ae0ff,
   shopkeeper: 0xff9ec0,
   hidden: 0xffd24a,
+  // Layout v2 background cell (EG07 refines the look).
+  cell: 0xb8f0c8,
 };
 
 export function flashColorFor(target: ImpactTarget): number {
-  if (target.kind === 'device' && !target.activated) return 0x9a9a9a;
+  if ((target.kind === 'device' || target.kind === 'cell') && !target.activated) return 0x9a9a9a;
   return FLASH_COLOR[target.kind];
 }
 

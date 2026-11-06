@@ -7,7 +7,7 @@
  * ShotSummary produced after the whole shot (flight → transform → falls →
  * settlement) carries points (requirements §7, decision 32).
  */
-import type { DeviceId, EventId, PrizeInstanceId, PrizeTypeId, ProjectileId, RunId, SetId, ShotId } from './ids';
+import type { BackgroundCellId, DeviceId, EventId, PrizeInstanceId, PrizeTypeId, ProjectileId, RunId, SetId, ShotId } from './ids';
 import type { Quat, Vec3 } from './geometry';
 import type { DeviceKind, ShopkeeperPart, SurfaceMaterial } from './layout';
 import type { PrizeMaterial } from './catalog';
@@ -22,7 +22,9 @@ export type ImpactTarget =
   | { readonly kind: 'surface'; readonly surfaceId: string; readonly material: SurfaceMaterial }
   | { readonly kind: 'device'; readonly deviceId: DeviceId; readonly deviceKind: DeviceKind; /** false when this device already fired in this shot (decision 31) */ readonly activated: boolean }
   | { readonly kind: 'shopkeeper'; readonly part: ShopkeeperPart }
-  | { readonly kind: 'hidden'; readonly targetId: string };
+  | { readonly kind: 'hidden'; readonly targetId: string }
+  /** Layout v2 back-wall cell. activated=false: already used this run (ordinary reflection only). */
+  | { readonly kind: 'cell'; readonly cellId: BackgroundCellId; readonly activated: boolean };
 
 /**
  * A cork touched something. Generated for every new contact, including ones

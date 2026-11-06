@@ -771,7 +771,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const frame = buildFrame(pending);
     pending = [];
     justCollected = [];
-    return { frame, record };
+    return { frame, record, barrier: null };
   };
 
   return {
@@ -779,6 +779,11 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     fire,
     step,
     frame: () => buildFrame([]),
+    // Expanded rules (EG05): the rules-v1 pipeline never stops at a barrier, so nothing can be resumed yet.
+    resumeAfterEffects: () => false,
+    previewFirstContact: () => {
+      throw new Error('previewFirstContact is implemented in EG05');
+    },
     get shotInProgress() {
       return active !== null;
     },

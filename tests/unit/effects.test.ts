@@ -293,7 +293,7 @@ describe('skipping changes presentation only (AC27, decision 26)', () => {
           step === frames.length
             ? { runId: mintId.run('r'), shotId: shot, collected: [], prizeOutcomes: [], deviceActivations: [], firstHitCandidates: [], transforms: [], endedByLimit: false, remainingPrizes: [], simTimeSec: 1 }
             : null;
-        return { frame: f, record };
+        return { frame: f, record, barrier: null };
       },
       frame: () => emptyFrame,
       shotInProgress: false,

@@ -63,6 +63,17 @@ export function corkFreeFlightPath(origin: Vec3, direction: Vec3, spec: Ballisti
   return pts;
 }
 
+/**
+ * FX098 "first contact" estimate. Always approximate: moving prizes and
+ * reflections after the first contact are not predicted.
+ */
+export interface AimPreview {
+  readonly points: readonly Vec3[];
+  /** Instance id, surface id, device id, cell id, "shopkeeper:<part>" or "hidden:<id>"; null = nothing within the flight limit. */
+  readonly firstHitTargetId: string | null;
+  readonly approximate: true;
+}
+
 /** Ballistic spec of the next cork; the sim's initial speed and gravity use the same numbers. */
 export function ballisticFor(tuning: TuningConfig, bulletType: BulletType): BallisticSpec {
   return {

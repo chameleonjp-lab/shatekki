@@ -10,7 +10,7 @@
  * All numeric values are PROTOTYPE layout v1 (試作). They are not approved
  * final values (open items O07, O08, O12, O15).
  */
-import type { DeviceId, SlotId } from './ids';
+import type { BackgroundCellId, DeviceId, SlotId } from './ids';
 import { mintId, slotIdOf } from './ids';
 import type { Box3, Vec3 } from './geometry';
 
@@ -30,8 +30,10 @@ export interface ShelfTier {
 
 export interface SlotGeometry {
   readonly slotId: SlotId;
+  /** 0 = bottom board. Layout v2 row (1 = top) is 3 - tier. */
   readonly tier: 0 | 1 | 2;
-  readonly column: 0 | 1 | 2;
+  /** 0-based from the left: 0..2 in layout v1, 0..11 in layout v2 (id c01..c12 = column + 1). */
+  readonly column: number;
   /** Where a new prize's bottom-center is placed (on the board top). */
   readonly spawnBase: Vec3;
   /**
@@ -69,6 +71,25 @@ export interface DeviceGeometry {
 
 export type ShopkeeperPart = 'hat' | 'fan' | 'body' | 'feet';
 
+/**
+ * Layout v2: one thin collider on the back wall behind each slot (D37).
+ * A cork's real contact with this face uses the cell once per run; prizes in
+ * front block it physically (no see-through hits).
+ */
+export interface BackgroundCellGeometry {
+  readonly cellId: BackgroundCellId;
+  readonly slotId: SlotId;
+  /** 1 = top row. */
+  readonly row: 1 | 2 | 3;
+  /** 1-based from the left, 1..12. */
+  readonly column: number;
+  readonly box: Box3;
+  readonly faceNormal: Vec3;
+}
+
+/** 'v1-9': rules-v1 three-by-three shelf. 'v2-36': three rows × twelve columns with background cells. */
+export type SlotModel = 'v1-9' | 'v2-36';
+
 export interface ShopkeeperPartGeometry {
   readonly part: ShopkeeperPart;
   readonly box: Box3;
@@ -94,6 +115,8 @@ export interface CameraRig {
 
 export interface BoothLayout {
   readonly version: string;
+  /** Absent = 'v1-9'. */
+  readonly slotModel?: SlotModel;
   readonly tiers: readonly ShelfTier[];
   readonly slots: readonly SlotGeometry[];
   readonly surfaces: readonly StaticSurface[];
@@ -105,6 +128,8 @@ export interface BoothLayout {
   /** Projectiles leaving this box are removed (not scored). Off-screen inside is still simulated. */
   readonly activeBounds: Box3;
   readonly camera: CameraRig;
+  /** Layout v2 only: 36 cells, one per slot, same order as `slots`. */
+  readonly backgroundCells?: readonly BackgroundCellGeometry[];
 }
 
 const box = (cx: number, cy: number, cz: number, hx: number, hy: number, hz: number): Box3 => ({
