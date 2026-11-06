@@ -52,3 +52,31 @@ test('a URL parameter cannot switch the public build to the prototype', async ({
   expect(saved.checkpoint.state.rulesVersion).toBe('rules-v1');
   expect(await page.evaluate((k) => localStorage.getItem(k), RUN_KEY)).toBeNull();
 });
+
+test('the prototype set book lists 300 pair and 100 trio sets with a filter; names stay hidden until found', async ({ page }) => {
+  await fresh(page);
+  await page.getByTestId('home-setbook').click();
+  const items = page.locator('.book-item');
+  await expect(items).toHaveCount(400);
+  const filters = page.getByTestId('setbook-filters');
+  await expect(filters).toBeVisible();
+  await filters.locator('[data-filter="2"]').click();
+  await expect(items).toHaveCount(300);
+  await expect(items.first()).toContainText('？？？');
+  await expect(items.first()).toContainText('2');
+  await filters.locator('[data-filter="3"]').click();
+  await expect(items).toHaveCount(100);
+  await filters.locator('[data-filter="all"]').click();
+  await expect(items).toHaveCount(400);
+  const text = await page.locator('.scr-book').innerText();
+  expect(text).not.toMatch(/exp\.pair|PAIR\d{3}/);
+});
+
+test('the public set book keeps 100 sets and shows no filter', async ({ page }) => {
+  await page.goto('http://127.0.0.1:4173/?e2e=1');
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('http://127.0.0.1:4173/?e2e=1');
+  await page.getByTestId('home-setbook').click();
+  await expect(page.locator('.book-item')).toHaveCount(100);
+  await expect(page.getByTestId('setbook-filters')).toBeHidden();
+});
