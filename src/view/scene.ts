@@ -13,6 +13,7 @@ import { aimDirection, computeReticle, muzzlePosition, type ReticleResult } from
 import { Kit, ROT_X, mergeParts } from './assets/kit';
 import { C } from './assets/prize-recipes';
 import { buildBooth, type BoothBuild } from './booth';
+import { createBackgroundCells, type BackgroundCellsView } from './background-cells';
 import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec } from './prizes';
 
 export interface SceneGraphDeps {
@@ -32,6 +33,8 @@ export const DEFAULT_PICK_CORK_RADIUS = 0.011;
 export interface PrizeNode {
   readonly instanceId: string;
   typeId: string;
+  /** Collider shape of the current kind (to re-grow the pick proxy when the cork radius changes). */
+  shape: CollisionShape;
   mesh: THREE.Mesh;
   /** Invisible collider-shaped pick proxy (shape inflated by the cork radius). */
   proxy: THREE.Mesh;
@@ -54,6 +57,8 @@ export interface SceneGraph {
   readonly layout: BoothLayout;
   readonly scene: THREE.Scene;
   readonly booth: BoothBuild;
+  /** Layout v2 only: the 36 background cells on the back wall. */
+  readonly cells: BackgroundCellsView | null;
   readonly prizeLayer: THREE.Group;
   readonly projectileLayer: THREE.Group;
   readonly effectsLayer: THREE.Group;
@@ -73,7 +78,10 @@ interface GraphInternals {
   readonly resolvePrize: SceneGraphDeps['resolvePrize'];
   readonly proxyLayer: THREE.Group;
   readonly proxyMaterial: THREE.Material;
-  readonly pickInflate: number;
+  /** Current cork radius used to grow pick proxies (expanded rules can change it per shot). */
+  pickInflate: number;
+  /** The radius the graph was built with (restored when the view state carries none). */
+  readonly basePickInflate: number;
   readonly factory: PrizeVisualFactory;
   readonly flashes: Flash[];
   readonly handledEvents: Set<string>;
@@ -173,6 +181,8 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
   const booth = buildBooth(layout, pickInflate);
   scene.add(booth.group, booth.proxies);
+  const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
+  if (cells) scene.add(cells.group);
   for (const l of booth.lights) scene.add(l);
 
   const prizeLayer = new THREE.Group();
@@ -194,6 +204,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     proxyLayer,
     proxyMaterial: new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
     pickInflate,
+    basePickInflate: pickInflate,
     factory: createPrizeVisualFactory(),
     flashes: buildFlashPool(effectsLayer),
     handledEvents: new Set(),
@@ -212,6 +223,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     layout,
     scene,
     booth,
+    cells,
     prizeLayer,
     projectileLayer,
     effectsLayer,
@@ -242,6 +254,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     },
     dispose() {
       booth.dispose();
+      cells?.dispose();
       for (const n of prizes.values()) n.proxy.geometry.dispose();
       internals.proxyMaterial.dispose();
       internals.factory.dispose();
@@ -327,8 +340,9 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
         node.mesh = mesh;
         node.proxy = proxy;
         node.typeId = p.typeId;
+        node.shape = spec.shape;
       } else {
-        node = { instanceId: id, typeId: p.typeId, mesh, proxy };
+        node = { instanceId: id, typeId: p.typeId, shape: spec.shape, mesh, proxy };
         graph.prizes.set(id, node);
         created++;
       }
@@ -370,7 +384,9 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
     }
     const powered = pr.powerMultiplier > 1;
     (g.children[0] as THREE.Mesh).material = corkMaterial(graph, pr.bulletType, powered);
-    g.scale.setScalar(powered ? 1.35 : 1);
+    // Expanded rules: draw the cork with its real collider radius (FX083/FX084); rules-v1 frames carry none.
+    const radiusScale = pr.radius !== undefined && it.basePickInflate > 0 ? pr.radius / it.basePickInflate : 1;
+    g.scale.setScalar((powered ? 1.35 : 1) * radiusScale);
     g.position.set(pr.position.x, pr.position.y, pr.position.z);
     dir.set(pr.velocity.x, pr.velocity.y, pr.velocity.z);
     if (dir.lengthSq() > 1e-8) g.quaternion.setFromUnitVectors(Z_FORWARD, dir.normalize());
@@ -416,11 +432,28 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
 
 // ------------------------------------------------------------------ aim / HUD
 
+/**
+ * Reticle pick proxies follow the cork radius the next shot really has
+ * (ViewState.ballistic.corkRadius, FX083/FX084), so the reticle marks where the
+ * sim's swept-sphere cork makes contact. No-op when the radius is unchanged.
+ */
+export function setPickInflate(graph: SceneGraph, radius: number): void {
+  const it = graph.internals;
+  if (!(radius >= 0) || Math.abs(radius - it.pickInflate) < 1e-9) return;
+  it.pickInflate = radius;
+  graph.booth.setPickInflate(radius);
+  for (const n of graph.prizes.values()) {
+    n.proxy.geometry.dispose();
+    n.proxy.geometry = pickProxyGeometry(n.shape, radius);
+  }
+}
+
 const GUN_PHASES = new Set(['position', 'loading', 'aiming']);
 
 /** Place the gun and the 3D reticle for the effective aim. Returns the reticle ray result. */
 export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic'>>): ReticleResult {
   const { layout } = graph;
+  setPickInflate(graph, view.ballistic?.corkRadius ?? graph.internals.basePickInflate);
   graph.prizeLayer.updateMatrixWorld(true);
   graph.booth.proxies.updateMatrixWorld(true);
   const r = computeReticle(layout, view.standX, view.effectiveAim, graph.pickTargets(), 6, view.ballistic);

@@ -1,5 +1,8 @@
-export { createThreeRenderer, type ThreeRenderer, type ThreeRendererDeps } from './renderer';
-export { createSceneGraph, applyFrame, updateAim, type SceneGraph, type SceneGraphDeps, type SceneStats, type FrameApplyResult } from './scene';
+export { createThreeRenderer, type ExpandedRendererDeps, type ThreeRenderer, type ThreeRendererDeps } from './renderer';
+export { createExpandedView, projectToScreen, type ExpandedView, type ExpandedViewDeps, type ExpandedViewModel, type ScreenLabel } from './expanded-view';
+export { createBackgroundCells, type BackgroundCellsView, type CellVisual } from './background-cells';
+export { seriesOutlineTargets, seriesLegend, type SeriesLegend } from './series-outline';
+export { createSceneGraph, applyFrame, updateAim, setPickInflate, type SceneGraph, type SceneGraphDeps, type SceneStats, type FrameApplyResult } from './scene';
 export { buildBooth, type BoothBuild } from './booth';
 export { buildPrizeGeometry, createPrizeVisualFactory, fitGeometryToShape, insideShape, shapeHalfExtents, type PrizeVisualSpec } from './prizes';
 export { aimDirection, computeReticle, muzzlePosition, aimTargetPosition, type ReticleResult } from './aim';

@@ -7,7 +7,7 @@
  * and view state; nothing is written back into the simulation.
  */
 import * as THREE from 'three';
-import type { BoothLayout, PresentOptions, PrizeTypeId, Renderer, ShotSummary, SimulationFrame, ViewState } from '../contracts';
+import type { BoothLayout, ExpansionCatalog, PresentOptions, PrizeTypeId, Renderer, RuntimeCatalog, ShotSummary, SimulationFrame, ViewState } from '../contracts';
 import { BOOTH_LAYOUT } from '../contracts';
 import { applyCameraPose, cameraPose } from './camera';
 import type { PrizeVisualSpec } from './prizes';
@@ -16,6 +16,8 @@ import type { ReticleResult } from './aim';
 import type { ShotClass } from './classify';
 import { createEffects, type Effects, type EffectsHud } from './effects';
 import { createDomHud, type DomHud } from './hud';
+import { createExpandedView, type ExpandedView, type ExpandedViewModel } from './expanded-view';
+import { createExpandedOverlay, type ExpandedOverlay } from './expanded-overlay';
 
 export interface ThreeRendererDeps {
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
@@ -35,12 +37,30 @@ export interface ThreeRendererDeps {
    * it can never fire before the shot has settled (AC27).
    */
   readonly onSettled?: (cls: ShotClass, summary: ShotSummary) => void;
+  /** Expanded rules only: cells, series outline and the FX093-FX100 hints. */
+  readonly expanded?: ExpandedRendererDeps;
+}
+
+/**
+ * Layout-v2 / expanded gameplay presentation (plan EG07). Without it the
+ * renderer behaves exactly as rules-v1 (it ignores `view.expansion`).
+ */
+export interface ExpandedRendererDeps {
+  /** The bundle's catalog (prize motions, sets for the "one more kind" hint). */
+  readonly catalog: RuntimeCatalog;
+  readonly expansion: ExpansionCatalog;
+  /** UI keys and `exp.*` content keys; see createExpansionTranslator in src/i18n/expansion-text.ts. */
+  readonly translate: (key: string, params?: Readonly<Record<string, string | number>>) => string;
+  /** Short kind name in the current language (prizeName from src/i18n/content). */
+  readonly prizeName: (typeId: PrizeTypeId) => string;
 }
 
 export interface ThreeRenderer extends Renderer {
   readonly graph: SceneGraph;
   /** Reticle ray of the last render() (null before the first one). */
   lastReticle(): ReticleResult | null;
+  /** What the expanded overlay showed in the last render() (null for rules-v1). */
+  lastExpandedModel(): ExpandedViewModel | null;
   /** Scene triangle / mesh counts and WebGL draw calls of the last frame. */
   stats(): SceneStats & { drawCalls: number };
 }
@@ -75,6 +95,11 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     ...(deps.onSettled ? { onClassified: deps.onSettled } : {}),
   });
 
+  const expandedView: ExpandedView | null = deps.expanded
+    ? createExpandedView({ graph, layout, catalog: deps.expanded.catalog, expansion: deps.expanded.expansion, translate: deps.expanded.translate, prizeName: deps.expanded.prizeName })
+    : null;
+  const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
+
   return {
     graph,
     render(frame: SimulationFrame, view: ViewState): void {
@@ -82,6 +107,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       applyFrame(graph, frame);
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height), width / height);
       last = updateAim(graph, view);
+      if (expandedView) expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }));
       fx.handleEvents(frame.events, frame.simTimeSec);
       fx.update(frame.simTimeSec);
       webgl.render(graph.scene, camera);
@@ -102,11 +128,14 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       if (disposed) return;
       disposed = true;
       fx.dispose();
+      expandedOverlay?.dispose();
+      expandedView?.dispose();
       domHud?.dispose();
       graph.dispose();
       webgl.dispose();
     },
     lastReticle: () => last,
+    lastExpandedModel: () => expandedView?.lastModel() ?? null,
     stats: () => ({ ...graph.stats(), drawCalls: webgl.info.render.calls }),
   };
 }
