@@ -17,7 +17,6 @@ import {
   type ImpactEvent,
   type PrizeInstanceState,
   type ShotContext,
-  type ShotId,
   type ShotRecord,
   type ShotWorld,
   type TuningConfig,
