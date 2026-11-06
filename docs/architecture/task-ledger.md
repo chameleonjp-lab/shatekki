@@ -1,6 +1,6 @@
 # タスク台帳（Opusが更新）
 
-状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（P3・P4統合後）。
+状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（Task 17）。
 
 基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`
 
@@ -23,7 +23,7 @@
 | 14 | 共通画面・名前・図鑑・結果 | UI/QA＋Opus配線 | PR_OPEN | `feat/p4-ui`→`feat/p4-integration` | integration/screens、e2e/screens 5×2画面 | — |
 | 15 | 15言語・共有 | UI/QA 2 | PR_OPEN | `feat/p4-i18n-content`→`feat/p4-integration` | unit/i18n・i18n-content | 母語話者の確認なし（O16） |
 | 16 | ランキング（模擬通信） | UI/QA＋Opus | PR_OPEN（本番はBLOCKED） | `feat/p4-ui`→`feat/p4-integration` | integration/ranking・security | 本番接続はDB登録の承認が必要 |
-| 17 | 公開前の統合確認 | Opus＋UI/QA | 未着手 | — | — | 03〜16の後。iPhone実機は公開承認待ち |
+| 17 | 公開前の統合確認 | Opus | PR_OPEN | `feat/p6-acceptance` | integration/balance-probe・performance・acceptance-composite、e2e/long-text・performance、docs/qa/* | iPhone実機は公開承認待ち。セット成立率の判断を申し送り（SHK-20261106-CLAUDE-002） |
 | 18 | 承認済みの公開と公開後確認 | Opus | BLOCKED | — | — | 利用者の公開承認・DB登録承認が必要 |
 
 ## 再開するときの手順
