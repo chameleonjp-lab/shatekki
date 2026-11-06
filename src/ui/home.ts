@@ -23,6 +23,8 @@ export interface HomeInput {
   audio: AudioSettings;
   /** True while the game runs on prototype values (never ranked). */
   prototype: boolean;
+  /** False during private/offline publication. Defaults to a configured ranking link. */
+  rankingAvailable?: boolean;
 }
 
 export interface HomeViewModel {
@@ -36,6 +38,7 @@ export interface HomeViewModel {
   /** The name to fix for the next run, or null (anonymous). */
   readonly startName: string | null;
   readonly name: {
+    readonly visible: boolean;
     readonly label: string;
     readonly placeholder: string;
     readonly explain: string;
@@ -46,7 +49,7 @@ export interface HomeViewModel {
     readonly error: string | null;
   };
   readonly bestText: string;
-  readonly ranking: { readonly label: string; readonly enabled: boolean; readonly url: string | null; readonly note: string | null };
+  readonly ranking: { readonly visible: boolean; readonly label: string; readonly enabled: boolean; readonly url: string | null; readonly note: string | null };
   readonly shareText: string;
   readonly prototypeNotice: string | null;
   readonly howto: { readonly title: string; readonly steps: readonly string[]; readonly closeLabel: string };
@@ -56,7 +59,8 @@ const HOWTO_KEYS: readonly UiKey[] = ['howto.1', 'howto.2', 'howto.3', 'howto.4'
 
 export function homeViewModel(input: HomeInput, links: PublicLinks, locale: Locale): HomeViewModel {
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
-  const check = checkName(input.nameDraft);
+  const rankingAvailable = input.rankingAvailable ?? links.labDetailUrl !== null;
+  const check = checkName(rankingAvailable ? input.nameDraft : '');
   const length = check.status === 'ok' ? [...check.name].length : check.status === 'too_long' ? check.length : 0;
   const canStart = check.status !== 'too_long';
   return {
@@ -69,10 +73,11 @@ export function homeViewModel(input: HomeInput, links: PublicLinks, locale: Loca
     canStart,
     startName: check.status === 'ok' ? check.name : null,
     name: {
+      visible: rankingAvailable,
       label: t('home.name.label'),
       placeholder: t('home.name.placeholder'),
-      explain: t('home.name.explain'),
-      fixedNote: t('home.name.fixed'),
+      explain: rankingAvailable ? t('home.name.explain') : '',
+      fixedNote: rankingAvailable ? t('home.name.fixed') : '',
       status: check.status,
       length,
       max: NAME_MAX_CODE_POINTS,
@@ -80,10 +85,11 @@ export function homeViewModel(input: HomeInput, links: PublicLinks, locale: Loca
     },
     bestText: input.selfBest === null ? t('home.best.none') : t('home.best', { score: input.selfBest }),
     ranking: {
+      visible: rankingAvailable,
       label: t('home.ranking'),
-      enabled: links.labDetailUrl !== null,
-      url: links.labDetailUrl,
-      note: links.labDetailUrl === null ? t('home.ranking.soon') : null,
+      enabled: rankingAvailable && links.labDetailUrl !== null,
+      url: rankingAvailable ? links.labDetailUrl : null,
+      note: rankingAvailable && links.labDetailUrl === null ? t('home.ranking.soon') : null,
     },
     shareText: buildHomeShareText(locale, links.canonicalUrl),
     prototypeNotice: input.prototype ? t('prototype') : null,
@@ -142,11 +148,13 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
   bookBtn.dataset.testid = 'home-setbook';
 
   const overlays = el('div', { class: 'overlays' });
+  const nameBlock = el('div', { class: 'name-block' }, [nameLabel, el('div', { class: 'input-row' }, [nameInput, counter]), explain, fixed, nameErr]);
+  const rankingBlock = el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]);
   const col = el('main', { class: 'scr-col' }, [
     title, tagline, proto,
-    el('div', { class: 'name-block' }, [nameLabel, el('div', { class: 'input-row' }, [nameInput, counter]), explain, fixed, nameErr]),
+    nameBlock,
     best,
-    el('div', { class: 'btn-grid' }, [howto, el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]), share, settingsBtn, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
+    el('div', { class: 'btn-grid' }, [howto, rankingBlock, share, settingsBtn, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
     shareStatus, manual,
   ]);
   const startBar = el('div', { class: 'sticky-bar' }, [start]);
@@ -165,6 +173,7 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
     setText(proto, vm.prototypeNotice ?? '');
     setHidden(proto, vm.prototypeNotice === null);
     setText(best, vm.bestText);
+    setHidden(nameBlock, !vm.name.visible);
     setText(nameLabel, vm.name.label);
     nameInput.placeholder = vm.name.placeholder;
     if (nameInput.value !== input.nameDraft) nameInput.value = input.nameDraft;
@@ -179,6 +188,7 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
     start.disabled = !vm.canStart;
     setText(howto, vm.howtoLabel);
     setText(rankingBtn, vm.ranking.label);
+    setHidden(rankingBlock, !vm.ranking.visible);
     rankingBtn.disabled = !vm.ranking.enabled;
     setText(rankingNote, vm.ranking.note ?? '');
     setHidden(rankingNote, vm.ranking.note === null);
@@ -221,6 +231,7 @@ export function mountHome(root: HTMLElement, deps: HomeDeps, initial: HomeInput)
   }
 
   nameInput.addEventListener('input', () => {
+    if (!vm.name.visible) return;
     input = { ...input, nameDraft: nameInput.value };
     deps.onNameChange(input.nameDraft);
     refresh();

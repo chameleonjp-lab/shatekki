@@ -146,7 +146,7 @@ function setup(over: { config?: RankingConfig; storage?: KeyValueStorage | null;
 describe('eligibility: what is never sent', () => {
   it('sends nothing while gameSlug is null (the shipped config)', async () => {
     expect(RANKING_CONFIG.gameSlug).toBeNull();
-    expect(RANKING_CONFIG.canonicalUrl).toBeNull();
+    expect(RANKING_CONFIG.canonicalUrl).toBe('https://chameleonjp-lab.github.io/shatekki/');
     expect(RANKING_CONFIG.labDetailUrl).toBeNull();
     const { lab, svc } = setup({ config: RANKING_CONFIG });
     const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });

@@ -23,6 +23,7 @@ export interface SetBookInput {
   readonly discovered: ReadonlySet<string> | readonly string[];
   /** Sets completed in the current/last run only. */
   readonly completedThisRun: readonly string[];
+  readonly prototypeHints?: boolean;
 }
 
 export interface SetBookEntryView {
@@ -63,7 +64,7 @@ export function setBookViewModel(input: SetBookInput, locale: Locale): SetBookVi
       completedThisRun: run.has(s.setId),
       title: discovered ? setName(locale, s.setId) : translate(locale, 'setbook.undiscovered'),
       hint: discovered ? null : setHint(locale, s.setId),
-      hintIsPrototype: HINT_IS_PROTOTYPE,
+      hintIsPrototype: input.prototypeHints ?? HINT_IS_PROTOTYPE,
       required: discovered ? s.requiredTypeIds.map((id) => ({ typeId: id, name: prizeName(locale, id) })) : null,
     };
   });

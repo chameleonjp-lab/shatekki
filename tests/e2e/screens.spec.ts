@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { RANKING_CONFIG } from '../../src/ranking/config';
 
 // Chromium with iPhone-class portrait viewports (not Safari, not a real device).
 // Home / result / set book / language, wired by src/app.ts.
@@ -25,23 +26,27 @@ async function shoot(page: Page) {
   await fire.dispatchEvent('pointerup');
 }
 
-test('the name is fixed at start; empty means anonymous (AC28)', async ({ page }) => {
+test('private release hides public-name and ranking controls and preserves an old saved name without using it', async ({ page }) => {
   await fresh(page);
-  await page.getByTestId('home-name').fill('たろう');
-  await page.getByTestId('home-start').click();
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
-  expect(await probe(page, 'playerName')).toBe('たろう');
-
-  await fresh(page);
-  await page.getByTestId('home-name').fill('   ');
+  await page.evaluate(() => localStorage.setItem('shatekki.player-name.v1', 'たろう'));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'シャテッキ', exact: true })).toBeVisible();
+  await expect(page.locator('.notice.proto')).toBeHidden();
+  await expect(page.getByTestId('home-name')).toBeHidden();
+  await expect(page.getByTestId('home-ranking')).toBeHidden();
+  await expect(page.getByText('名前を入力すると、名前と記録がランキングに公開されます。空欄でも遊べます。')).toBeHidden();
   await page.getByTestId('home-start').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
   expect(await probe(page, 'playerName')).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('shatekki.player-name.v1'))).toBe('たろう');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('shatekki.run.v1')!));
+  expect(saved.checkpoint.state.rulesVersion).toBe('rules-v1');
+  expect(saved.checkpoint.state.valueStatus).toBe('approved');
 });
 
-test('ranking is "準備中" while the official page is unknown, and X share opens a post screen only (AC29, AC34 partial)', async ({ page }) => {
+test('private release hides ranking, and X share opens a post screen only (AC29, AC34 partial)', async ({ page }) => {
   await fresh(page);
-  await expect(page.getByTestId('home-ranking')).toBeDisabled();
+  await expect(page.getByTestId('home-ranking')).toBeHidden();
   const opened: string[] = [];
   await page.exposeFunction('__recordOpen', (u: string) => opened.push(u));
   await page.evaluate(() => {
@@ -55,8 +60,10 @@ test('ranking is "準備中" while the official page is unknown, and X share ope
   const url = new URL(opened[0]!);
   expect(url.hostname).toBe('x.com');
   expect(url.pathname).toBe('/intent/post');
-  // No official URL exists yet, so the text must not contain a guessed URL.
-  expect(url.searchParams.get('text') ?? '').not.toMatch(/https?:\/\//);
+  const text = url.searchParams.get('text') ?? '';
+  expect(text).toContain('シャテッキ');
+  if (RANKING_CONFIG.canonicalUrl) expect(text).toContain(RANKING_CONFIG.canonicalUrl);
+  else expect(text).not.toMatch(/https?:\/\//);
   const bg = await page.getByTestId('home-share').evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe('rgb(0, 0, 0)');
 });
@@ -104,7 +111,10 @@ test('a whole run of 10 shots ends on the result screen with the confirmed score
     expect(box, id).not.toBeNull();
     expect(box!.y + box!.height, id).toBeLessThanOrEqual(vp.height);
   }
-  await expect(page.getByTestId('result-ranking')).toBeDisabled();
+  await expect(page.getByTestId('result-ranking')).toBeHidden();
+  await expect(page.getByTestId('result-submit')).toBeHidden();
+  await expect(page.getByTestId('result-top')).toBeHidden();
+  await expect(page.getByRole('heading', { name: '上位30名' })).toBeHidden();
   await page.getByTestId('result-retry').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
   expect(await probe(page, 'ammo')).toBe(10);
