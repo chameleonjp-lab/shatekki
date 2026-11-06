@@ -237,4 +237,6 @@ export const EN: Record<UiKey, string> = {
   "result.best.title": "Best shot this game",
   "result.best.line": "Shot {shot}: {prizes} prize(s), {sets} set(s) (+{points} pts)",
   "result.best.none": "No shot won a prize this game.",
+  "reward.strip.next": "Next shot: reserved",
+  "reward.tag.changed": "Now {name}",
 };

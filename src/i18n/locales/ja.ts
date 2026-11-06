@@ -240,6 +240,8 @@ export const JA = {
   "result.best.title": "今回のベストショット",
   "result.best.line": "{shot}射目・{prizes}個・セット{sets}組（+{points}点）",
   "result.best.none": "今回は景品を取った射がありませんでした。",
+  "reward.strip.next": "次の射：予約あり",
+  "reward.tag.changed": "{name}に変化",
 } as const;
 
 export type UiKey = keyof typeof JA;

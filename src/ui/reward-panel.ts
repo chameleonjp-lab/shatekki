@@ -127,6 +127,8 @@ export function rewardStripModel(v: RewardViewState, t: RewardText, prizeName: (
   if (on('A6') && v.nextStamp !== null) chips.push({ id: 'stamp', text: t('reward.strip.stamp', { n: Math.max(0, v.nextStamp - v.prizesWon) }) });
   if (on('A10')) chips.push({ id: 'lanterns', text: t('reward.strip.lanterns', { lit: v.lanternsLit.length, total: v.lanternZones }) });
   if (on('A4')) chips.push({ id: 'piggy', text: t('reward.strip.piggy', { n: v.piggyDeposits }) });
+  // P4: a reservation for the next shot is marked next to the corks.
+  if (v.nextReserved) chips.push({ id: 'next', text: t('reward.strip.next') });
   if (on('A9') && v.order) {
     const name = prizeName(v.order.typeId);
     if (v.order.status === 'accepted') chips.push({ id: 'order', text: t('reward.strip.order', { name, left: v.orderShotsLeft ?? 0 }) });

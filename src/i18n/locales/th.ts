@@ -237,4 +237,6 @@ export const TH: Record<UiKey, string> = {
   "result.best.title": "นัดที่ดีที่สุดของเกมนี้",
   "result.best.line": "นัดที่ {shot}: {prizes} ชิ้น ชุด {sets} ชุด (+{points} คะแนน)",
   "result.best.none": "เกมนี้ไม่มีนัดไหนได้ของรางวัล",
+  "reward.strip.next": "นัดหน้า: จองไว้แล้ว",
+  "reward.tag.changed": "กลายเป็น {name}",
 };

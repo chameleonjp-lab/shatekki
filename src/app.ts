@@ -51,6 +51,7 @@ import { JA as UI_KEYS } from './i18n/locales/ja';
 import { mountHome } from './ui/home';
 import { mountResult, type LastShotInput, type ResultTextOptions } from './ui/result';
 import { setDisplayName } from './ui/set-book';
+import { rewardDevicesFor } from './core/rewards';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
 import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
@@ -387,6 +388,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       case 'CONFIRM_POSITION':
         return cue('loadStart');
       case 'STOP_LOAD':
+        // P5 (rewards versions): the latch sounds at the same moment as the perfect-load sound.
+        if (rewardCfg && s?.load?.tier === 'perfect') cue('critLatch');
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
       case 'FIRE':
         return cue('fire');
@@ -465,7 +468,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const ensureEngine = async (): Promise<ShotWorld> => {
     if (world) return world;
     const { sim, view } = await loadHeavyModules();
-    const w = await sim.createShotWorld(layout, catalog, tuning);
+    const w = await sim.createShotWorld(layout, catalog, tuning, rewardCfg ? { rewardDevices: rewardDevicesFor(rewardCfg) } : {});
     world = w;
     try {
       renderer = view.createThreeRenderer(canvas, {

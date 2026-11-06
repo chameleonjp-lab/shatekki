@@ -6,7 +6,7 @@ import type { ShotSummary, SimEvent, SimulationFrame } from './events';
 import type { AimAngles, FinalResult, LoadTier, Phase } from './game';
 import type { AimPreview, BallisticSpec } from './aim';
 import type { BackgroundCellId, EffectId, PrizeInstanceId, PrizeTypeId, QuestionId, SeriesId, SetId, ShotId } from './ids';
-import type { RewardId, RewardOrderState, RewardTargetGeometry } from './rewards';
+import type { RewardDeviceLayout, RewardId, RewardOrderState, RewardTargetGeometry } from './rewards';
 import type { HintKind, QuestionChoice } from './expansion';
 
 /**
@@ -48,6 +48,13 @@ export interface RewardViewState {
   readonly nextStamp: number | null;
   readonly piggyDeposits: number;
   readonly enabled: readonly RewardId[];
+  /** A2-A4 device geometry (drawn exactly where the physics has it) and whether each is spent. */
+  readonly devices: RewardDeviceLayout;
+  readonly chimeUsed: boolean;
+  readonly seesawUsed: boolean;
+  readonly piggyDone: boolean;
+  /** P4: the next shot already has a reservation (a modifier or a hint). */
+  readonly nextReserved: boolean;
 }
 
 /** What the camera/HUD needs besides the physics frame. */
@@ -92,7 +99,9 @@ export type UiCue =
         // Expanded rules (D35-D37): question, answer and one coalesced effect cue per shot.
         | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown'
         // Rewards (plan P1/P3): prizes won in one shot (count), and continuing from the last cork.
-        | 'takeTier' | 'lastShotContinue';
+        | 'takeTier' | 'lastShotContinue'
+        // P5: a metal latch at the same moment as the perfect-load sound.
+        | 'critLatch';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */

@@ -237,4 +237,6 @@ export const VI: Record<UiKey, string> = {
   "result.best.title": "Phát bắn hay nhất ván này",
   "result.best.line": "Phát thứ {shot}: {prizes} quà, {sets} bộ (+{points} điểm)",
   "result.best.none": "Ván này không có phát nào lấy được quà.",
+  "reward.strip.next": "Phát sau: đã đặt trước",
+  "reward.tag.changed": "Đã thành {name}",
 };

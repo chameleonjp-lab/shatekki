@@ -237,4 +237,6 @@ export const TR: Record<UiKey, string> = {
   "result.best.title": "Oyunun en iyi atışı",
   "result.best.line": "{shot}. atış: {prizes} ödül, {sets} set (+{points} puan)",
   "result.best.none": "Bu oyunda hiçbir atış ödül kazanmadı.",
+  "reward.strip.next": "Sonraki atış: ayrıldı",
+  "reward.tag.changed": "Artık {name}",
 };

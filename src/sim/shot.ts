@@ -38,7 +38,21 @@ export interface Projectile {
   ended: boolean;
   /** target key -> sim time of the last contact (dedupe of continuing contacts). */
   readonly lastContact: Map<string, number>;
+  /**
+   * A2 only: this very cork has really reflected off a wall or a board. A split child starts
+   * without it (its reflection count and contacts still come from the parent).
+   */
+  chimeReady?: boolean;
   readonly x?: ProjectileExpanded;
+}
+
+/**
+ * What a split child inherits (plan T4a): the reflection count that limits its flight and the
+ * contacts it already made come from the parent; "this cork reflected off a wall or a board"
+ * (A2, the chime) does not.
+ */
+export function splitChildMarks(parent: Pick<Projectile, 'reflections' | 'chimeReady'>): { readonly reflections: number; readonly chimeReady: false } {
+  return { reflections: parent.reflections, chimeReady: false };
 }
 
 export function reflectionLimitFor(p: Pick<Projectile, 'bulletType' | 'x'>, tuning: TuningConfig): number {

@@ -9,7 +9,7 @@
  * Plan: docs/superpowers/plans/2026-11-07-post-pr19-gameplay.md
  */
 import type { PrizeInstanceId, PrizeTypeId } from './ids';
-import type { Vec3 } from './geometry';
+import type { Box3, Vec3 } from './geometry';
 import type { DeferredTransform, PlannedEffect } from './expansion';
 
 export const REWARD_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'] as const;
@@ -122,6 +122,16 @@ export interface RewardContacts {
   readonly seesawInstances: readonly PrizeInstanceId[];
   /** A4: true when any cork of this shot went into the slot (counted once per shot). */
   readonly piggyDeposit: boolean;
+}
+
+/**
+ * A2-A4 devices of a rules version (r003). The chime and the piggy-bank slot are solid; the seesaw
+ * tray is a band that falling prizes pass through, placed above the normal collection height.
+ */
+export interface RewardDeviceLayout {
+  readonly chime: Box3 | null;
+  readonly piggySlot: Box3 | null;
+  readonly seesawTray: Box3 | null;
 }
 
 export const NO_REWARD_CONTACTS: RewardContacts = Object.freeze({ targetHit: null, chimeAfterReflection: false, seesawInstances: [], piggyDeposit: false });

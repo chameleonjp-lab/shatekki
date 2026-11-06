@@ -237,4 +237,6 @@ export const KO: Record<UiKey, string> = {
   "result.best.title": "이번 게임의 베스트 샷",
   "result.best.line": "{shot}번째 발: {prizes}개, 세트 {sets}개 (+{points}점)",
   "result.best.none": "이번 게임에서는 경품을 얻은 발이 없었습니다.",
+  "reward.strip.next": "다음 발: 예약 있음",
+  "reward.tag.changed": "{name}(으)로 바뀜",
 };

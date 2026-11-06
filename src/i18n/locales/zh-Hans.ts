@@ -237,4 +237,6 @@ export const ZH_HANS: Record<UiKey, string> = {
   "result.best.title": "本局最佳一击",
   "result.best.line": "第{shot}发：{prizes}个、套装{sets}组（+{points}分）",
   "result.best.none": "本局没有拿到奖品的一发。",
+  "reward.strip.next": "下一发：已预约",
+  "reward.tag.changed": "变成{name}",
 };

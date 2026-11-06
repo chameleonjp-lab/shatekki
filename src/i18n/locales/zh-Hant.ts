@@ -237,4 +237,6 @@ export const ZH_HANT: Record<UiKey, string> = {
   "result.best.title": "本局最佳一擊",
   "result.best.line": "第{shot}發：{prizes}個、套裝{sets}組（+{points}分）",
   "result.best.none": "本局沒有拿到獎品的一發。",
+  "reward.strip.next": "下一發：已預約",
+  "reward.tag.changed": "變成{name}",
 };

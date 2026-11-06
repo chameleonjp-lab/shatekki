@@ -237,4 +237,6 @@ export const RU: Record<UiKey, string> = {
   "result.best.title": "Лучший выстрел игры",
   "result.best.line": "Выстрел {shot}: призов {prizes}, наборов {sets} (+{points} очк.)",
   "result.best.none": "В этой игре ни один выстрел не принёс приз.",
+  "reward.strip.next": "Следующий выстрел: заказан",
+  "reward.tag.changed": "Теперь {name}",
 };

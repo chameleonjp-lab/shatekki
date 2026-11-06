@@ -237,4 +237,6 @@ export const ID: Record<UiKey, string> = {
   "result.best.title": "Tembakan terbaik permainan ini",
   "result.best.line": "Tembakan ke-{shot}: {prizes} hadiah, {sets} set (+{points} poin)",
   "result.best.none": "Tidak ada tembakan yang mendapat hadiah di permainan ini.",
+  "reward.strip.next": "Tembakan berikutnya: dipesan",
+  "reward.tag.changed": "Kini {name}",
 };

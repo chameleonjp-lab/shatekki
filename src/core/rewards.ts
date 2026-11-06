@@ -24,6 +24,7 @@ import type {
   PrizeTypeId,
   RewardConfig,
   RewardContacts,
+  RewardDeviceLayout,
   RewardId,
   RewardOutcome,
   RewardRunState,
@@ -37,7 +38,7 @@ import type {
   SlotGeometry,
   TuningConfig,
 } from '../contracts';
-import { aimDirection, ballisticFor, corkFreeFlightPath, isExpandedRunState, muzzlePosition, NO_REWARD_CONTACTS, slotRowColumn } from '../contracts';
+import { BASE_SHOT_MODIFIERS, aimDirection, ballisticFor, corkFreeFlightPath, isExpandedRunState, muzzlePosition, NO_REWARD_CONTACTS, slotRowColumn } from '../contracts';
 import { rngNext, seedRng } from '../catalog/rng';
 import { realAmmoAdd, withAmmoAdded, type EffectWork } from './gameplay-effects';
 
@@ -99,6 +100,27 @@ export function placeBag(shelf: ShelfState, catalog: RuntimeCatalog, layout: Boo
     return p;
   });
   return { shelf: { ...shelf, prizes }, instanceId: easiest.instanceId };
+}
+
+// ------------------------------------------------------ A2-A4: the devices
+
+const box = (cx: number, cy: number, cz: number, hx: number, hy: number, hz: number) => ({ center: { x: cx, y: cy, z: cz }, halfExtents: { x: hx, y: hy, z: hz } });
+/** In the open space left of the shelf (x -2.55 … -3.0), in view from the left end of the stand. */
+export const CHIME_BOX = box(-2.78, 1.62, -1.95, 0.04, 0.07, 0.04);
+export const PIGGY_SLOT_BOX = box(-2.78, 1.02, -1.85, 0.07, 0.05, 0.05);
+/**
+ * Behind the bottom board, columns 3-4, where pushed prizes fall (the board's back edge is at
+ * z -1.89, the back wall at -2.45), above the collection height (0.45).
+ */
+export const SEESAW_TRAY_BOX = box(-1.26, 0.56, -2.1, 0.42, 0.06, 0.2);
+
+/** Which device colliders the physics world builds for this rules version. */
+export function rewardDevicesFor(cfg: RewardConfig | null): RewardDeviceLayout {
+  return {
+    chime: rewardEnabled(cfg, 'A2') ? CHIME_BOX : null,
+    piggySlot: rewardEnabled(cfg, 'A4') ? PIGGY_SLOT_BOX : null,
+    seesawTray: rewardEnabled(cfg, 'A3') ? SEESAW_TRAY_BOX : null,
+  };
 }
 
 // --------------------------------------------------------- A5: the target
@@ -350,6 +372,13 @@ export function settleRewards(input: RewardSettlementInput): RewardSettlement {
 
 // ------------------------------------------------------------ the view
 
+function isBaseReservation(next: ExpandedRunState['expansion']['next']): boolean {
+  if (next.hint !== null) return false;
+  const m = next.modifiers;
+  const b = BASE_SHOT_MODIFIERS;
+  return (Object.keys(b) as (keyof typeof b)[]).every((k) => JSON.stringify(m[k]) === JSON.stringify(b[k]));
+}
+
 /** Display facts for the view and the panel. Never read back into the run. */
 export function rewardViewState(state: RunState, cfg: RewardConfig | null, layout: BoothLayout, tuning: TuningConfig): RewardViewState | undefined {
   if (!cfg || !isExpandedRunState(state) || !state.expansion.rewards) return undefined;
@@ -380,6 +409,11 @@ export function rewardViewState(state: RunState, cfg: RewardConfig | null, layou
     nextStamp,
     piggyDeposits: r.piggyDeposits.length,
     enabled: cfg.enabled,
+    devices: rewardDevicesFor(cfg),
+    chimeUsed: r.chimeUsed,
+    seesawUsed: r.seesawUsed,
+    piggyDone: r.piggyDone,
+    nextReserved: !isBaseReservation(state.expansion.next),
   };
 }
 

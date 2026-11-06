@@ -94,6 +94,9 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   const recorder = new TrajectoryRecorder();
   const rewardProps = createRewardProps();
   graph.scene.add(rewardProps.group);
+  /** P4: price tags on prizes whose kind really changed, for a few seconds of simulation time. */
+  const changed = new Map<string, { readonly toTypeId: PrizeTypeId; readonly untilSec: number }>();
+  const TAG_SEC = 3;
   /** First kind each individual was seen as: the mount keeps running that kind's motion after a transform. */
   const firstKind = new Map<string, PrizeTypeId>();
   let last: ExpandedViewModel | null = null;
@@ -205,6 +208,18 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
     if (placed.bag && ex.rewards) {
       const s = projectToScreen(camera, placed.bag, size.width, size.height);
       if (s) rewardLabels.push({ id: 'reward:bag', x: s.x, y: s.y, text: ui('reward.bag.label', { n: ex.rewards.bagOffer }), tone: 'badge', color: '#d9a441' });
+    }
+    if (ex.rewards) {
+      for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
+      for (const [id, c] of [...changed]) {
+        const p = byId.get(id);
+        if (!p || frame.simTimeSec > c.untilSec) {
+          if (frame.simTimeSec > c.untilSec) changed.delete(id);
+          continue;
+        }
+        const s = projectToScreen(camera, p.position, size.width, size.height);
+        if (s) rewardLabels.push({ id: `reward:tag:${id}`, x: s.x, y: s.y, text: ui('reward.tag.changed', { name: deps.prizeName(c.toTypeId) }), tone: 'badge', color: '#ffe9a8' });
+      }
     }
     if (placed.target && ex.rewards?.target) {
       const s = projectToScreen(camera, placed.target, size.width, size.height);

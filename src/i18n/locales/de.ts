@@ -237,4 +237,6 @@ export const DE: Record<UiKey, string> = {
   "result.best.title": "Bester Schuss des Spiels",
   "result.best.line": "Schuss {shot}: {prizes} Preis(e), {sets} Set(s) (+{points} Pkt.)",
   "result.best.none": "In diesem Spiel hat kein Schuss einen Preis gewonnen.",
+  "reward.strip.next": "Nächster Schuss: reserviert",
+  "reward.tag.changed": "Jetzt {name}",
 };

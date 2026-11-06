@@ -81,6 +81,11 @@ const view = (over: Partial<RewardViewState> = {}): RewardViewState => ({
   nextStamp: 2,
   piggyDeposits: 0,
   enabled: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'],
+  devices: { chime: null, piggySlot: null, seesawTray: null },
+  chimeUsed: false,
+  seesawUsed: false,
+  piggyDone: false,
+  nextReserved: false,
   ...over,
 });
 
@@ -88,6 +93,8 @@ describe('strip and order card', () => {
   it('shows the bag count, next stamp, lanterns, piggy bank and an accepted order with shots left', () => {
     const chips = rewardStripModel(view({ order: { typeId: 'P034' as never, status: 'accepted', acceptedAfterShots: 0, doneOnShot: null }, orderShotsLeft: 2 }), t, () => 'ライオン').chips;
     expect(chips.map((c) => c.text)).toEqual(['袋 1個', 'スタンプまで あと1個', '提灯 1/3', '貯金箱 0', '注文：ライオン（あと2射）']);
+    // P4: a reservation for the next shot gets its own mark
+    expect(rewardStripModel(view({ nextReserved: true }), t, String).chips.some((c) => c.id === 'next')).toBe(true);
   });
 
   it('offers the order only while it is open, with the deadline and reward written out', () => {
