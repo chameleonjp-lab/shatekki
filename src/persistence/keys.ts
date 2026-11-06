@@ -19,3 +19,16 @@ export function expandedRunKey(rulesVersion: string): string {
   if (key === STORAGE_KEYS.run) throw new RangeError('rulesVersion would collide with the rules-v1 run key');
   return key;
 }
+
+/**
+ * E4 (plan T4c): a view of `storage` where every key gets `suffix` (e.g. '.daily'), so the daily
+ * mode's run, self best, set book and result view never share a name with the normal mode.
+ */
+export function withKeySuffix(storage: import('../contracts').KeyValueStorage, suffix: string): import('../contracts').KeyValueStorage {
+  if (!/^\.[a-z]+$/.test(suffix)) throw new RangeError(`invalid storage key suffix: ${suffix}`);
+  return {
+    getItem: (k) => storage.getItem(`${k}${suffix}`),
+    setItem: (k, v) => storage.setItem(`${k}${suffix}`, v),
+    removeItem: (k) => storage.removeItem(`${k}${suffix}`),
+  };
+}

@@ -42,6 +42,7 @@ import {
   createVersionedProfileStore,
   expandedRunKey,
   STORAGE_KEYS,
+  withKeySuffix,
   type RestoreResult,
   type RunStore,
 } from './persistence';
@@ -52,6 +53,9 @@ import { mountHome } from './ui/home';
 import { mountResult, type LastShotInput, type ResultTextOptions } from './ui/result';
 import { setDisplayName } from './ui/set-book';
 import { rewardDevicesFor } from './core/rewards';
+import { dailySeed, jstDateOf } from './core/daily';
+import { createSouvenirStore } from './persistence/souvenirs';
+import { mountSouvenirShelf, type SouvenirShelfHandle } from './ui/souvenir-shelf';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
 import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
@@ -161,10 +165,27 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // ------------------------------------------------------------ stores
   const storage = browserStorage(win);
   // Expanded rules write their own keys (EG06); rules-v1 keys and records are never touched by them.
-  const runStore: RunStore = expansion
+  const normalRunStore: RunStore = expansion
     ? createRunStore(storage, newRunId(win), { catalog, tuning, layout, expansion, key: expandedRunKey(catalog.rulesVersion) })
     : createRunStore(storage, newRunId(win), { catalog, tuning, layout });
-  const profile = expansion ? createVersionedProfileStore(storage, { rulesVersion: catalog.rulesVersion }) : createProfileStore(storage);
+  const normalProfile = expansion ? createVersionedProfileStore(storage, { rulesVersion: catalog.rulesVersion }) : createProfileStore(storage);
+  // E4 "today's stall" (rewards versions): its own run, self best and set book under '<key>.daily' names.
+  const hasDaily = Boolean(expansion?.profile.rewards);
+  const dailyStorage: KeyValueStorage = withKeySuffix(storage, '.daily');
+  const dailyRunStore: RunStore | null = hasDaily && expansion ? createRunStore(dailyStorage, newRunId(win), { catalog, tuning, layout, expansion, key: expandedRunKey(catalog.rulesVersion) }) : null;
+  const dailyProfile = hasDaily ? createVersionedProfileStore(dailyStorage, { rulesVersion: catalog.rulesVersion }) : null;
+  let mode: 'normal' | 'daily' = 'normal';
+  let runStore: RunStore = normalRunStore;
+  let profile: typeof normalProfile = normalProfile;
+  /** The storage the current mode writes its own records to (result view, daily date). */
+  let modeStorage: KeyValueStorage = storage;
+  const setMode = (m: 'normal' | 'daily') => {
+    mode = m;
+    runStore = m === 'daily' && dailyRunStore ? dailyRunStore : normalRunStore;
+    profile = m === 'daily' && dailyProfile ? dailyProfile : normalProfile;
+    modeStorage = m === 'daily' ? dailyStorage : storage;
+  };
+  const souvenirs = hasDaily ? createSouvenirStore(storage) : null;
   const settingsStore = createSettingsStore(storage);
   const nameStore = createPlayerNameStore(storage);
   const ranking = createRankingService({ storage });
@@ -172,6 +193,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // The expanded prototype is never ranked (prototype values, internal builds only).
   const rankingAvailable = RANKING_CONFIG.gameSlug !== null && expansion === null;
   let restore: RestoreResult = runStore.load();
+  // A daily game in progress (or a kept daily result) comes back when the normal mode has nothing.
+  if (dailyRunStore && restore.kind === 'none') {
+    const d = dailyRunStore.load();
+    if (d.kind !== 'none') {
+      setMode('daily');
+      restore = d;
+    }
+  }
   // Rewards versions (r002+) keep a finished run until it is closed, so a reload opens the same result (plan T2).
   const keepsEndedRun = Boolean(expansion?.profile.rewards);
   const keptEnded = keepsEndedRun && restore.kind === 'ended' ? restore.state : null;
@@ -507,14 +536,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const resultMetaKey = `shatekki.resultView.${catalog.rulesVersion}`;
   const saveResultMeta = (runId: string, selfBestBefore: number | null, newBest: boolean) => {
     try {
-      storage.setItem(resultMetaKey, JSON.stringify({ runId, selfBestBefore, newBest }));
+      modeStorage.setItem(resultMetaKey, JSON.stringify({ runId, selfBestBefore, newBest }));
     } catch {
       /* the result still shows; a reload then reads the stored best only */
     }
   };
   const readResultMeta = (runId: string): { selfBestBefore: number | null; newBest: boolean } | null => {
     try {
-      const raw = storage.getItem(resultMetaKey);
+      const raw = modeStorage.getItem(resultMetaKey);
       const m = raw ? (JSON.parse(raw) as { runId?: unknown; selfBestBefore?: unknown; newBest?: unknown }) : null;
       if (!m || m.runId !== runId) return null;
       return { selfBestBefore: typeof m.selfBestBefore === 'number' ? m.selfBestBefore : null, newBest: m.newBest === true };
@@ -527,7 +556,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (!rewardCfg) return;
     runStore.clear();
     try {
-      storage.removeItem(resultMetaKey);
+      modeStorage.removeItem(resultMetaKey);
     } catch {
       /* nothing to close */
     }
@@ -619,8 +648,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       initial,
     );
 
+  const DAILY_DATE_KEY = 'shatekki.dailyDate';
   /** Start a new run with the name fixed now (null = anonymous), or continue a saved one. */
-  const startRun = async (opts: { name: string | null; resume?: RunState }): Promise<void> => {
+  const startRun = async (opts: { name: string | null; resume?: RunState; daily?: boolean }): Promise<void> => {
     if (starting) return;
     starting = true;
     status.textContent = i18n.t('app.status.preparing');
@@ -633,7 +663,19 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         runName = initial.playerName;
       } else {
         runName = rankingAvailable ? opts.name : null;
-        const config = { runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName };
+        // E4: a new daily game takes today's Japan date; the same date and version give the same stall.
+        setMode(opts.daily && hasDaily ? 'daily' : 'normal');
+        let seed = newSeed(win);
+        if (mode === 'daily') {
+          const date = jstDateOf(Date.now());
+          seed = dailySeed(date, catalog.rulesVersion);
+          try {
+            modeStorage.setItem(DAILY_DATE_KEY, date);
+          } catch {
+            /* the stall is still fixed by the seed in the saved run */
+          }
+        }
+        const config = { runId: mintId.run(newRunId(win)), seed, tuning, playerName: runName };
         initial = expansion ? createExpandedRun(config, { catalog, tuning, layout, expansion }) : CORE_RULES.createRun(config, catalog);
         runStore.saveStable(initial);
       }
@@ -686,6 +728,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const showHome = () => {
     clearScreen();
     setScreen('home');
+    setMode('normal');
     const settings = settingsStore.load();
     screenHandle = mountHome(
       screens,
@@ -706,8 +749,38 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         onOpenSetBook: openSetBook,
       },
-      { nameDraft: nameStore.get() ?? '', selfBest: profile.load().bestScore, audio: settings.audio, prototype: isPrototype, rankingAvailable },
+      { nameDraft: nameStore.get() ?? '', selfBest: normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rankingAvailable },
     );
+    // Rewards versions: today's stall (E4) and the souvenir shelf (E3) under the normal start.
+    if (hasDaily && dailyProfile) {
+      const col = screens.querySelector<HTMLElement>('.scr-home .scr-col');
+      if (col) {
+        const sec = doc.createElement('section');
+        sec.className = 'sec daily';
+        sec.dataset.testid = 'home-daily';
+        const date = jstDateOf(Date.now());
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+        btn.dataset.testid = 'home-daily-start';
+        btn.textContent = expText('daily.start');
+        btn.addEventListener('click', () => {
+          cue('start');
+          void startRun({ name: null, daily: true });
+        });
+        const note = doc.createElement('p');
+        note.className = 'note';
+        const best = dailyProfile.load().bestScore;
+        note.textContent = `${expText('daily.note', { date })} ${best === null ? '' : expText('daily.best', { score: best })}`.trim();
+        const shelf = doc.createElement('p');
+        shelf.className = 'note';
+        shelf.dataset.testid = 'home-souvenirs';
+        const slots = souvenirs?.load().slots ?? [];
+        shelf.textContent = `${expText('souvenir.title')}: ${slots.map((s) => (s ? prizeName(i18n.locale, s.typeId) : expText('souvenir.empty'))).join(' / ')}`;
+        sec.append(btn, note, shelf);
+        col.appendChild(sec);
+      }
+    }
   };
 
   let stopCelebration: (() => void) | null = null;
@@ -730,6 +803,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       : undefined;
 
   let shownEnded: RunState | null = null;
+  let souvenirView: SouvenirShelfHandle | null = null;
   const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null, readOnly = false) => {
     clearScreen();
     setScreen('result');
@@ -744,7 +818,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         i18n,
         onRetry: () => {
           closeKeptResult();
-          void startRun({ name: runName });
+          void startRun({ name: runName, daily: mode === 'daily' });
         },
         onHome: () => {
           closeKeptResult();
@@ -758,6 +832,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable, lastShot },
     );
     screenHandle = handle;
+    // E3: the souvenir shelf under the result (rewards versions; the same three slots in both modes).
+    souvenirView?.dispose();
+    souvenirView = null;
+    if (souvenirs) {
+      const col = screens.querySelector<HTMLElement>('.scr-result .scr-col');
+      const won = [...new Set(result.collected.map((c) => String(c.typeId)))];
+      if (col) souvenirView = mountSouvenirShelf(col, { store: souvenirs, t: expText, name: (k) => prizeName(i18n.locale, k) }, { runId: result.runId, completed: result.status === 'completed', wonTypeIds: won });
+    }
     void loadHeavyModules().then(({ view }) => {
       if (screen !== 'result' || readOnly) return;
       const reducedMotion = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;

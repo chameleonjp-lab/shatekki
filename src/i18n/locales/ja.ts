@@ -242,6 +242,19 @@ export const JA = {
   "result.best.none": "今回は景品を取った射がありませんでした。",
   "reward.strip.next": "次の射：予約あり",
   "reward.tag.changed": "{name}に変化",
+  "souvenir.title": "おみやげ棚",
+  "souvenir.empty": "（空き）",
+  "souvenir.pick": "今回取った景品から1つ選ぶと、この端末に飾れます。",
+  "souvenir.full": "棚がいっぱいです。景品を選んでから、入れ替える枠を選んでください。",
+  "souvenir.chooseSlot": "入れ替える枠を選んでください。",
+  "souvenir.cancel": "やめる",
+  "souvenir.saved": "飾りました。",
+  "souvenir.saveFailed": "保存できませんでした。もう一度選んでください。",
+  "souvenir.nothing": "今回は飾れる景品がありません。",
+  "souvenir.allShown": "今回の景品はもう飾ってあります。",
+  "daily.start": "今日の屋台",
+  "daily.note": "{date}（日本時間）の屋台。同じ日は同じ並びで遊べます。",
+  "daily.best": "今日の屋台の自己ベスト：{score}点",
 } as const;
 
 export type UiKey = keyof typeof JA;

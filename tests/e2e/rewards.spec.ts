@@ -107,6 +107,8 @@ test('the last cork shows the target, a hit on it continues the game, and the re
   await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('result-best-shot')).toBeVisible();
   await expect(page.getByTestId('result-last-shot')).toContainText('弾がなくなったので');
+  // E3: the souvenir shelf sits under the result (this run aimed high, so nothing to place)
+  await expect(page.getByTestId('souvenir-shelf')).toBeVisible();
   const before = await page.getByTestId('result-last-shot').textContent();
   const score = await page.getByTestId('result-score').textContent();
 
@@ -118,4 +120,22 @@ test('the last cork shows the target, a hit on it continues the game, and the re
   await page.reload();
   await expect(page.getByTestId('home-start')).toBeVisible({ timeout: 20_000 });
   expect(await page.evaluate(() => localStorage.getItem('shatekki.run.rules-v2-proposed-r003'))).toBeNull();
+});
+
+test("today's stall starts from home and is saved apart from the normal game (E4)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/?e2e=1');
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/?e2e=1');
+  await expect(page.getByTestId('home-daily')).toContainText('今日の屋台');
+  await expect(page.getByTestId('home-souvenirs')).toContainText('おみやげ棚');
+  await page.getByTestId('home-daily-start').click();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
+  await page.getByTestId('order-decline').click();
+  const keys = await page.evaluate(() => Object.keys(localStorage));
+  expect(keys).toContain('shatekki.run.rules-v2-proposed-r003.daily');
+  expect(keys).not.toContain('shatekki.run.rules-v2-proposed-r003');
+  // a reload offers to continue the same daily game
+  await page.reload();
+  await expect(page.getByTestId('btn-resume-run')).toBeVisible({ timeout: 20_000 });
 });
