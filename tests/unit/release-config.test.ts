@@ -26,3 +26,14 @@ describe('first official release values', () => {
     expect(run.ammo).toBe(10);
   });
 });
+
+describe('gameplay bundles keep the release values', () => {
+  it('official-v1 bundle is the release config and the expanded catalog is prototype', async () => {
+    const { getGameplayBundle } = await import('../../src/catalog/gameplay-config');
+    const official = getGameplayBundle('official-v1');
+    expect(official.catalog).toBe(RELEASE_CATALOG);
+    expect(official.tuning).toBe(RELEASE_TUNING);
+    expect(catalogValueStatus(getGameplayBundle('expanded-proposed').catalog)).toBe('prototype');
+    expect(catalogValueStatus(RELEASE_CATALOG)).toBe('approved');
+  });
+});

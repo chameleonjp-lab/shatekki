@@ -1,0 +1,52 @@
+{
+  "rulesVersion": "rules-v2-proposed-r001",
+  "valueStatus": "prototype",
+  "slotCount": 36,
+  "cellCount": 36,
+  "pairSetBonusScore": 50,
+  "tierTargets": {
+    "easy": 12,
+    "normal": 16,
+    "hard": 8
+  },
+  "limits": {
+    "damagePushMult": {
+      "min": 0.5,
+      "max": 1.5
+    },
+    "maxPowerMultiplier": 4,
+    "speedMult": {
+      "min": 0.8,
+      "max": 1.2
+    },
+    "gravityMult": {
+      "min": 0.5,
+      "max": 1.5
+    },
+    "restitutionMult": {
+      "min": 0.65,
+      "max": 1
+    },
+    "swayMult": {
+      "min": 0.5,
+      "max": 1.5
+    },
+    "maxSwayAmplitudeRad": 0.05,
+    "loadPeriodMult": {
+      "min": 0.85,
+      "max": 1.15
+    },
+    "radiusMult": {
+      "min": 0.85,
+      "max": 1.2
+    },
+    "reflections": {
+      "min": 4,
+      "max": 10
+    },
+    "splitSpreadMult": {
+      "min": 0.75,
+      "max": 1.5
+    }
+  }
+}
