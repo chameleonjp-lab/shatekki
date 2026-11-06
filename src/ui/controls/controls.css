@@ -112,3 +112,5 @@
   align-self: center;
   max-height: 132px;
 }
+.row-position-wide { flex-wrap: wrap; }
+.stand-slider { flex: 1 0 100%; height: 32px; margin: 0; accent-color: var(--accent); touch-action: pan-x; }

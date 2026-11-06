@@ -59,7 +59,7 @@ export function hpRatioLabels(prizes: readonly PrizeFrame[]): HintLabel[] {
     return {
       instanceId: p.instanceId as string,
       typeId: p.typeId as string,
-      key: percent === 0 ? 'hint.hp.zero' : 'hint.hp',
+      key: percent === 0 ? 'xhint.hp.zero' : 'xhint.hp',
       params: { percent },
       tone: percent === 0 ? 'zero' : 'info',
       position: p.position,
@@ -95,7 +95,7 @@ export function oneMissingLabels(ctx: HintContext): HintLabel[] {
   const kinds = new Set<string>(oneMissingKinds(ctx).map((k) => k.typeId as string));
   return alive(ctx.prizes)
     .filter((p) => kinds.has(p.typeId as string))
-    .map((p) => ({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: 'hint.oneMissing', tone: 'warn' as const, position: p.position }));
+    .map((p) => ({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: 'xhint.oneMissing', tone: 'warn' as const, position: p.position }));
 }
 
 /** FX095: kinds not confirmed this run (the collection book is not mixed in). */
@@ -103,7 +103,7 @@ export function notCollectedLabels(ctx: Pick<HintContext, 'prizes' | 'collectedT
   const have = new Set<string>(ctx.collectedTypeIds as readonly string[]);
   return alive(ctx.prizes)
     .filter((p) => !have.has(p.typeId as string))
-    .map((p) => ({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: 'hint.notCollected', tone: 'info' as const, position: p.position }));
+    .map((p) => ({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: 'xhint.notCollected', tone: 'info' as const, position: p.position }));
 }
 
 /** FX096: kinds with two or more individuals on the shelf, with the count. */
@@ -126,7 +126,7 @@ export function duplicateLabels(ctx: Pick<HintContext, 'prizes' | 'nameOf'>): Hi
   for (const g of duplicateGroups(ctx.prizes)) {
     for (const id of g.instanceIds) {
       const p = byId.get(id)!;
-      out.push({ instanceId: id, typeId: g.typeId as string, key: 'hint.dup', params: { name: ctx.nameOf(g.typeId), count: g.count }, tone: 'info', position: p.position });
+      out.push({ instanceId: id, typeId: g.typeId as string, key: 'xhint.dup', params: { name: ctx.nameOf(g.typeId), count: g.count }, tone: 'info', position: p.position });
     }
   }
   return out;
@@ -143,7 +143,7 @@ export function motionLabels(ctx: Pick<HintContext, 'prizes' | 'motionOf'>): Hin
     if (!p.mounted) continue; // once it came off the mount the motion has stopped
     const m = ctx.motionOf(p.instanceId as string, p.typeId);
     if (!m || m.type === 'none' || !(m.periodSec > 0)) continue;
-    out.push({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: `hint.motion.${m.type}`, params: { sec: formatSeconds(m.periodSec) }, tone: 'info', position: p.position });
+    out.push({ instanceId: p.instanceId as string, typeId: p.typeId as string, key: `xhint.motion.${m.type}`, params: { sec: formatSeconds(m.periodSec) }, tone: 'info', position: p.position });
   }
   return out;
 }

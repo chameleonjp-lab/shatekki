@@ -24,7 +24,6 @@ export function seriesOutlineTargets(prizes: readonly PrizeFrame[], series: Pick
 }
 
 export interface SeriesLegend {
-  readonly seriesId: SeriesId;
   /** "#RRGGBB" */
   readonly color: string;
   /** Shared mark, e.g. "[菓]". Falls back to nothing (label still shown) when no symbol text exists. */
@@ -47,7 +46,6 @@ export function readText(text: TextFn, key: string): string {
 export function seriesLegend(series: SeriesDef | undefined | null, targetCount: number, text: TextFn): SeriesLegend | null {
   if (!series) return null;
   return {
-    seriesId: series.seriesId,
     color: series.color,
     symbol: readText(text, series.symbolKey),
     label: readText(text, series.labelKey),
