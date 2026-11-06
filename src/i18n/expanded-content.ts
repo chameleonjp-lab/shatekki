@@ -20,6 +20,7 @@ import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
 import { ZH_HANT_CONTENT } from './expanded/zh-Hant';
 import { ID_CONTENT } from './expanded/id';
 import { TR_CONTENT } from './expanded/tr';
+import { VI_CONTENT } from './expanded/vi';
 import { IT_CONTENT } from './expanded/it';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
@@ -51,7 +52,7 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   'zh-Hant': { status: 'complete', content: ZH_HANT_CONTENT },
   id: { status: 'complete', content: ID_CONTENT },
   tr: { status: 'complete', content: TR_CONTENT },
-  vi: PENDING,
+  vi: { status: 'complete', content: VI_CONTENT },
   th: PENDING,
 };
 

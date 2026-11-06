@@ -43,6 +43,7 @@ const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
   'zh-Hant': /2種/,
   id: /2 jenis/,
   tr: /2 çeşit/,
+  vi: /2 loại/,
   fr: /2 types/,
   de: /2 Sorten/,
   ko: /2종류/,
