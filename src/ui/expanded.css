@@ -134,3 +134,34 @@
   border-radius: 3px;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------ effect result lines */
+.fxres {
+  position: fixed;
+  left: 8px;
+  /* Under the HUD, left of the overview map, clear of the aim and fire controls. */
+  top: calc(env(safe-area-inset-top, 0px) + 84px);
+  width: min(240px, calc(100vw - 190px));
+  z-index: 12;
+  box-sizing: border-box;
+  padding: 6px 8px 7px;
+  border-radius: 10px;
+  background: rgba(24, 14, 10, 0.9);
+  border: 1px solid rgba(255, 211, 107, 0.6);
+  color: #fff7ec;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.fxres[hidden] { display: none; }
+.fxres-title { font-weight: 800; color: #ffd36b; font-size: 10px; margin-bottom: 2px; }
+.fxres-list { margin: 0; padding: 0; list-style: none; }
+.fxres-item { margin: 2px 0; }
+.fxres-src { display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 6px; background: rgba(255, 211, 107, 0.22); font-size: 9px; font-weight: 700; }
+.fxres-none { opacity: 0.78; }
+.fxres-note { display: block; font-size: 10px; opacity: 0.85; }
+.fxres-more { opacity: 0.8; }
+.fxres-deferred { margin: 3px 0 0; font-size: 10px; opacity: 0.9; }
+.fxres-deferred[hidden] { display: none; }
