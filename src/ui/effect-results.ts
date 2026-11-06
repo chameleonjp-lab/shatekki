@@ -72,28 +72,64 @@ const OUTLINE_FX = /^FX0(6\d|7\d|80)$/;
 /** FX090-FX092 may leave a prize outside the series. */
 const OUTSIDE_SERIES_FX = /^FX09[0-2]$/;
 
-function reasonLine(e: PlannedEffect, line: EffectResultTextDeps['line']): string {
+function reasonLine(e: PlannedEffect, line: EffectResultTextDeps['line'], t: EffectResultTextDeps['t']): string {
   const fx = e.effectId === null ? '' : String(e.effectId);
+  if (e.reason === 'noAmmoRoom') return t('fxres.ammo.noRoom'); // an ammo grant at the cap: no room, not "cannot be used"
   if (e.reason === 'noApplicableEffect' || (e.source.kind === 'answer' && e.effectId === null)) return line('noApplicableEffect');
   if (OUTLINE_FX.test(fx) && e.reason === 'noTarget') return line('noOutlineTarget');
+  if (e.source.kind === 'device' && e.effectId === null && (e.reason === 'deviceAlreadyUsed' || e.reason === 'bulletTypeAlreadyChanged')) return t('fxres.device.used');
   return line('effectNotApplicable');
+}
+
+/** Legacy plates carry no effect id: what an applied one did, by its kind. */
+const LEGACY_APPLIED_KEY = {
+  penalty: 'fxres.device.penalty',
+  bulletType: 'fxres.device.bulletType',
+  transform: 'fxres.device.transform',
+} as const;
+
+/** "Asked for 2, got 1": only for grants that asked for more than they got. */
+function partialNote(e: PlannedEffect, t: EffectResultTextDeps['t']): string | null {
+  const asked = e.ammoRequested;
+  return e.outcome === 'applied' && asked !== undefined && e.ammoDelta > 0 && e.ammoDelta < asked ? t('fxres.ammo.partial', { n: e.ammoDelta, req: asked }) : null;
 }
 
 export function effectResultLine(e: PlannedEffect, deps: EffectResultTextDeps): EffectResultLine {
   const fx = e.effectId === null ? null : String(e.effectId);
+  const sourceLabel = deps.t(SOURCE_KEY[e.source.kind]);
+  if (e.source.kind === 'device' && fx === null) {
+    // Legacy plate: source, outcome and real amount are read separately (plan T1/T2).
+    const kind = e.source.deviceKind;
+    const name = deps.t(`fx.offscreen.device.${kind}`);
+    const applied = e.outcome === 'applied';
+    let text: string;
+    if (!applied) text = reasonLine(e, deps.line, deps.t);
+    else if (kind === 'ammo') text = deps.t('fxres.ammo.added', { n: e.ammoDelta });
+    else if (kind === 'penalty' || kind === 'bulletType' || kind === 'transform') text = deps.t(LEGACY_APPLIED_KEY[kind]);
+    else text = '';
+    return { source: 'device', sourceLabel, name: name === `fx.offscreen.device.${kind}` ? '' : name, text, note: partialNote(e, deps.t), applied };
+  }
   const applied = e.outcome === 'applied' && fx !== null;
   const name = fx === null ? '' : deps.t(`exp.fx.${fx}.name`);
-  const text = applied ? deps.t(`exp.fx.${fx}.result`, { n: Math.abs(e.ammoDelta) }) : reasonLine(e, deps.line);
-  const note = applied && fx !== null && OUTSIDE_SERIES_FX.test(fx) ? deps.line('sideEffectTemporaryOutsideSeries') : null;
-  return { source: e.source.kind, sourceLabel: deps.t(SOURCE_KEY[e.source.kind]), name, text, note, applied };
+  const text = applied ? deps.t(`exp.fx.${fx}.result`, { n: Math.abs(e.ammoDelta) }) : reasonLine(e, deps.line, deps.t);
+  const note = applied && fx !== null && OUTSIDE_SERIES_FX.test(fx) ? deps.line('sideEffectTemporaryOutsideSeries') : partialNote(e, deps.t);
+  return { source: e.source.kind, sourceLabel, name, text, note, applied };
 }
 
-/** Pure: what the card shows for a settled shot. Order follows `effects`; capped at {@link EFFECT_RESULT_MAX_LINES}. */
-export function effectResultsModel(input: EffectResultInput, deps: EffectResultTextDeps): EffectResultsModel {
-  const all = (input.effects ?? []).map((e) => effectResultLine(e, deps)).filter((l) => l.text !== '');
+export interface EffectResultsOptions {
+  /** Lines shown at most, the "more" line included (default {@link EFFECT_RESULT_MAX_LINES}; Infinity lists all, as on the result screen). */
+  readonly maxLines?: number;
+}
+
+/** Split and power plates act during the flight; after it they have nothing to report. */
+const listed = (e: PlannedEffect): boolean => !(e.source.kind === 'device' && e.reason === 'flightOnlyDevice');
+
+/** Pure: what the card shows for a settled shot. Order follows `effects`; capped at {@link EFFECT_RESULT_MAX_LINES} unless `maxLines` says otherwise. */
+export function effectResultsModel(input: EffectResultInput, deps: EffectResultTextDeps, options: EffectResultsOptions = {}): EffectResultsModel {
+  const all = (input.effects ?? []).filter(listed).map((e) => effectResultLine(e, deps)).filter((l) => l.text !== '');
   const deferredCount = input.deferredTransforms?.length ?? 0;
   const deferred = deferredCount > 0 ? deps.t('fxres.deferred', { n: deferredCount }) : null;
-  const budget = EFFECT_RESULT_MAX_LINES - (deferred !== null ? 1 : 0);
+  const budget = (options.maxLines ?? EFFECT_RESULT_MAX_LINES) - (deferred !== null ? 1 : 0);
   let lines = all;
   let more: string | null = null;
   if (all.length > budget) {

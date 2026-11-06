@@ -5,9 +5,10 @@
  * The first portrait screenful holds the total and the retry button; prizes,
  * sets, chain, breakdown and the top 30 follow and scroll.
  */
-import type { FinalResult } from '../contracts';
+import type { DeferredTransform, FinalResult, PlannedEffect } from '../contracts';
 import { formatInteger, translate, type I18n, type Locale, type UiKey } from '../i18n';
-import { prizeName, setName } from '../i18n/content';
+import { prizeName } from '../i18n/content';
+import { setDisplayName, type SetBookExpandedText } from './set-book';
 import { type RankingRow, type RankingSubmitStatus, type TopState } from '../ranking/client';
 import type { PublicLinks } from '../ranking/config';
 import { el, replaceChildren, setHidden, setText, type ScreenHandle } from './dom';
@@ -15,7 +16,42 @@ import { buildResultShareText, browserOpen, browserWriteText, shareOnX, shareOut
 import './screens.css';
 
 /** Section order. 'hero' and 'actions' are the first screenful; the rest scrolls. */
-export const RESULT_SECTION_ORDER = ['hero', 'actions', 'prizes', 'sets', 'chain', 'breakdown', 'submit', 'top'] as const;
+export const RESULT_SECTION_ORDER = ['hero', 'actions', 'lastShot', 'prizes', 'sets', 'chain', 'breakdown', 'submit', 'top'] as const;
+
+/**
+ * Expanded rules (plan T1, F2): the confirmed summary of the shot that ended the run. The
+ * 5-second effect card is gone ~0.9 s later when the result opens, so the result keeps every
+ * line of it and the reason the run ended. Read only from the settled summary; never re-applied.
+ */
+export interface LastShotInput {
+  readonly shotNumber: number;
+  readonly effects: readonly PlannedEffect[];
+  readonly deferredTransforms: readonly DeferredTransform[];
+  readonly ammoAfter: number;
+}
+
+/** Lines of the last shot in the current locale (the expanded build passes effectResultsModel with no line limit). */
+export type DescribeEffects = (input: { readonly effects: readonly PlannedEffect[]; readonly deferredTransforms: readonly DeferredTransform[] }) => {
+  readonly lines: ReadonlyArray<{ readonly sourceLabel: string; readonly name: string; readonly text: string; readonly note: string | null; readonly applied: boolean }>;
+  readonly deferred: string | null;
+};
+
+export interface ResultTextOptions {
+  /** Pair-set names, the same source as the set book (expanded build only). */
+  readonly expandedText?: SetBookExpandedText;
+  /** Without it (public build) the last-shot section is not shown. */
+  readonly describeEffects?: DescribeEffects;
+}
+
+export interface LastShotView {
+  readonly title: string;
+  readonly lines: ReturnType<DescribeEffects>['lines'];
+  readonly deferred: string | null;
+  /** Shown when the shot had nothing to report. */
+  readonly emptyText: string;
+  /** Why the run ended here, in reading order. */
+  readonly endReasons: readonly string[];
+}
 
 export interface ResultInput {
   result: FinalResult;
@@ -27,6 +63,8 @@ export interface ResultInput {
   links: PublicLinks;
   /** False during private/offline publication. Defaults to a configured ranking link. */
   rankingAvailable?: boolean;
+  /** Expanded rules: the shot that ended the run (null/absent: not shown). */
+  lastShot?: LastShotInput | null;
 }
 
 export type BreakdownKind = 'prize' | 'trick' | 'set' | 'firstHit' | 'penalty';
@@ -43,6 +81,8 @@ export interface ResultViewModel {
   readonly rankText: string | null;
   readonly prizes: { readonly title: string; readonly total: number; readonly items: ReadonlyArray<{ typeId: string; name: string; count: number }>; readonly emptyText: string };
   readonly sets: { readonly title: string; readonly items: ReadonlyArray<{ setId: string; name: string }>; readonly emptyText: string };
+  /** Expanded rules only; null for an abandoned run or without effect text. */
+  readonly lastShot: LastShotView | null;
   readonly chain: { readonly title: string; readonly value: number; readonly text: string };
   readonly shotsText: string;
   readonly breakdown: {
@@ -80,7 +120,23 @@ const NOT_ELIGIBLE_KEYS: Readonly<Record<string, UiKey>> = {
   not_ready: 'submit.notEligible.notReady',
 };
 
-export function resultViewModel(input: ResultInput, locale: Locale): ResultViewModel {
+/** Did an ammo grant of this shot ask for more than the caps allowed? */
+const hitAmmoCap = (e: PlannedEffect): boolean => e.reason === 'noAmmoRoom' || (e.ammoRequested !== undefined && e.ammoDelta < e.ammoRequested);
+
+function lastShotView(input: ResultInput, locale: Locale, describe: DescribeEffects | undefined): LastShotView | null {
+  const last = input.lastShot;
+  if (!last || !describe || input.result.status !== 'completed') return null;
+  const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
+  const m = describe({ effects: last.effects, deferredTransforms: last.deferredTransforms });
+  const endReasons: string[] = [];
+  if (last.ammoAfter === 0) {
+    if (last.effects.some(hitAmmoCap)) endReasons.push(t('result.end.capped'));
+    endReasons.push(t('result.end.noAmmo'));
+  }
+  return { title: t('result.lastShot.title', { n: last.shotNumber }), lines: m.lines, deferred: m.deferred, emptyText: t('result.lastShot.none'), endReasons };
+}
+
+export function resultViewModel(input: ResultInput, locale: Locale, options: ResultTextOptions = {}): ResultViewModel {
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
   const { result } = input;
   const rankingAvailable = input.rankingAvailable ?? input.links.labDetailUrl !== null;
@@ -198,7 +254,13 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
       items: order.map((id) => ({ typeId: id, name: prizeName(locale, id), count: counts.get(id) ?? 0 })),
       emptyText: t('result.prizes.none'),
     },
-    sets: { title: t('result.sets'), items: result.completedSets.map((s) => ({ setId: String(s), name: setName(locale, String(s)) })), emptyText: t('result.sets.none') },
+    sets: {
+      title: t('result.sets'),
+      // The same lookup as the set book; an unknown name falls back to the set's place, never a bare id.
+      items: result.completedSets.map((s) => ({ setId: String(s), name: setDisplayName(locale, String(s), options.expandedText) || t('setbook.undiscovered') })),
+      emptyText: t('result.sets.none'),
+    },
+    lastShot: lastShotView(input, locale, options.describeEffects),
     chain: { title: t('result.maxChain'), value: result.maxChain, text: t('unit.pieces', { n: result.maxChain }) },
     shotsText: t('result.shots', { n: result.shotsFired }),
     breakdown: {
@@ -239,6 +301,8 @@ export interface ResultDeps {
   readonly onRetryTop: () => void;
   /** Open the set book (図鑑). The button is shown only when provided. */
   readonly onOpenSetBook?: () => void;
+  /** Expanded build: pair-set names (same source as the book) and the last-shot lines. */
+  readonly text?: ResultTextOptions;
   readonly open?: OpenWindow;
   readonly writeText?: WriteText | undefined;
 }
@@ -246,7 +310,7 @@ export interface ResultDeps {
 export function mountResult(root: HTMLElement, deps: ResultDeps, initial: ResultInput): ScreenHandle<ResultInput> {
   let input = initial;
   const open = deps.open ?? browserOpen();
-  let vm = resultViewModel(input, deps.i18n.locale);
+  let vm = resultViewModel(input, deps.i18n.locale, deps.text);
 
   const h = (tag: 'h2' | 'h3', cls = 'sec-title') => el(tag, { class: cls });
   const title = h('h2', 'ov-title');
@@ -283,6 +347,12 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   const topRetry = el('button', { class: 'btn', attrs: { type: 'button' } });
   const topList = el('ol', { class: 'top-list' });
   const bookBtn = el('button', { class: 'btn', attrs: { type: 'button' } });
+  const lastTitle = h('h3');
+  const lastList = el('ul', { class: 'last-shot-list' });
+  const lastEmpty = el('p', { class: 'note dim' });
+  const lastDeferred = el('p', { class: 'note' });
+  const lastReasons = el('div', { class: 'last-shot-reasons' });
+  const lastSec = el('section', { class: 'sec last-shot', attrs: { 'data-testid': 'result-last-shot' } }, [lastTitle, lastList, lastEmpty, lastDeferred, lastReasons]);
   // Stable hooks for browser automation (never used by game logic).
   heroValue.dataset.testid = 'result-score';
   retry.dataset.testid = 'result-retry';
@@ -306,6 +376,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   ]);
   const col = el('main', { class: 'scr-col' }, [
     title, notice, heroSec, actionsSec,
+    lastSec,
     el('section', { class: 'sec' }, [prizesTitle, prizesBody]),
     el('section', { class: 'sec' }, [setsTitle, setsBody, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
     el('section', { class: 'sec' }, [chainTitle, chainValue, shots]),
@@ -322,7 +393,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   }
 
   function refresh(): void {
-    vm = resultViewModel(input, deps.i18n.locale);
+    vm = resultViewModel(input, deps.i18n.locale, deps.text);
     document.documentElement.lang = deps.i18n.locale;
     setText(title, vm.title);
     setText(notice, vm.abandonedNotice ?? '');
@@ -351,6 +422,24 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     setText(share, vm.actions.share.label);
     setText(prizesTitle, `${vm.prizes.title} (${vm.prizes.total})`);
     replaceChildren(prizesBody, vm.prizes.items.length === 0 ? [el('span', { class: 'note', text: vm.prizes.emptyText })] : vm.prizes.items.map((i) => chip(i.name, i.count)));
+    const ls = vm.lastShot;
+    setHidden(lastSec, ls === null);
+    setText(lastTitle, ls?.title ?? '');
+    replaceChildren(
+      lastList,
+      (ls?.lines ?? []).map((l) =>
+        el('li', { class: l.applied ? 'last-shot-item' : 'last-shot-item none' }, [
+          el('span', { class: 'chip', text: l.sourceLabel }),
+          el('span', { text: ` ${l.name !== '' ? `${l.name}: ` : ''}${l.text}` }),
+          ...(l.note !== null ? [el('span', { class: 'note dim', text: ` ${l.note}` })] : []),
+        ]),
+      ),
+    );
+    setText(lastEmpty, ls && ls.lines.length === 0 ? ls.emptyText : '');
+    setHidden(lastEmpty, !ls || ls.lines.length > 0);
+    setText(lastDeferred, ls?.deferred ?? '');
+    setHidden(lastDeferred, !ls?.deferred);
+    replaceChildren(lastReasons, (ls?.endReasons ?? []).map((r) => el('p', { class: 'note', text: r, attrs: { role: 'status' } })));
     setText(setsTitle, vm.sets.title);
     replaceChildren(setsBody, vm.sets.items.length === 0 ? [el('span', { class: 'note', text: vm.sets.emptyText })] : vm.sets.items.map((i) => chip(i.name)));
     setText(chainTitle, vm.chain.title);
