@@ -18,12 +18,22 @@ export default defineConfig({
     // Main audience: Japanese iPhones. Other locales are covered by unit tests and explicit switches.
     locale: 'ja-JP',
   },
-  webServer: {
-    command: process.env.CI_PREBUILT === 'true' ? 'npm run preview' : 'npm run build && npm run preview',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
-  },
+  webServer: [
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview' : 'npm run build && npm run preview',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    // Internal build of the D34-D37 prototype (VITE_SHATEKKI_BUNDLE=expanded-proposed), only for
+    // tests/e2e/expanded-*.spec.ts. Never published: Pages deploys the site-dist artifact only.
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:expanded' : 'npm run build:expanded && npm run preview:expanded',
+      url: 'http://127.0.0.1:4174',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+  ],
   projects: [
     {
       name: 'iphone-portrait-chromium',

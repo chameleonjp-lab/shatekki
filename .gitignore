@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-expanded/
 coverage/
 test-results/
 playwright-report/
