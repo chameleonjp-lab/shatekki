@@ -27,6 +27,8 @@ export interface BoothBuild {
   readonly hidden: ReadonlyMap<string, THREE.Object3D>;
   readonly shopkeeper: ReadonlyMap<string, THREE.Mesh>;
   readonly lights: readonly THREE.Light[];
+  /** Re-grows the invisible collision proxies to a new cork radius (expanded rules: FX083/FX084). */
+  setPickInflate(inflate: number): void;
   dispose(): void;
 }
 
@@ -334,6 +336,7 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
   const addProxy = (id: string, b: Box3) => {
     const [sx, sy, sz] = size(b);
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx + 2 * pickInflate, sy + 2 * pickInflate, sz + 2 * pickInflate), proxyMat);
+    m.userData = { size: [sx, sy, sz] };
     m.position.set(...pos(b));
     m.name = `proxy:${id}`;
     m.updateMatrixWorld(true);
@@ -361,6 +364,15 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
     hidden,
     shopkeeper: keeper.parts,
     lights: [hemi, key, glowLight],
+    setPickInflate(inflate: number) {
+      for (const child of proxies.children) {
+        const m = child as THREE.Mesh;
+        const size = m.userData.size as V3 | undefined;
+        if (!size) continue;
+        m.geometry.dispose();
+        m.geometry = new THREE.BoxGeometry(size[0] + 2 * inflate, size[1] + 2 * inflate, size[2] + 2 * inflate);
+      }
+    },
     dispose() {
       group.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();

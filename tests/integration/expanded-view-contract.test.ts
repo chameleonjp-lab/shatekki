@@ -13,7 +13,8 @@ import {
   type PrizeTypeId,
   type SimulationFrame,
 } from '../../src/contracts';
-import { applyCameraPose, applyFrame, cameraPose, createSceneGraph, fovForAspect } from '../../src/view';
+import { applyCameraPose, applyFrame, cameraPose, createSceneGraph, fovForAspect, updateAim } from '../../src/view';
+import type { BallisticSpec, ProjectileFrame } from '../../src/contracts';
 import { createBackgroundCells } from '../../src/view/background-cells';
 
 const bundle = getGameplayBundle('expanded-proposed');
@@ -254,5 +255,54 @@ describe('view v2: camera follows the stand and shows about three columns', () =
     const v1 = cameraPose(BOOTH_LAYOUT, 0.4, 0.46);
     expect(v1.target.x).toBeCloseTo(0.24, 12); // 0.6 follow, as before
     expect(v1.fovDeg).toBeCloseTo(fovForAspect(0.46), 12);
+  });
+});
+
+// -------------------------------------------------------------- cork radius
+
+describe('view v2: cork radius (FX083/FX084)', () => {
+  const L = BOOTH_LAYOUT_V2;
+  const ballistic = (corkRadius?: number): BallisticSpec => ({ speed: 11, gravity: 0, fixedStepSec: 1 / 120, bulletType: 'standard', ...(corkRadius !== undefined ? { corkRadius } : {}) });
+
+  it('reticle pick proxies are grown by ViewState.ballistic.corkRadius, and fall back to the built radius without it', () => {
+    const g = createSceneGraph({ layout: L, resolvePrize, corkRadius: 0.011 });
+    applyFrame(g, frame([prizeFrame(1, 1, 0, 1.2, -1.75)]));
+    const aim = { yaw: 0, pitch: 0 };
+    const base = updateAim(g, { phase: 'aiming', standX: 0, effectiveAim: aim, ballistic: ballistic() });
+    const big = updateAim(g, { phase: 'aiming', standX: 0, effectiveAim: aim, ballistic: ballistic(0.041) });
+    expect(base.hit && big.hit).toBe(true);
+    // a 3 cm larger cork touches the prize 3 cm earlier along the path
+    expect(base.distance - big.distance).toBeGreaterThan(0.027);
+    expect(base.distance - big.distance).toBeLessThan(0.033);
+    const same = updateAim(g, { phase: 'aiming', standX: 0, effectiveAim: aim, ballistic: ballistic(0.011) });
+    expect(same.distance).toBeCloseTo(base.distance, 9);
+    // the cell and shelf proxies follow too
+    const cellProxy = g.booth.proxies.getObjectByName('proxy:cell-r2-c06') as THREE.Mesh;
+    updateAim(g, { phase: 'aiming', standX: 0, effectiveAim: aim, ballistic: ballistic(0.041) });
+    cellProxy.geometry.computeBoundingBox();
+    expect(cellProxy.geometry.boundingBox!.getSize(new THREE.Vector3()).z).toBeCloseTo(0.008 + 2 * 0.041, 6);
+    updateAim(g, { phase: 'aiming', standX: 0, effectiveAim: aim });
+    cellProxy.geometry.computeBoundingBox();
+    expect(cellProxy.geometry.boundingBox!.getSize(new THREE.Vector3()).z).toBeCloseTo(0.008 + 2 * 0.011, 6);
+    g.dispose();
+  });
+
+  it('draws a cork with the radius its frame carries, and unchanged without one', () => {
+    const g = createSceneGraph({ layout: L, resolvePrize, corkRadius: 0.011 });
+    const cork = (n: number, radius?: number): ProjectileFrame => ({
+      projectileId: mintId.projectile(mintId.shot(1), n),
+      position: { x: 0.1 * n, y: 1.2, z: -1 },
+      velocity: { x: 0, y: 0, z: -8 },
+      bulletType: 'standard',
+      powerMultiplier: 1,
+      ...(radius !== undefined ? { radius } : {}),
+    });
+    applyFrame(g, { ...frame([]), projectiles: [cork(0), cork(1, 0.011), cork(2, 0.0132), cork(3, 0.0088)] });
+    const scales = g.projectileLayer.children.map((c) => c.scale.x);
+    expect(scales[0]).toBeCloseTo(1, 9);
+    expect(scales[1]).toBeCloseTo(1, 9);
+    expect(scales[2]).toBeCloseTo(1.2, 9);
+    expect(scales[3]).toBeCloseTo(0.8, 9);
+    g.dispose();
   });
 });
