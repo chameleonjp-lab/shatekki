@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const FR: Record<UiKey, string> = {
+  "app.restore.abandoned": "La partie précédente a été interrompue pendant un tir et ne sera pas enregistrée.",
+  "app.restore.ended": "La partie précédente est terminée.",
+  "app.restore.quarantined": "La partie sauvegardée est illisible. Commencez une nouvelle partie.",
+  "app.resume.title": "Vous avez une partie inachevée",
+  "app.resume.continue": "Continuer",
+  "app.resume.restart": "Recommencer (accueil)",
+  "app.status.preparing": "Préparation…",
+  "app.error.stale": "Cette partie continue dans un autre onglet. Vous ne pouvez pas jouer dans cet onglet.",
+  "app.error.renderer": "Impossible de lancer la vue 3D. Votre navigateur ne la prend peut-être pas en charge.",
+  "app.error.start": "Impossible de lancer la partie. Rechargez la page.",
   'app.title': 'Tir de fête foraine',
   'home.tagline': 'Visez les lots du stand de fête avec votre pistolet à bouchon.',
   'home.start': 'Commencer',

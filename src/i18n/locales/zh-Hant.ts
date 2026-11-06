@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANT: Record<UiKey, string> = {
+  "app.restore.abandoned": "上一局在射擊過程中中斷，因此不會記錄該局成績。",
+  "app.restore.ended": "上一局已結束。",
+  "app.restore.quarantined": "無法讀取儲存的遊戲。請開始新的一局。",
+  "app.resume.title": "你有一局尚未完成的遊戲",
+  "app.resume.continue": "繼續遊戲",
+  "app.resume.restart": "重新開始（返回首頁）",
+  "app.status.preparing": "準備中…",
+  "app.error.stale": "此局遊戲正在另一個分頁中繼續。無法在此分頁中操作。",
+  "app.error.renderer": "無法啟動3D畫面。你的瀏覽器可能不支援。",
+  "app.error.start": "無法開始遊戲。請重新載入頁面。",
   'app.title': '廟會打靶遊戲',
   'home.tagline': '在廟會攤位上，用軟木塞槍瞄準獎品吧。',
   'home.start': '開始',

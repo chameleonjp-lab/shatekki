@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const ES: Record<UiKey, string> = {
+  "app.restore.abandoned": "La partida anterior se interrumpió durante un disparo y no se registrará.",
+  "app.restore.ended": "La partida anterior ha terminado.",
+  "app.restore.quarantined": "No se pudo leer la partida guardada. Empieza una nueva.",
+  "app.resume.title": "Tienes una partida sin terminar",
+  "app.resume.continue": "Continuar",
+  "app.resume.restart": "Empezar de nuevo (inicio)",
+  "app.status.preparing": "Preparando…",
+  "app.error.stale": "La partida continúa en otra pestaña. No puedes jugar en esta pestaña.",
+  "app.error.renderer": "No se pudo iniciar la vista 3D. Es posible que tu navegador no la admita.",
+  "app.error.start": "No se pudo iniciar la partida. Recarga la página.",
   'app.title': 'Tiro al blanco de feria',
   'home.tagline': 'Apunta con tu pistola de corcho a los premios del puesto de feria.',
   'home.start': 'Empezar',

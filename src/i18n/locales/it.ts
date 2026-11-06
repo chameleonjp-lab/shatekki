@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const IT: Record<UiKey, string> = {
+  "app.restore.abandoned": "La partita precedente è stata interrotta durante un tiro e non verrà registrata.",
+  "app.restore.ended": "La partita precedente è terminata.",
+  "app.restore.quarantined": "Impossibile leggere la partita salvata. Inizia una nuova partita.",
+  "app.resume.title": "Hai una partita non terminata",
+  "app.resume.continue": "Continua",
+  "app.resume.restart": "Ricomincia (pagina iniziale)",
+  "app.status.preparing": "Preparazione…",
+  "app.error.stale": "La partita continua in un’altra scheda. Non puoi giocare in questa scheda.",
+  "app.error.renderer": "Impossibile avviare la vista 3D. Il browser potrebbe non supportarla.",
+  "app.error.start": "Impossibile avviare la partita. Ricarica la pagina.",
   'app.title': 'Tiro a segno della sagra',
   'home.tagline': 'Mira ai premi della bancarella con la tua pistola a tappo di sughero.',
   'home.start': 'Inizia',

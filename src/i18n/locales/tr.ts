@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const TR: Record<UiKey, string> = {
+  "app.restore.abandoned": "Önceki oyun atış sırasında kesildiği için kaydedilmeyecek.",
+  "app.restore.ended": "Önceki oyun sona erdi.",
+  "app.restore.quarantined": "Kaydedilen oyun okunamadı. Yeni bir oyun başlatın.",
+  "app.resume.title": "Tamamlanmamış bir oyununuz var",
+  "app.resume.continue": "Devam et",
+  "app.resume.restart": "Yeniden başla (ana sayfa)",
+  "app.status.preparing": "Hazırlanıyor…",
+  "app.error.stale": "Bu oyun başka bir sekmede devam ediyor. Bu sekmede oynayamazsınız.",
+  "app.error.renderer": "3B görüntü başlatılamadı. Tarayıcınız bunu desteklemiyor olabilir.",
+  "app.error.start": "Oyun başlatılamadı. Lütfen sayfayı yeniden yükleyin.",
   'app.title': 'Panayır Atış Oyunu',
   'home.tagline': 'Mantar tabancanla panayır tezgâhındaki ödülleri hedefle.',
   'home.start': 'Başla',

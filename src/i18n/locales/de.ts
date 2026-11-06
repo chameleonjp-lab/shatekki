@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const DE: Record<UiKey, string> = {
+  "app.restore.abandoned": "Das vorherige Spiel wurde während eines Schusses unterbrochen und wird nicht gewertet.",
+  "app.restore.ended": "Das vorherige Spiel ist beendet.",
+  "app.restore.quarantined": "Der Spielstand konnte nicht gelesen werden. Starte ein neues Spiel.",
+  "app.resume.title": "Du hast ein unvollendetes Spiel",
+  "app.resume.continue": "Fortsetzen",
+  "app.resume.restart": "Neu beginnen (Startseite)",
+  "app.status.preparing": "Wird vorbereitet…",
+  "app.error.stale": "Dieses Spiel wird in einem anderen Tab fortgesetzt. In diesem Tab kannst du nicht spielen.",
+  "app.error.renderer": "Die 3D-Ansicht konnte nicht gestartet werden. Dein Browser unterstützt sie möglicherweise nicht.",
+  "app.error.start": "Das Spiel konnte nicht gestartet werden. Bitte lade die Seite neu.",
   'app.title': 'Jahrmarkt-Schießbude',
   'home.tagline': 'Ziele mit deinem Korkengewehr auf die Preise an der Jahrmarktbude.',
   'home.start': 'Starten',

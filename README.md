@@ -1,32 +1,26 @@
-# shatekki — 屋台の射的ゲーム 要件・実装計画
+# shatekki — 屋台の射的ゲーム
 
-2026年11月6日更新。確定したルールと実装計画の資料一式です。2026年11月5日（UTC）からClaude Codeによる実装を始め、Task 00〜17の実装と公開前の自動確認まで進めています（PR #7〜で提出、マージは利用者）。進み具合は[タスク台帳](docs/architecture/task-ledger.md)、受入確認の証拠は[記録表](docs/qa/acceptance-evidence.md)にまとめています。正式な公開タイトルは未確定です。
+2026年11月6日更新。要件33項目に沿った試作を実装し、PR #7・#11をmainへマージ済みです。**一般公開・正式ランキング接続・数値の正式採用・iPhone Safari実機確認はまだです。** 正式タイトルも未確定です。
 
-## 読む順番
+[最新の残作業と今回の修正](docs/release/follow-up-status.md)に、実施済みの修正、確認結果、次の順序、利用者に判断いただく内容をまとめています。[タスク台帳](docs/architecture/task-ledger.md)と[受入確認の証拠](docs/qa/acceptance-evidence.md)も参照してください。
 
-1. [要件仕様書](docs/requirements.md)と[決定記録](docs/decision-log.md)：01〜33の確定内容。
-2. [受入確認45項目](docs/acceptance-criteria.md)と[未確定事項](docs/open-items.md)：未実施の確認と残る詳細。
-3. [景品100種類](docs/prize-candidates.md)、[セット100組](docs/set-candidates.md)、[候補JSON](data/catalog-candidates.json)：具体的な名称・組合せの候補。nullは0点/HP0ではありません。
-4. [Claude Code実装計画1.1](docs/superpowers/plans/2026-11-06-shatekki-claude-code.md)：Opus 5.5/Sonnet 5.5の分担、19タスク、所有範囲と試験。
+## 仕様と実装
 
-## 敵対的検証で更新した資料
+- [要件仕様書](docs/requirements.md)・[決定記録](docs/decision-log.md)：確定01〜33。
+- [受入確認45項目](docs/acceptance-criteria.md)・[残る詳細](docs/open-items.md)：試作と正式採用、実機・本番の未確認を区別。
+- [景品100種類](docs/prize-candidates.md)・[セット100組](docs/set-candidates.md)・[候補データ](data/catalog-candidates.json)：候補名・組合せ。nullは0点や耐久値0を意味しません。
+- [実装計画1.1](docs/superpowers/plans/2026-11-06-shatekki-claude-code.md)・[対応表](docs/reviews/shatekki-plan-traceability.md)：Task 00〜18と各要件の対応。
 
-[検証報告](docs/reviews/2026-11-06-plan-adversarial-review.md)に15件の問題・修正点を整理し、[要件と工程の対応表](docs/reviews/shatekki-plan-traceability.md)に33決定、45確認、残る13分類を対応付けました。これは計画の検査であり、ゲームの動作試験合格ではありません。
+景品100種類、セット100種類、縦向き中心、軽量3D、初期棚9個、初期10発＋追加累計10発。一射の処理後に空き枠を補充し、塞がった枠は延期します。最後の連鎖まで処理して弾切れなら終了します。今回の修正でゲームの点数・抽選・物理値は変えていません。
 
-[CLAUDE.md](CLAUDE.md)、[Claude Code開始指示](docs/claude-code-start-prompt.md)、[申し送り規約](docs/handoff/protocol.md)、[Claude宛の今回の申し送り](docs/handoff/to-claude/2026-11-06-plan-review.md)も更新・追加しています。
+## 進め方
 
-Claudeは初期実装と美術・演出・音、ChatGPTは要件・仕様管理と不具合/想定外への修正を担当します。別の相手宛リポジトリは未指定のため、暫定窓口は同repoの `docs/handoff/to-claude/` と `docs/handoff/to-chatgpt/` です。メモの投稿と相手の受領を区別します。
+Claudeは初期実装と美術・演出・音、ChatGPTは要件管理と統合後の不具合修正を担当します。[CLAUDE.md](CLAUDE.md)・[申し送り規約](docs/handoff/protocol.md)に従い、今回の回答は[Claude宛の申し送り](docs/handoff/to-claude/2026-11-06-post-merge-followups.md)に記録しています。投稿と相手の受領は別に扱います。
 
-## 変えていない基本仕様
+変更は専用ブランチからmainへのPRで提出し、マージは利用者が行います。現在のGitHub Actionsは試験のみを行います。マージしても本番公開やデータベース登録は行いません。
 
-景品100種類、セット100種類、縦向きメイン、軽量3D、初期棚9個、初期10発＋追加累計10発。一射終了後に補充し、最後の連鎖まで処理して弾切れなら終了します。塞がった枠の補充は延期します。ホーム/結果の共通機能は他ゲームの共通要件を引き継ぎ、景品やセットの見せ方は射的専用です。
+## 開発の確認
 
-## 保存履歴と作業範囲
+Node 22以上で `npm ci`、`npm run check`（型検査・単体・統合・ビルド）、`npm run test:e2e`（Chromiumで画面操作）を実行します。iPhone程度の画面幅をまねる試験はSafari実機の確認とは別です。
 
-[Issue #2](https://github.com/chameleonjp-lab/shatekki/issues/2)に初期資料を記録し、[PR #3](https://github.com/chameleonjp-lab/shatekki/pull/3)でファイル化、[PR #4](https://github.com/chameleonjp-lab/shatekki/pull/4)で27〜33を反映、[PR #5](https://github.com/chameleonjp-lab/shatekki/pull/5)でClaude向け計画を追加しました。いずれもマージ済みです。
-
-今回の検証修正は新しいPRで提出します。mainを直接変更せず、マージは利用者が行います。ゲーム実装、Claudeチーム起動、追加課金、DB変更、本番公開・実験場への新規掲載は行いません。元の要件書・決定記録・確認項目・候補データの内容は維持しています。
-
-## 開発の始め方（実装者向け）
-
-Node 22で `npm ci` を実行し、`npm run check`（型検査・単体試験・統合試験・ビルド）と `npm run test:e2e`（Chromiumでのブラウザ自動試験）で確認します。ブラウザ自動試験はiPhoneの画面幅をまねたもので、Safari実機の確認ではありません。技術選定と調査の結果は[実装の基準記録](docs/architecture/implementation-baseline.md)、一射の処理順は[一射の処理設計](docs/architecture/shot-pipeline.md)にあります。
+[実装の基準](docs/architecture/implementation-baseline.md)・[一射の処理設計](docs/architecture/shot-pipeline.md)・[公開前の確認と承認事項](docs/release/approval-request.md)も保存しています。

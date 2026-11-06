@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const KO: Record<UiKey, string> = {
+  "app.restore.abandoned": "이전 게임은 발사 도중 중단되어 기록되지 않습니다.",
+  "app.restore.ended": "이전 게임이 끝났습니다.",
+  "app.restore.quarantined": "저장된 게임을 읽을 수 없습니다. 새 게임을 시작해 주세요.",
+  "app.resume.title": "아직 끝나지 않은 게임이 있습니다",
+  "app.resume.continue": "이어서 하기",
+  "app.resume.restart": "처음부터 (홈으로)",
+  "app.status.preparing": "준비 중…",
+  "app.error.stale": "이 게임은 다른 탭에서 진행 중입니다. 이 탭에서는 조작할 수 없습니다.",
+  "app.error.renderer": "3D 화면을 시작할 수 없습니다. 브라우저가 지원하지 않을 수 있습니다.",
+  "app.error.start": "게임을 시작할 수 없습니다. 페이지를 새로고침해 주세요.",
   'app.title': '포장마차 사격 게임',
   'home.tagline': '축제 포장마차에서 코르크 총으로 경품을 노려 보세요.',
   'home.start': '시작',

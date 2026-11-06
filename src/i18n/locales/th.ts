@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const TH: Record<UiKey, string> = {
+  "app.restore.abandoned": "เกมก่อนหน้าถูกขัดจังหวะระหว่างยิง จึงจะไม่บันทึกผล",
+  "app.restore.ended": "เกมก่อนหน้าจบแล้ว",
+  "app.restore.quarantined": "ไม่สามารถอ่านเกมที่บันทึกไว้ได้ กรุณาเริ่มเกมใหม่",
+  "app.resume.title": "คุณมีเกมที่ยังเล่นไม่จบ",
+  "app.resume.continue": "เล่นต่อ",
+  "app.resume.restart": "เริ่มใหม่ (หน้าหลัก)",
+  "app.status.preparing": "กำลังเตรียม…",
+  "app.error.stale": "เกมนี้กำลังเล่นต่อในแท็บอื่น คุณไม่สามารถเล่นในแท็บนี้ได้",
+  "app.error.renderer": "ไม่สามารถเริ่มภาพ 3 มิติได้ เบราว์เซอร์ของคุณอาจไม่รองรับ",
+  "app.error.start": "ไม่สามารถเริ่มเกมได้ กรุณาโหลดหน้าใหม่",
   'app.title': 'เกมยิงปืนงานวัด',
   'home.tagline': 'เล็งปืนจุกไม้ก๊อกไปที่ของรางวัลในร้านงานวัด',
   'home.start': 'เริ่มเล่น',

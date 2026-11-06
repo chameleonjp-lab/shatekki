@@ -29,6 +29,13 @@ const SAME_AS_EN_ALLOWED: Record<string, readonly string[]> = {
 };
 
 describe('locales', () => {
+  it('translates the saved-run prompt and startup notices in the selected language', () => {
+    expect(translate('en', 'app.resume.continue')).toBe('Continue');
+    expect(translate('en', 'app.resume.title')).toBe('You have an unfinished game');
+    expect(translate('ja', 'app.resume.continue')).toBe('続きから');
+    expect(translate('en', 'app.restore.abandoned')).toBe('The previous game was interrupted during a shot and will not be recorded.');
+  });
+
   it('has exactly the 15 common locales', () => {
     expect([...LOCALES]).toEqual(['ja', 'en', 'es', 'pt-BR', 'zh-Hans', 'fr', 'de', 'ko', 'ru', 'it', 'zh-Hant', 'id', 'tr', 'vi', 'th']);
   });

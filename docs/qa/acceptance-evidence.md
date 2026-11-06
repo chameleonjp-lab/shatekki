@@ -2,7 +2,7 @@
 
 AC01〜45の実際の試験結果を記録する。「証拠の種類」は、単体・統合（Node上の自動試験）、ブラウザ自動（ChromiumでiPhone程度の画面幅をまねたもの）、実機（iPhone Safariでの観察）、本番（公開URL・正式ランキング）を区別する。証拠がないものは合格にしない。
 
-最終更新：2026-11-05 Opus（Task 17、公開前の統合確認）。「自動試験で確認」はNode上またはChromiumでの結果で、iPhone Safari実機の結果ではない。
+最終更新：2026-11-06 ChatGPT（#11後の追加確認。元のTask 17記録は保持）。「自動試験で確認」はNode上またはChromiumでの結果で、iPhone Safari実機の結果ではない。
 
 | AC | 担当Task | 試験（tests/配下） | 証拠の種類 | 状態 | 証拠（コミット・コマンド・件数） |
 |---|---|---|---|---|---|
@@ -40,14 +40,14 @@ AC01〜45の実際の試験結果を記録する。「証拠の種類」は、�
 | AC32 | 16,18 | integration/ranking.test.ts | 統合（模擬通信） | 一部確認（本番未接続） | integration/ranking（上位30参加者の取得）。実験場との一致はTask 18 |
 | AC33 | 16,18 | integration/ranking.test.ts | 統合（模擬通信） | 一部確認（本番未接続） | integration/ranking（応答喪失後の再送で1件、古い応答で上書きしない、各状態） |
 | AC34 | 15,18 | unit/share.test.ts | 単体＋ブラウザ自動 | 一部確認（正式URL未確定のため本文にURLなし） | unit/share（黒地白字・URLSearchParams・自動投稿なし・コピー代替）、e2e/screens「X share opens a post screen only」 |
-| AC35 | 15 | unit/i18n.test.ts; e2e/locales.spec.ts | 単体＋ブラウザ自動 | 自動試験で確認（翻訳はClaude作成・母語話者の確認なし O16） | unit/i18n・i18n-content（15言語×UI文言・景品100・セット100・ヒント100）、e2e/screens「switching to English」 |
+| AC35 | 15 | unit/i18n.test.ts; e2e/screens.spec.ts | 単体＋ブラウザ自動 | 自動試験で確認（翻訳はClaude作成・母語話者の確認なし O16） | unit/i18n・i18n-content（15言語×UI文言・景品100・セット100・ヒント100）、e2e/screens「switching to English」 |
 | AC36 | 13,17 | unit/audio.test.ts | 単体 | 一部確認（実際の試聴なし） | unit/audio（初回オン・音量正、保存済みオフ/0を尊重、解除失敗、停止で滞留音を破棄、連打の抑制） |
-| AC37 | 10,17 | integration/checkpoint.test.ts; e2e/acceptance.spec.ts | ブラウザ自動＋単体 | 一部確認（実機未確認） | e2e/smoke（横向き案内・非表示の検知）、unit/controller（停止中は進まず時間を飛ばさない）、unit/audio（停止で音を破棄）。実機は docs/qa/iphone-checklist.md 8・9 |
+| AC37 | 10,17 | integration/checkpoint.test.ts; integration/acceptance-composite.test.ts | ブラウザ自動＋単体 | 一部確認（実機未確認） | e2e/smoke（横向き案内・非表示の検知）、unit/controller（停止中は進まず時間を飛ばさない）、unit/audio（停止で音を破棄）。実機は docs/qa/iphone-checklist.md 8・9 |
 | AC38 | 10 | integration/checkpoint.test.ts | 統合＋ブラウザ自動 | 自動試験で確認（実機未確認） | integration/checkpoint「restores shelf, ammo, score, draw state and first-hit flags exactly」、e2e/reload「reload between shots resumes」 |
 | AC39 | 10,16 | integration/checkpoint.test.ts; integration/ranking.test.ts | 統合＋ブラウザ自動 | 自動試験で確認（実機未確認） | integration/checkpoint「flight, transform and fall all leave the FIRE marker」、integration/acceptance-composite（中断は送信対象外）、integration/ranking（abandonedは送信しない）、e2e/reload「reload while the shot is resolving abandons」 |
 | AC40 | 05,17 | e2e/performance.spec.ts | 統合＋ブラウザ自動 | 一部確認（実機の性能は未計測） | integration/performance（最も重い一射3種：95%点0.6ms以下、上限時間内）、unit/collision（薄い棚をすり抜けない）、e2e/performance（ソフトウェアGPUで中央値33ms）。docs/qa/performance.md |
 | AC41 | 16,18 | integration/security.test.ts | 統合 | 一部確認（本番の旧記録はTask 18） | integration/security（src/と配信物に秘密鍵・service_roleなし） |
-| AC42 | 17 | e2e/acceptance.spec.ts | 統合 | 自動試験で確認（実機未確認） | integration/acceptance-composite（最後の一発→分裂→+2→2個獲得→2セット同時→演出省略で同じ状態→次の一射中の再読み込みで中断・送信対象外） |
+| AC42 | 17 | integration/acceptance-composite.test.ts | 統合 | 自動試験で確認（実機未確認） | integration/acceptance-composite（最後の一発→分裂→+2→2個獲得→2セット同時→演出省略で同じ状態→次の一射中の再読み込みで中断・送信対象外） |
 | AC43 | 08 | unit/gimmicks.test.ts | 単体（物理） | 自動試験で確認 | unit/devices-sim「AC43: original + split corks hitting the same plate again give one activation」 |
 | AC44 | 08,09 | unit/gimmicks.test.ts; unit/scoring.test.ts | 単体（物理）＋統合 | 自動試験で確認 | unit/transform-grace「HP 2/8 -> max 20 -> 5; the transformed prize falling in the same shot counts」、integration/devices-run「transform plate」 |
 | AC45 | 08 | unit/gimmicks.test.ts | 単体（物理） | 自動試験で確認（猶予秒数は試作） | unit/transform-grace「a prize already falling when the limit is hit is still collected within the grace」「never re-extended」 |
@@ -59,3 +59,13 @@ iPhone実機とSafari（WebKit）の確認は、この実行環境では行え�
 ## 集計（Task 17時点）
 
 45項目のうち、自動試験で確認した項目が35、一部だけ確認した項目が10。どちらもiPhone Safari実機での確認はまだで、「合格」とは扱わない。一部確認の10項目は、本番のランキング・正式URLが必要なもの（AC28・29・31〜34・41）、実際の試聴が必要なもの（AC36）、実機が必要なもの（AC37・40）である。実機の手順は `docs/qa/iphone-checklist.md`、性能の記録は `docs/qa/performance.md`、つり合いの測定は `docs/qa/balance-probe.md`。
+
+## #11後の追加確認（今回の修正ブランチ）
+
+対象：main `9ea0a63` を基にした `fix/post-merge-followups`。詳細は[後続対応表](../release/follow-up-status.md)。
+
+- AC28・31：名前＋点が上位30名に1件だけあっても本人とは確定できないため、本人順位の推測と本人行の強調を撤去。サーバー側の本人識別は未解決。模擬通信・結果表示の試験で確認。
+- AC33・39・41：未登録設定での再送を止め、別ゲームの保存キューを再送・続行・終了・中断で変更しないことを確認。試作・提案値では開始も送信しない。公開キーはapikeyヘッダーのみ。実際の本番通信は未実施。
+- AC35：途中再開、前回の中断、保存データ不読、起動中、複数タブ、起動エラーの10文言を15言語へ追加。単体試験で全言語のキー・空欄・変数一致を確認。英語の再開画面はブラウザ試験にも確認条件を追加。
+
+ローカルのブラウザ試験は、指定版のダウンロード破損と、代替Chromium起動時の `socket() failed: Operation not permitted` により実行できなかった。56件はブラウザ起動前に失敗しており、ゲームの合格・不合格の証拠にはしない。PRの通常CIで再確認する。Safari実機・本番の状態はこの追記で合格へ変えない。
