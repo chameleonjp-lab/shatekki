@@ -22,14 +22,13 @@ import {
 } from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
-import { OFFICIAL_BUNDLE } from './app/bundle';
+import { OFFICIAL_BUNDLE, type ExpandedUiKit } from './app/bundle';
 import { createExpandedRun } from './core/expanded-run';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
 import { standRangeOf } from './ui/controls/stand';
-import { createShopkeeperQuestionPanel, questionContentFor, type QuestionPanelHandle } from './ui/shopkeeper-question';
-import { mountBoothMap, type BoothMapHandle } from './ui/booth-map';
-import { createExpansionTranslator } from './i18n/expansion-text';
+import type { QuestionPanelHandle } from './ui/shopkeeper-question';
+import type { BoothMapHandle } from './ui/booth-map';
 import { prizeName } from './i18n/content';
 import { controlsModel } from './ui/controls/model';
 import { setControlsLocale, t } from './ui/controls/strings';
@@ -143,13 +142,14 @@ function loadHeavyModules(): Promise<HeavyModules> {
   return heavyModules;
 }
 
-export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle = OFFICIAL_BUNDLE): AppHandle {
+export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle = OFFICIAL_BUNDLE, expandedUi: ExpandedUiKit | null = null): AppHandle {
   const doc = win.document;
   // One bundle for start, restore, physics, view and persistence (plan EG01/EG08).
   const catalog: RuntimeCatalog = bundle.catalog;
   const tuning: TuningConfig = bundle.tuning;
   const layout = bundle.layout;
   const expansion = bundle.expansion;
+  if (expansion && !expandedUi) throw new Error('the expanded bundle needs its UI pieces (loadBuildSetup)');
   const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
@@ -327,16 +327,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
 
   // Text for the expanded view and panel: UI keys through i18n, exp.* content keys through the content resolvers.
-  const expText = createExpansionTranslator(
-    () => i18n.locale,
-    (k, p) => (k in UI_KEYS ? i18n.t(k as UiKey, p) : k),
-  );
+  const uiText = (k: string, p?: Readonly<Record<string, string | number>>) => (k in UI_KEYS ? i18n.t(k as UiKey, p) : k);
+  const expText = expandedUi ? expandedUi.createExpansionTranslator(() => i18n.locale, uiText) : uiText;
 
   const updateExpandedUi = (snap: ControllerSnapshot) => {
     const ex = snap.view.expansion;
     const q = ex?.question ?? null;
     if (questionPanel) {
-      const content = q && q.answer === null && expansion ? questionContentFor(expansion, { shotId: q.shotId, questionId: q.questionId }, (k) => expText(k)) : null;
+      const content = q && q.answer === null && expansion && expandedUi ? expandedUi.questionContentFor(expansion, { shotId: q.shotId, questionId: q.questionId }, (k) => expText(k)) : null;
       if (content) questionPanel.show(content);
       else questionPanel.hide();
       questionPanel.setPaused(snap.view.paused);
@@ -400,8 +398,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     questionPanel = null;
     boothMap?.destroy();
     boothMap = null;
-    if (expansion) {
-      boothMap = mountBoothMap(ui, {
+    if (expansion && expandedUi) {
+      boothMap = expandedUi.mountBoothMap(ui, {
         layout,
         t: expText,
         onJump: (x) => {
@@ -410,7 +408,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
       });
       // Mounted after the controls so it sits above them; its backdrop takes the touches while shown.
-      questionPanel = createShopkeeperQuestionPanel(ui, {
+      questionPanel = expandedUi.createShopkeeperQuestionPanel(ui, {
         t: expText,
         onAnswer: (cmd) => {
           if (markStale() || !controller) return false;
