@@ -35,6 +35,8 @@ export interface ExpansionViewState {
 /** Display-only facts about A1-A10 for the view and the panel. */
 export interface RewardViewState {
   readonly bagInstanceId: PrizeInstanceId | null;
+  /** A1: the most the bag can give now (its value, capped by the room left). */
+  readonly bagOffer: number;
   /** A5: a fixed target ('fixed') after the stand is confirmed; a preview that follows the stand before that. */
   readonly target: { readonly geometry: RewardTargetGeometry; readonly offered: { readonly outer: number; readonly center: number }; readonly mode: 'preview' | 'fixed' } | null;
   readonly order: RewardOrderState | null;
@@ -88,7 +90,9 @@ export type UiCue =
       readonly cue:
         | 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus'
         // Expanded rules (D35-D37): question, answer and one coalesced effect cue per shot.
-        | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown';
+        | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown'
+        // Rewards (plan P1/P3): prizes won in one shot (count), and continuing from the last cork.
+        | 'takeTier' | 'lastShotContinue';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */

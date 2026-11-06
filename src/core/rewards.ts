@@ -51,8 +51,11 @@ export const rewardEnabled = (cfg: RewardConfig | null, id: RewardId): boolean =
 
 // ------------------------------------------------------------- A1: the bag
 
-/** Columns (1-based) of the front row in view from the start position (stand x = 0). */
-export const BAG_COLUMNS: readonly number[] = [5, 6, 7, 8];
+/**
+ * Columns (1-based) of the front row well inside the view from the start position (stand x = 0),
+ * also on a short 375 px portrait screen where columns 5 and 8 sit at the very edges.
+ */
+export const BAG_COLUMNS: readonly number[] = [6, 7];
 /** The front-center slot kept free for the bag when no candidate was drawn there. */
 export const BAG_RESERVED_SLOT = 'slot-r3-c06';
 
@@ -367,6 +370,7 @@ export function rewardViewState(state: RunState, cfg: RewardConfig | null, layou
   }
   return {
     bagInstanceId: r.bag && !r.bag.used ? r.bag.instanceId : null,
+    bagOffer: Math.max(0, Math.min(cfg.bonusBag, tuning.maxBonusAmmoTotal - state.bonusAmmoTotal)),
     target,
     order: r.order,
     orderShotsLeft,

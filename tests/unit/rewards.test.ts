@@ -186,11 +186,11 @@ describe('the plan example: 1 cork left, 9 already added; old +2 plate, A1 and A
     const flying = fire(full, base);
     const r = settleShot(full, flying, { collect: [bagOf(base), ...notBag(base)], requests: [deviceRequest(flying.inFlight!.shotId, 1, 'dev-ammo-1', 'ammo')] });
     expect(r.summary.effects!.find((e) => e.source.kind === 'device')).toMatchObject({ ammoDelta: 1, ammoRequested: 2 });
-    expect(r.summary.rewards!.map((o) => [o.id, o.offered, o.granted])).toEqual([
-      ['A1', 2, 0],
-      ['A6', 2, 0],
-      ['A7', 1, 0],
-    ]);
+    // A1 and A7 (and anything else this shot met, e.g. the 2-prize stamp) give 0: the plate took the room.
+    expect(r.summary.rewards!.find((o) => o.id === 'A1')).toMatchObject({ offered: 2, granted: 0 });
+    expect(r.summary.rewards!.find((o) => o.id === 'A7')).toMatchObject({ offered: 1, granted: 0 });
+    expect(r.summary.rewards!.every((o) => o.granted === 0)).toBe(true);
+    expect(r.summary.rewards!.map((o) => o.id)).toEqual([...r.summary.rewards!.map((o) => o.id)].sort((x, y) => Number(x.slice(1)) - Number(y.slice(1))));
     expect(r.state.ammo).toBe(1);
     expect(r.state.phase).toBe('position');
     expect(r.state.bonusAmmoTotal).toBe(10);

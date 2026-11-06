@@ -43,12 +43,12 @@ const sourceCases = [
   ['src/i18n/locales/ja.ts', {
     unit: ['tests/unit/controls-model.test.ts', 'tests/unit/expanded-i18n.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'], browser: true,
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/rewards.spec.ts', 'tests/e2e/screens.spec.ts'], browser: true,
   }],
   ['src/ui/controls/controls.css', {
     unit: ['tests/unit/controls-model.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts', 'tests/unit/stand-step.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts', 'tests/e2e/shot-smoke.spec.ts', 'tests/e2e/smoke.spec.ts'], browser: true,
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/rewards.spec.ts', 'tests/e2e/screens.spec.ts', 'tests/e2e/shot-smoke.spec.ts', 'tests/e2e/smoke.spec.ts'], browser: true,
   }],
   ['src/audio/engine.ts', {
     unit: ['tests/unit/audio.test.ts'], integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
@@ -67,7 +67,7 @@ test('mixed safe changes union their selections without duplicates and retain do
     scope: 'targeted',
     unit: ['tests/unit/audio.test.ts', 'tests/unit/controls-model.test.ts', 'tests/unit/expanded-i18n.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'],
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/rewards.spec.ts', 'tests/e2e/screens.spec.ts'],
     node: true, build: true, browser: true,
   });
 });

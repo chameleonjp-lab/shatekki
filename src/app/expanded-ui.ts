@@ -9,3 +9,5 @@ export { createShopkeeperQuestionPanel, questionContentFor } from '../ui/shopkee
 export { mountBoothMap } from '../ui/booth-map';
 export { expandedLine } from '../i18n/expanded-content';
 export { mountEffectResults, effectResultsModel } from '../ui/effect-results';
+export { mountRewardPanel, momentCue, shotMoment, rewardLine } from '../ui/reward-panel';
+export { bestShotOf } from '../core/rewards';

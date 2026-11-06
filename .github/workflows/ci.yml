@@ -98,6 +98,14 @@ jobs:
           path: dist-expanded/
           if-no-files-found: error
           retention-days: 7
+      # Internal build with the ammo rewards (rules-v2-proposed-r003) for tests/e2e/rewards.spec.ts.
+      - run: npm run build:rewards
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-rewards-dist
+          path: dist-rewards/
+          if-no-files-found: error
+          retention-days: 7
 
   browser:
     needs: [plan, build]
@@ -134,6 +142,10 @@ jobs:
         with:
           name: internal-expanded-dist
           path: dist-expanded/
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-rewards-dist
+          path: dist-rewards/
       - name: Check the browser version and the fonts for Japanese, Chinese and Thai text
         timeout-minutes: 2
         run: |

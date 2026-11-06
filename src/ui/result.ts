@@ -5,7 +5,7 @@
  * The first portrait screenful holds the total and the retry button; prizes,
  * sets, chain, breakdown and the top 30 follow and scroll.
  */
-import type { DeferredTransform, FinalResult, PlannedEffect } from '../contracts';
+import type { DeferredTransform, FinalResult, PlannedEffect, RewardOutcome } from '../contracts';
 import { formatInteger, translate, type I18n, type Locale, type UiKey } from '../i18n';
 import { prizeName } from '../i18n/content';
 import { setDisplayName, type SetBookExpandedText } from './set-book';
@@ -28,6 +28,8 @@ export interface LastShotInput {
   readonly effects: readonly PlannedEffect[];
   readonly deferredTransforms: readonly DeferredTransform[];
   readonly ammoAfter: number;
+  /** Rules versions with rewards: what A1-A10 really gave in that shot. */
+  readonly rewards?: readonly RewardOutcome[];
 }
 
 /** Lines of the last shot in the current locale (the expanded build passes effectResultsModel with no line limit). */
@@ -41,6 +43,10 @@ export interface ResultTextOptions {
   readonly expandedText?: SetBookExpandedText;
   /** Without it (public build) the last-shot section is not shown. */
   readonly describeEffects?: DescribeEffects;
+  /** Rules versions with rewards: one line per reward of the last shot. */
+  readonly describeReward?: (o: RewardOutcome) => { readonly sourceLabel: string; readonly name: string; readonly text: string; readonly note: string | null; readonly applied: boolean };
+  /** E1: the best shot of the run, from the confirmed ledger and collection (rewards versions only). */
+  readonly bestShot?: (result: FinalResult) => { readonly shotNumber: number; readonly prizes: number; readonly points: number; readonly sets: number } | null;
 }
 
 export interface LastShotView {
@@ -83,6 +89,8 @@ export interface ResultViewModel {
   readonly sets: { readonly title: string; readonly items: ReadonlyArray<{ setId: string; name: string }>; readonly emptyText: string };
   /** Expanded rules only; null for an abandoned run or without effect text. */
   readonly lastShot: LastShotView | null;
+  /** E1 (rewards versions only). */
+  readonly bestShot: { readonly title: string; readonly text: string } | null;
   readonly chain: { readonly title: string; readonly value: number; readonly text: string };
   readonly shotsText: string;
   readonly breakdown: {
@@ -123,17 +131,27 @@ const NOT_ELIGIBLE_KEYS: Readonly<Record<string, UiKey>> = {
 /** Did an ammo grant of this shot ask for more than the caps allowed? */
 const hitAmmoCap = (e: PlannedEffect): boolean => e.reason === 'noAmmoRoom' || (e.ammoRequested !== undefined && e.ammoDelta < e.ammoRequested);
 
-function lastShotView(input: ResultInput, locale: Locale, describe: DescribeEffects | undefined): LastShotView | null {
+function lastShotView(input: ResultInput, locale: Locale, options: ResultTextOptions): LastShotView | null {
   const last = input.lastShot;
+  const describe = options.describeEffects;
   if (!last || !describe || input.result.status !== 'completed') return null;
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
   const m = describe({ effects: last.effects, deferredTransforms: last.deferredTransforms });
+  const rewards = last.rewards ?? [];
+  const rewardLines = options.describeReward ? rewards.map(options.describeReward) : [];
   const endReasons: string[] = [];
   if (last.ammoAfter === 0) {
-    if (last.effects.some(hitAmmoCap)) endReasons.push(t('result.end.capped'));
+    if (last.effects.some(hitAmmoCap) || rewards.some((r) => r.granted < r.offered)) endReasons.push(t('result.end.capped'));
     endReasons.push(t('result.end.noAmmo'));
   }
-  return { title: t('result.lastShot.title', { n: last.shotNumber }), lines: m.lines, deferred: m.deferred, emptyText: t('result.lastShot.none'), endReasons };
+  return { title: t('result.lastShot.title', { n: last.shotNumber }), lines: [...m.lines, ...rewardLines], deferred: m.deferred, emptyText: t('result.lastShot.none'), endReasons };
+}
+
+function bestShotView(input: ResultInput, locale: Locale, options: ResultTextOptions): ResultViewModel['bestShot'] {
+  if (!options.bestShot || input.result.status !== 'completed') return null;
+  const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
+  const b = options.bestShot(input.result);
+  return { title: t('result.best.title'), text: b ? t('result.best.line', { shot: b.shotNumber, prizes: b.prizes, sets: b.sets, points: b.points }) : t('result.best.none') };
 }
 
 export function resultViewModel(input: ResultInput, locale: Locale, options: ResultTextOptions = {}): ResultViewModel {
@@ -260,7 +278,8 @@ export function resultViewModel(input: ResultInput, locale: Locale, options: Res
       items: result.completedSets.map((s) => ({ setId: String(s), name: setDisplayName(locale, String(s), options.expandedText) || t('setbook.undiscovered') })),
       emptyText: t('result.sets.none'),
     },
-    lastShot: lastShotView(input, locale, options.describeEffects),
+    lastShot: lastShotView(input, locale, options),
+    bestShot: bestShotView(input, locale, options),
     chain: { title: t('result.maxChain'), value: result.maxChain, text: t('unit.pieces', { n: result.maxChain }) },
     shotsText: t('result.shots', { n: result.shotsFired }),
     breakdown: {
@@ -353,6 +372,9 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   const lastDeferred = el('p', { class: 'note' });
   const lastReasons = el('div', { class: 'last-shot-reasons' });
   const lastSec = el('section', { class: 'sec last-shot', attrs: { 'data-testid': 'result-last-shot' } }, [lastTitle, lastList, lastEmpty, lastDeferred, lastReasons]);
+  const bestTitle = h('h3');
+  const bestText = el('p', { class: 'note' });
+  const bestSec = el('section', { class: 'sec best-shot', attrs: { 'data-testid': 'result-best-shot' } }, [bestTitle, bestText]);
   // Stable hooks for browser automation (never used by game logic).
   heroValue.dataset.testid = 'result-score';
   retry.dataset.testid = 'result-retry';
@@ -376,6 +398,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   ]);
   const col = el('main', { class: 'scr-col' }, [
     title, notice, heroSec, actionsSec,
+    bestSec,
     lastSec,
     el('section', { class: 'sec' }, [prizesTitle, prizesBody]),
     el('section', { class: 'sec' }, [setsTitle, setsBody, ...(deps.onOpenSetBook ? [bookBtn] : [])]),
@@ -422,6 +445,9 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     setText(share, vm.actions.share.label);
     setText(prizesTitle, `${vm.prizes.title} (${vm.prizes.total})`);
     replaceChildren(prizesBody, vm.prizes.items.length === 0 ? [el('span', { class: 'note', text: vm.prizes.emptyText })] : vm.prizes.items.map((i) => chip(i.name, i.count)));
+    setHidden(bestSec, vm.bestShot === null);
+    setText(bestTitle, vm.bestShot?.title ?? '');
+    setText(bestText, vm.bestShot?.text ?? '');
     const ls = vm.lastShot;
     setHidden(lastSec, ls === null);
     setText(lastTitle, ls?.title ?? '');

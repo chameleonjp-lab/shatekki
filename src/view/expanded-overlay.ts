@@ -150,6 +150,7 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
       put(model.badges, '-135%');
       put(model.labels, '30%');
       put(model.corks, '-160%');
+      put(model.rewardLabels, '-150%');
       if (model.aim) put([model.aim], '-170%');
       for (let i = n; i < pool.length; i++) {
         if (shown[i] !== '') {

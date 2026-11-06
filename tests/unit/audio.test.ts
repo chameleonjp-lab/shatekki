@@ -275,11 +275,18 @@ describe('mapping covers every event and cue', () => {
     expect(soundsForSimEvent(impact({ ...base, activated: true }))).toEqual([]);
   });
 
+  it('prizes won in one shot (plan P1): 1 "kotón", 2 and 3 rising xylophone, 4 or more a short taiko', () => {
+    const ids = [1, 2, 3, 4, 7].map((n) => soundsForUiCue({ type: 'ui', cue: 'takeTier', count: n } as never).map((r) => r.id));
+    expect(ids).toEqual([['take.1'], ['take.2'], ['take.3'], ['take.taiko'], ['take.taiko']]);
+    expect(soundsForUiCue({ type: 'ui', cue: 'lastShotContinue' } as never).map((r) => r.id)).toEqual(['lastShot.hayashi']);
+  });
+
   it('every defined sound is reachable from some event or cue, and has voices', () => {
     const reachable = new Set<SoundId>();
     for (const id of Object.values(UI_CUE_SOUND)) reachable.add(id);
     for (const t of ['perfect', 'good', 'normal', 'weak'] as const) for (const r of soundsForUiCue({ type: 'ui', cue: 'loadStop', tier: t } as never)) reachable.add(r.id);
     for (const r of soundsForUiCue({ type: 'ui', cue: 'collect', count: 3 } as never)) reachable.add(r.id);
+    for (const n of [1, 2, 3, 4]) for (const r of soundsForUiCue({ type: 'ui', cue: 'takeTier', count: n } as never)) reachable.add(r.id);
     const mats = ['wood', 'cloth', 'paper', 'metal', 'plastic', 'glass', 'ceramic', 'rubber'] as const;
     for (const m of mats) for (const r of soundsForSimEvent(impact({ kind: 'prize', instanceId: mintId.instance(1), typeId: asPrizeTypeId('P001'), material: m }, { reflectionIndex: 1 }))) reachable.add(r.id);
     for (const r of soundsForSimEvent(impact({ kind: 'surface', surfaceId: 's', material: 'wood' }, { reflectionIndex: 2 }))) reachable.add(r.id);

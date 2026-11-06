@@ -15,6 +15,7 @@ import type { SceneGraph } from './scene';
 import { angleReadout, computeHintLabels, signedDeg, TrajectoryRecorder, type AngleReadout, type HintLabel, type HintTone } from './gameplay-hints';
 import { createHint3D, CORK_COLORS, type Hint3D } from './hint-3d';
 import { createSeriesOutline, seriesLegend, type SeriesLegend, type SeriesOutline } from './series-outline';
+import { createRewardProps } from './reward-props';
 
 export type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -60,6 +61,8 @@ export interface ExpandedViewModel {
   readonly corks: readonly ScreenLabel[];
   readonly aim: ScreenLabel | null;
   readonly angle: { readonly readout: AngleReadout; readonly text: string } | null;
+  /** Rewards (r002+): "+2" on the bag, the ring values on the target. */
+  readonly rewardLabels: readonly ScreenLabel[];
   /** Counts for tests and diagnostics. */
   readonly stats: { readonly outlined: number; readonly dashes: number; readonly trailSegments: number; readonly rings: number };
 }
@@ -89,6 +92,8 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   const hint3d: Hint3D = createHint3D();
   graph.scene.add(hint3d.group);
   const recorder = new TrajectoryRecorder();
+  const rewardProps = createRewardProps();
+  graph.scene.add(rewardProps.group);
   /** First kind each individual was seen as: the mount keeps running that kind's motion after a transform. */
   const firstKind = new Map<string, PrizeTypeId>();
   let last: ExpandedViewModel | null = null;
@@ -194,8 +199,22 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       }
     }
 
+    // ---- rewards: the bag on its prize and the last-shot target (display only)
+    const placed = rewardProps.update(ex.rewards, frame.prizes);
+    const rewardLabels: ScreenLabel[] = [];
+    if (placed.bag && ex.rewards) {
+      const s = projectToScreen(camera, placed.bag, size.width, size.height);
+      if (s) rewardLabels.push({ id: 'reward:bag', x: s.x, y: s.y, text: ui('reward.bag.label', { n: ex.rewards.bagOffer }), tone: 'badge', color: '#d9a441' });
+    }
+    if (placed.target && ex.rewards?.target) {
+      const s = projectToScreen(camera, placed.target, size.width, size.height);
+      const o = ex.rewards.target.offered;
+      if (s) rewardLabels.push({ id: `reward:target:${placed.targetMode}`, x: s.x, y: s.y, text: ui('reward.target.label', { center: o.center, outer: o.outer }), tone: 'badge', color: '#c8372d' });
+    }
+
     hint3d.faceCamera(camera);
     return {
+      rewardLabels,
       outline: legend,
       assortment,
       hint,
@@ -223,6 +242,8 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
     },
     lastModel: () => last,
     dispose() {
+      graph.scene.remove(rewardProps.group);
+      rewardProps.dispose();
       outline.dispose();
       graph.scene.remove(hint3d.group);
       hint3d.dispose();

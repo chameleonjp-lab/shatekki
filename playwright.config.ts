@@ -33,6 +33,14 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    // Internal build with the ammo rewards (VITE_SHATEKKI_BUNDLE=expanded-full, rules-v2-proposed-r003),
+    // only for tests/e2e/rewards*.spec.ts. Never published.
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:rewards' : 'npm run build:rewards && npm run preview:rewards',
+      url: 'http://127.0.0.1:4175',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
   ],
   projects: [
     {
