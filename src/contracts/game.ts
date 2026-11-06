@@ -276,7 +276,9 @@ export type GameCommand =
   | { readonly type: 'ABANDON' }
   | { readonly type: 'SKIP_PRESENTATION' }
   /** Expanded rules only; rejected by rules-v1. */
-  | AnswerShopkeeperCommand;
+  | AnswerShopkeeperCommand
+  /** A9: take or decline the shopkeeper's order, before the first shot only. */
+  | { readonly type: 'ORDER'; readonly accept: boolean };
 
 export type GameCommandType = GameCommand['type'];
 export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
@@ -290,6 +292,7 @@ export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
   'ABANDON',
   'SKIP_PRESENTATION',
   'ANSWER_SHOPKEEPER',
+  'ORDER',
 ];
 
 export type CommandParseResult =
@@ -341,6 +344,11 @@ export function parseCommand(input: unknown): CommandParseResult {
       if (!isQuestionId(o.questionId)) return { ok: false, reason: 'invalid questionId' };
       if (o.choice !== 'A' && o.choice !== 'B') return { ok: false, reason: 'invalid choice' };
       return { ok: true, command: { type, shotId: o.shotId as ShotId, questionId: o.questionId, choice: o.choice as QuestionChoice } };
+    }
+    case 'ORDER': {
+      if (!hasOnlyKeys(o, ['type', 'accept'])) return { ok: false, reason: 'unexpected fields' };
+      if (typeof o.accept !== 'boolean') return { ok: false, reason: 'accept must be a boolean' };
+      return { ok: true, command: { type, accept: o.accept } };
     }
     case 'CONFIRM_POSITION':
     case 'STOP_LOAD':

@@ -12,10 +12,13 @@ import { effectiveAim } from '../core/aim';
 import { loadingBarValue, loadPeriodMultiplierFor } from '../core/loading';
 import { resolveShot } from '../core/settlement';
 import { createTransformChooser } from '../core/gimmicks';
+import { reduceWithRewards } from '../core/rewards';
 
 export const CORE_RULES: RulesApi = {
   createRun: (config, catalog) => createRun(config, catalog),
-  reduceGame: (state, command, ctx) => reduceGame(state, command, { tuning: ctx.tuning, layout: ctx.layout }),
+  // Rewards (r002+) wrap the core reducer: A9 accept/decline, A5 placement at the stand and its use at FIRE.
+  reduceGame: (state, command, ctx) =>
+    reduceWithRewards(state, command, { tuning: ctx.tuning, layout: ctx.layout, expansion: ctx.expansion }, (s, c) => reduceGame(s, c, { tuning: ctx.tuning, layout: ctx.layout })),
   tickRun: (state, dt, tuning) => tickRun(state, dt, tuning),
   effectiveAim: (state, tuning) => effectiveAim(state, tuning),
   loadingBarValue: (state, tuning) => loadingBarValue(state.clocks.loadingSec, tuning, loadPeriodMultiplierFor(state)),

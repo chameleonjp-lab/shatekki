@@ -16,12 +16,17 @@ import type { RuntimeCatalog, ValueStatus } from './catalog';
 import type { BoothLayout, DeviceKind, ShopkeeperPart } from './layout';
 import type { BulletType } from './events';
 import type { PrizeInstanceState, TuningConfig } from './game';
+import type { RewardConfig, RewardRunState } from './rewards';
 
 // ------------------------------------------------------------------ bundle
 
 /** Selection name of a rule bundle. Not a save/rules version: saves use catalog.rulesVersion. */
-export type GameplayBundleKey = 'official-v1' | 'expanded-proposed';
-export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed'];
+export type GameplayBundleKey = 'official-v1' | 'expanded-proposed' | 'expanded-trial' | 'expanded-full';
+/**
+ * expanded-proposed = rules-v2-proposed-r001 (kept for comparison), expanded-trial = r002 (first
+ * playable rewards: A1, A5), expanded-full = r003 (all ten). Internal builds only.
+ */
+export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed', 'expanded-trial', 'expanded-full'];
 /** The bundle every public entry point uses unless a build-time switch for internal testing says otherwise. */
 export const DEFAULT_GAMEPLAY_BUNDLE_KEY: GameplayBundleKey = 'official-v1';
 
@@ -196,6 +201,8 @@ export interface ExpansionProfile {
   readonly pairSetBonusScore: number;
   readonly tierTargets: Readonly<Record<'easy' | 'normal' | 'hard', number>>;
   readonly limits: ExpansionLimits;
+  /** Post-#19 ammo rewards (A1-A10). Absent = none (r001). */
+  readonly rewards?: RewardConfig;
 }
 
 /** The checked definitions added on top of the 100 prizes. Built by src/catalog/expanded-config.ts. */
@@ -263,6 +270,8 @@ export interface ExpansionRunState {
   /** At most one per instance; a newer valid request overwrites it; removed when collected. */
   readonly deferredTransforms: readonly DeferredTransform[];
   readonly rng: ExpansionRngState;
+  /** Present only when the rules version has rewards (r002+). */
+  readonly rewards?: RewardRunState;
 }
 
 // --------------------------------------------- flight-end barrier and plan

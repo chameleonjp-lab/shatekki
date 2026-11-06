@@ -13,6 +13,7 @@ import type { DeviceKind, ShopkeeperPart, SurfaceMaterial } from './layout';
 import type { PrizeMaterial } from './catalog';
 import type { FirstHitKey, PrizeOutcome } from './sim';
 import type { AppliedTransform, DeferredTransform, PlannedEffect } from './expansion';
+import type { RewardOutcome } from './rewards';
 
 export const EVENTS_VERSION = 1;
 
@@ -264,6 +265,8 @@ export interface ShotSummary {
   readonly appliedTransforms?: readonly AppliedTransform[];
   /** Transforms postponed because the new shape would overlap (shown as "will change later"). */
   readonly deferredTransforms?: readonly DeferredTransform[];
+  /** Rules versions with rewards: what A1-A10 did in this shot, in A1 → A10 order (granted = real amount). */
+  readonly rewards?: readonly RewardOutcome[];
 }
 
 /**

@@ -10,6 +10,7 @@ import './app.css';
 import { environmentPauseReasons, type EnvironmentSnapshot } from './environment';
 import {
   catalogValueStatus,
+  isExpandedRunState,
   mintId,
   type FinalResult,
   type GameplayBundle,
@@ -49,6 +50,8 @@ import { createI18n, LANGUAGE_STORAGE_KEY, type I18n, type UiKey } from './i18n'
 import { JA as UI_KEYS } from './i18n/locales/ja';
 import { mountHome } from './ui/home';
 import { mountResult, type LastShotInput, type ResultTextOptions } from './ui/result';
+import { setDisplayName } from './ui/set-book';
+import { rewardDevicesFor } from './core/rewards';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
 import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
@@ -169,8 +172,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // The expanded prototype is never ranked (prototype values, internal builds only).
   const rankingAvailable = RANKING_CONFIG.gameSlug !== null && expansion === null;
   let restore: RestoreResult = runStore.load();
+  // Rewards versions (r002+) keep a finished run until it is closed, so a reload opens the same result (plan T2).
+  const keepsEndedRun = Boolean(expansion?.profile.rewards);
+  const keptEnded = keepsEndedRun && restore.kind === 'ended' ? restore.state : null;
   // An abandoned or finished run is shown once and never resumed or ranked from here (decision 27).
-  if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
+  if (restore.kind === 'abandoned' || (restore.kind === 'ended' && !keptEnded)) runStore.clear();
 
   // The settings store is the single saved source of the language (saved → browser → English).
   const languageStorage: KeyValueStorage = {
@@ -182,7 +188,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
   const i18n: I18n = createI18n(languageStorage, win.navigator.languages ?? [win.navigator.language]);
   setControlsLocale(i18n.locale);
-  let noticeKey = restoreNoticeKey(restore);
+  let noticeKey = keptEnded ? null : restoreNoticeKey(restore);
   const bootNotice = noticeKey ? i18n.t(noticeKey) : '';
 
   // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
@@ -261,6 +267,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let questionPanel: QuestionPanelHandle | null = null;
   let boothMap: BoothMapHandle | null = null;
   let effectResults: ReturnType<ExpandedUiKit['mountEffectResults']> | null = null;
+  // Rewards (r002+): order card, progress strip and the per-shot reward card.
+  let rewardPanel: ReturnType<ExpandedUiKit['mountRewardPanel']> | null = null;
+  let firedWithLastCork = false;
   let mapUpdatedAt = -Infinity;
   let shownQuestion = '';
   let screenHandle: ScreenHandle<never> | null = null;
@@ -323,10 +332,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   win.addEventListener('online', retryRanking);
 
   // ------------------------------------------------------------ game
+  const rewardCfg = expansion?.profile.rewards ?? null;
   const onChange = (snap: ControllerSnapshot) => {
     panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
     if (expansion) updateExpandedUi(snap);
+    if (rewardPanel && rewardCfg) rewardPanel.update(snap.view.expansion?.rewards, { shots: rewardCfg.order.shots, amount: rewardCfg.order.amount });
   };
 
   // Text for the expanded view and panel: UI keys through i18n, exp.* content keys through the content resolvers.
@@ -377,6 +388,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       case 'CONFIRM_POSITION':
         return cue('loadStart');
       case 'STOP_LOAD':
+        // P5 (rewards versions): the latch sounds at the same moment as the perfect-load sound.
+        if (rewardCfg && s?.load?.tier === 'perfect') cue('critLatch');
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
       case 'FIRE':
         return cue('fire');
@@ -410,6 +423,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     boothMap = null;
     effectResults?.destroy();
     effectResults = null;
+    rewardPanel?.destroy();
+    rewardPanel = null;
     if (expansion && expandedUi) {
       boothMap = expandedUi.mountBoothMap(ui, {
         layout,
@@ -433,6 +448,18 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         t: expText,
         line: (key) => expandedUi.expandedLine(i18n.locale, key),
       });
+      if (rewardCfg) {
+        rewardPanel = expandedUi.mountRewardPanel(ui, {
+          t: expText,
+          prizeName: (typeId) => prizeName(i18n.locale, typeId),
+          onOrder: (accept) => {
+            if (markStale() || !controller) return false;
+            const ok = controller.dispatch({ type: 'ORDER', accept });
+            if (ok) cue(accept ? 'confirm' : 'cancel');
+            return ok;
+          },
+        });
+      }
       mapUpdatedAt = -Infinity;
     }
     if (controller) onChange(controller.snapshot());
@@ -441,7 +468,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const ensureEngine = async (): Promise<ShotWorld> => {
     if (world) return world;
     const { sim, view } = await loadHeavyModules();
-    const w = await sim.createShotWorld(layout, catalog, tuning);
+    const w = await sim.createShotWorld(layout, catalog, tuning, rewardCfg ? { rewardDevices: rewardDevicesFor(rewardCfg) } : {});
     world = w;
     try {
       renderer = view.createThreeRenderer(canvas, {
@@ -474,8 +501,37 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   /** The settled summary of the shot that ended the run (expanded rules show it on the result). */
   const lastShotOf = (summary: ShotSummary | null): LastShotInput | null =>
     expansion && summary
-      ? { shotNumber: summary.shotNumber, effects: summary.effects ?? [], deferredTransforms: summary.deferredTransforms ?? [], ammoAfter: summary.ammoAfter }
+      ? { shotNumber: summary.shotNumber, effects: summary.effects ?? [], deferredTransforms: summary.deferredTransforms ?? [], ammoAfter: summary.ammoAfter, ...(summary.rewards ? { rewards: summary.rewards } : {}) }
       : null;
+  /** Rewards versions keep the ended run so a reload opens the same result (plan T2); this records what the result showed. */
+  const resultMetaKey = `shatekki.resultView.${catalog.rulesVersion}`;
+  const saveResultMeta = (runId: string, selfBestBefore: number | null, newBest: boolean) => {
+    try {
+      storage.setItem(resultMetaKey, JSON.stringify({ runId, selfBestBefore, newBest }));
+    } catch {
+      /* the result still shows; a reload then reads the stored best only */
+    }
+  };
+  const readResultMeta = (runId: string): { selfBestBefore: number | null; newBest: boolean } | null => {
+    try {
+      const raw = storage.getItem(resultMetaKey);
+      const m = raw ? (JSON.parse(raw) as { runId?: unknown; selfBestBefore?: unknown; newBest?: unknown }) : null;
+      if (!m || m.runId !== runId) return null;
+      return { selfBestBefore: typeof m.selfBestBefore === 'number' ? m.selfBestBefore : null, newBest: m.newBest === true };
+    } catch {
+      return null;
+    }
+  };
+  /** Leaving a kept result (new run, or home on purpose) closes it for good. */
+  const closeKeptResult = () => {
+    if (!rewardCfg) return;
+    runStore.clear();
+    try {
+      storage.removeItem(resultMetaKey);
+    } catch {
+      /* nothing to close */
+    }
+  };
 
   const onRunEnded = (state: RunState, summary: ShotSummary | null) => {
     const result = finalResult(state);
@@ -484,7 +540,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     const { newBest } = profile.recordRunEnd(result);
     cue('runEnd');
     const fireSaveFailed = runStore.status().fireSaveFailed;
-    runStore.clear();
+    if (rewardCfg) {
+      // Save what the result shows before the screen changes, then keep the ended run (plan T2).
+      saveResultMeta(state.runId, selfBestBefore, newBest);
+      runStore.saveStable(state);
+    } else runStore.clear();
     // A run whose pre-shot save failed cannot prove a lost shot on reload: never submit it (persistence-design §5).
     if (rankingAvailable && !fireSaveFailed) void ranking.submit(result).catch(() => undefined);
     // Let the last settle presentation play briefly before the result screen.
@@ -511,16 +571,37 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
           effectResults?.hide();
+          rewardPanel?.hideCard();
+          firedWithLastCork = s.ammo === 0;
           runStore.saveAfterFire(s);
           markStale();
         },
         onCommandApplied: (cmd, s) => {
-          if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
+          // ORDER (A9): the answer is part of the run, so a reload before the first shot keeps it.
+          if (cmd.type === 'STOP_LOAD' || cmd.type === 'ORDER') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
           effectResults?.show({ effects: summary.effects, deferredTransforms: summary.deferredTransforms });
           // One coalesced cue for what the post-flight effects did (expanded rules only).
           const effectCue = effectCueFor(summary.effects);
+          if (rewardCfg && expandedUi) {
+            // Rewards versions (P1-P3): one big moment per shot; everything else stays on the card.
+            const fresh = summary.newlyCompletedSets.length > 0 ? profile.discoverSets(summary.newlyCompletedSets) : [];
+            const input = {
+              collected: summary.chainCount,
+              completedSets: summary.newlyCompletedSets,
+              freshSets: fresh,
+              firedWithLastCork,
+              ammoAfter: summary.ammoAfter,
+              runEnded: summary.runEnded,
+              rewards: summary.rewards ?? [],
+            };
+            const moment = expandedUi.momentCue(expandedUi.shotMoment(input), summary.chainCount);
+            if (moment) cue(moment.cue, moment.count !== undefined ? { count: moment.count } : {});
+            else if (effectCue) cue(effectCue);
+            if (summary.ledger.nominalPenalty > 0) cue('penalty');
+            rewardPanel?.showShot({ ...input, setName: (id) => setDisplayName(i18n.locale, String(id), (k) => expText(k)) || String(id) });
+          } else {
           if (effectCue) cue(effectCue);
           if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
           if (summary.newlyCompletedSets.length > 0) {
@@ -530,6 +611,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           }
           if (summary.ledger.nominalPenalty > 0) cue('penalty');
           if (summary.bonusAmmoGranted > 0) cue('ammoBonus');
+          }
           if (s.phase === 'ended') onRunEnded(s, summary);
           else runStore.saveStable(s);
         },
@@ -580,7 +662,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // ------------------------------------------------------------ screens
   const openSetBook = () => {
     bookHandle?.dispose();
-    const last = controller?.current;
+    const last = controller?.current ?? shownEnded;
     bookHandle = mountSetBook(
       overlay,
       {
@@ -635,20 +717,39 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       ? {
           expandedText: (k: string) => expText(k),
           describeEffects: (i) => expandedUi.effectResultsModel(i, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity }),
+          ...(rewardCfg
+            ? {
+                describeReward: (o) => {
+                  const l = expandedUi.rewardLine(o, expText);
+                  return { sourceLabel: expText('reward.card.title'), name: l.name, text: l.text, note: null, applied: l.granted > 0 };
+                },
+                bestShot: (r) => expandedUi.bestShotOf(r),
+              }
+            : {}),
         }
       : undefined;
 
-  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null) => {
+  let shownEnded: RunState | null = null;
+  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null, readOnly = false) => {
     clearScreen();
     setScreen('result');
-    cue('resultShow');
-    if (newBest) cue('newBest');
+    // A result reopened after a reload is read only: no sounds or celebration again (plan T2).
+    if (!readOnly) {
+      cue('resultShow');
+      if (newBest) cue('newBest');
+    }
     const handle = mountResult(
       screens,
       {
         i18n,
-        onRetry: () => void startRun({ name: runName }),
-        onHome: showHome,
+        onRetry: () => {
+          closeKeptResult();
+          void startRun({ name: runName });
+        },
+        onHome: () => {
+          closeKeptResult();
+          showHome();
+        },
         onRetrySubmit: () => void ranking.retryPending({ includePermanent: false }).catch(() => undefined),
         onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
         onOpenSetBook: openSetBook,
@@ -658,7 +759,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     );
     screenHandle = handle;
     void loadHeavyModules().then(({ view }) => {
-      if (screen !== 'result') return;
+      if (screen !== 'result' || readOnly) return;
       const reducedMotion = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
       const host = screens.querySelector<HTMLElement>('.scr-result') ?? screens;
       stopCelebration = view.playResultCelebration(host, { newBest, sets: result.completedSets.length, reducedMotion });
@@ -694,7 +795,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   });
 
   if (restore.kind === 'resume') setScreen('resume');
-  else showHome();
+  else if (keptEnded) {
+    // Read only: no points, refills, stamps, sounds of the shot or self-best registration again.
+    const meta = readResultMeta(keptEnded.runId);
+    const kept = isExpandedRunState(keptEnded) ? keptEnded.expansion.rewards?.lastShot ?? null : null;
+    const lastShot: LastShotInput | null = kept ? { shotNumber: kept.shotNumber, effects: kept.effects, deferredTransforms: kept.deferredTransforms, ammoAfter: kept.ammoAfter, rewards: kept.rewards } : null;
+    shownEnded = keptEnded;
+    showResult(finalResult(keptEnded), meta ? meta.selfBestBefore : profile.load().bestScore, meta?.newBest ?? false, lastShot, true);
+  } else showHome();
 
   // Begin downloading the heavy chunks in the background; a failure surfaces on start.
   void loadHeavyModules().catch(() => {

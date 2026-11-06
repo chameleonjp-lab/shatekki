@@ -15,6 +15,7 @@ import type { AimPreview } from './aim';
 import type { DeviceKind, ShopkeeperPart } from './layout';
 import type { BulletType, PrizeTransformedEvent, SimulationFrame } from './events';
 import type { PrizeInstanceState, ShelfState, ShotRequest } from './game';
+import type { RewardContacts, RewardTargetGeometry } from './rewards';
 
 /** One cork's touch on a prize, kept for trick classification. */
 export interface PrizeHitRecord {
@@ -64,6 +65,8 @@ export interface ShotRecord {
   readonly appliedTransforms?: readonly AppliedTransform[];
   /** Intents whose candidates all overlapped; kept for the next post-flight point. */
   readonly deferredTransforms?: readonly DeferredTransform[];
+  /** Rules versions with rewards: what the cork touched for A2-A5. */
+  readonly rewardContacts?: RewardContacts;
 }
 
 export interface SimulationStep {
@@ -90,6 +93,10 @@ export interface ShotContext {
     readonly modifiers: ShotModifiers;
     /** Cells not used yet this run; contacts with other cells are plain reflections. */
     readonly usableCells: readonly BackgroundCellId[];
+    /** A5: the last-shot target placed for this shot (a solid disc for this shot only). */
+    readonly rewardTarget?: RewardTargetGeometry | null;
+    /** True when the rules version has rewards: the record then carries rewardContacts. */
+    readonly rewards?: boolean;
   };
 }
 

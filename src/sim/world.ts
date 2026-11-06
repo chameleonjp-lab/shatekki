@@ -49,6 +49,8 @@ import type {
   ShotContext,
   ShotId,
   ShotRecord,
+  RewardTargetGeometry,
+  RewardDeviceLayout,
   ShotRequest,
   ShotStage,
   ShotModifiers,
@@ -79,7 +81,7 @@ import {
 } from './collisions';
 import { mountBasePose, mountedPose } from './motion';
 import { createPrizeBody } from './prize';
-import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, type Projectile, type ProjectileExpanded } from './shot';
+import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, splitChildMarks, type Projectile, type ProjectileExpanded } from './shot';
 import { planTransforms } from './transform-plan';
 
 let rapierReady: Promise<void> | null = null;
@@ -93,7 +95,12 @@ type StaticTarget =
   | { readonly t: 'device'; readonly deviceId: ReturnType<typeof mintId.device>; readonly kind: DeviceKind }
   | { readonly t: 'shopkeeper'; readonly part: ShopkeeperPart }
   | { readonly t: 'hidden'; readonly targetId: string }
-  | { readonly t: 'cell'; readonly cellId: BackgroundCellId };
+  | { readonly t: 'cell'; readonly cellId: BackgroundCellId }
+  /** A5: the last-shot target, a solid disc that exists for one shot only. */
+  | { readonly t: 'rewardTarget' }
+  /** A2 / A4 devices (r003). */
+  | { readonly t: 'rewardChime' }
+  | { readonly t: 'rewardPiggy' };
 type Target = StaticTarget | { readonly t: 'prize'; readonly id: PrizeInstanceId };
 
 const SURFACE_FRICTION: Readonly<Record<SurfaceMaterial, number>> = { wood: 0.5, cloth: 0.8, paper: 0.6, metal: 0.35, plastic: 0.45 };
@@ -153,6 +160,12 @@ interface ActiveShot {
   barrierId: BarrierId | null;
   applied: AppliedTransform[];
   deferred: DeferredTransform[];
+  /** A5: best ring touched by any cork of this shot. */
+  targetHit: 'center' | 'outer' | null;
+  /** A2-A4 observations of this shot. */
+  chimeAfterReflection: boolean;
+  piggyDeposit: boolean;
+  seesaw: PrizeInstanceId[];
 }
 
 interface PendingRequest {
@@ -164,9 +177,17 @@ interface PendingRequest {
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
 
+/** Impact surface id of the A5 target (the view and sounds treat it as a paper surface). */
+export const REWARD_TARGET_SURFACE_ID = 'reward-target';
+export const REWARD_CHIME_SURFACE_ID = 'reward-chime';
+export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
+const REWARD_TARGET_HALF_THICKNESS = 0.006;
+
 /** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
 export interface ShotWorldOptions {
   readonly limits?: Pick<ExpansionLimits, 'reflections' | 'maxPowerMultiplier'>;
+  /** Rules versions with A2-A4 (r003): the chime, the piggy-bank slot and the seesaw tray. */
+  readonly rewardDevices?: RewardDeviceLayout;
 }
 export const DEFAULT_EXPANDED_SHOT_LIMITS: NonNullable<ShotWorldOptions['limits']> = { reflections: { min: 4, max: 10 }, maxPowerMultiplier: MAX_POWER_MULTIPLIER };
 
@@ -210,6 +231,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   // Layout v2: thin solid boxes on the back wall. Real surfaces (corks reflect, prizes in front block them).
   const cellGeoms: readonly BackgroundCellGeometry[] = [...(layout.backgroundCells ?? [])].sort((a, b) => (a.cellId < b.cellId ? -1 : 1));
   for (const c of cellGeoms) addStatic(c.box, SURFACE_FRICTION.wood, { t: 'cell', cellId: c.cellId });
+  // A2 / A4 devices (r003 only): solid, for every shot.
+  if (options.rewardDevices?.chime) addStatic(options.rewardDevices.chime, SURFACE_FRICTION.metal, { t: 'rewardChime' });
+  if (options.rewardDevices?.piggySlot) addStatic(options.rewardDevices.piggySlot, SURFACE_FRICTION.plastic, { t: 'rewardPiggy' });
   /** One cell per contact: the cell whose face contains the point (boundary tolerance, then lowest id). */
   const CELL_EDGE_EPS = 1e-6;
   const cellAtPoint = (pt: Vec3, hitCell: BackgroundCellId): BackgroundCellId => {
@@ -218,6 +242,30 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       if (Math.abs(pt.x - b.center.x) <= b.halfExtents.x + CELL_EDGE_EPS && Math.abs(pt.y - b.center.y) <= b.halfExtents.y + CELL_EDGE_EPS) return c.cellId;
     }
     return hitCell;
+  };
+
+  // ---- A5: the target collider exists only while its shot flies
+  let rewardTargetCollider: RAPIER.Collider | null = null;
+  const removeRewardTarget = (): void => {
+    if (!rewardTargetCollider) return;
+    targets.delete(rewardTargetCollider.handle);
+    world.removeCollider(rewardTargetCollider, false);
+    rewardTargetCollider = null;
+  };
+  const addRewardTarget = (g: RewardTargetGeometry): void => {
+    removeRewardTarget();
+    // A thin cylinder whose axis points at the player (+z): rotate the y-axis cylinder 90° about x.
+    const half = Math.SQRT1_2;
+    const c = world.createCollider(
+      RAPIER.ColliderDesc.cylinder(REWARD_TARGET_HALF_THICKNESS, g.outerRadius)
+        .setTranslation(g.center.x, g.center.y, g.center.z)
+        .setRotation({ x: half, y: 0, z: 0, w: half })
+        .setFriction(SURFACE_FRICTION.paper)
+        .setRestitution(0),
+      fixedBody,
+    );
+    targets.set(c.handle, { t: 'rewardTarget' });
+    rewardTargetCollider = c;
   };
 
   // ---- state
@@ -360,6 +408,13 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return { kind: 'hidden', targetId: t.targetId };
       case 'cell':
         return { kind: 'cell', cellId: t.cellId, activated };
+      case 'rewardTarget':
+        // Reported as a paper surface so sounds and views need no new kind; points never come from it.
+        return { kind: 'surface', surfaceId: REWARD_TARGET_SURFACE_ID, material: 'paper' };
+      case 'rewardChime':
+        return { kind: 'surface', surfaceId: REWARD_CHIME_SURFACE_ID, material: 'metal' };
+      case 'rewardPiggy':
+        return { kind: 'surface', surfaceId: REWARD_PIGGY_SURFACE_ID, material: 'plastic' };
       case 'prize': {
         const p = live.get(t.id)!;
         return { kind: 'prize', instanceId: t.id, typeId: p.src.typeId, material: p.cfg.material };
@@ -378,6 +433,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return `h:${t.targetId}`;
       case 'cell':
         return `c:${t.cellId}`;
+      case 'rewardTarget':
+        return 't:reward';
+      case 'rewardChime':
+        return 't:chime';
+      case 'rewardPiggy':
+        return 't:piggy';
       case 'prize':
         return `p:${t.id}`;
     }
@@ -393,6 +454,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       case 'hidden':
       case 'cell':
         return 'wood';
+      case 'rewardTarget':
+        return 'paper';
+      case 'rewardChime':
+        return 'metal';
+      case 'rewardPiggy':
+        return 'plastic';
       case 'prize':
         return live.get(t.id)!.cfg.material;
     }
@@ -464,6 +531,18 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         recordRequest(a, { kind: 'cell', cellId: target.cellId }, hitTimeSec, target.cellId);
       }
       if (target.t === 'prize') hitPrize(a, p, live.get(target.id)!, point, speed, dir);
+      // A2: only a cork that itself reflected off a wall or a board first rings the chime for ammo.
+      if (target.t === 'rewardChime' && p.chimeReady === true) a.chimeAfterReflection = true;
+      if (target.t === 'rewardPiggy') a.piggyDeposit = true;
+      if (target.t === 'rewardTarget') {
+        // The target faces the player: the ring is the distance from its center in the x-y plane.
+        const g = a.expanded?.rewardTarget;
+        if (g) {
+          const d = Math.hypot(point.x - g.center.x, point.y - g.center.y);
+          const ring = d <= g.centerRadius + 1e-6 ? 'center' : 'outer';
+          if (a.targetHit !== 'center') a.targetHit = ring;
+        }
+      }
       if (target.t === 'shopkeeper') a.firstHit.push(`shopkeeper:${target.part}`);
       if (target.t === 'hidden') a.firstHit.push(`hidden:${target.targetId}`);
     }
@@ -473,6 +552,13 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     p.velocity = reflectVelocity(p.velocity, n, e, TANGENTIAL_KEEP);
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
+    // A2: a real reflection off a wall, a board or a back-wall cell (a continuing contact is not one).
+    if (!continuing && (target.t === 'surface' || target.t === 'cell')) p.chimeReady = true;
+    // A4: a cork that went into the slot stays in the bank.
+    if (target.t === 'rewardPiggy' && !continuing) {
+      endProjectile(a, p, 'stopped');
+      return;
+    }
     const wouldStop = len(p.velocity) < CORK_STOP_SPEED;
     const wouldHitLimit = p.reflections >= reflectionLimitFor(p, tuning);
     if (splitNow && !wouldStop && !wouldHitLimit && splitCork(a, p, n)) return;
@@ -521,7 +607,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         velocity,
         bulletType: p.bulletType,
         powerMultiplier: p.powerMultiplier,
-        reflections: p.reflections,
+        ...splitChildMarks(p),
         spawnedAtSec: p.spawnedAtSec,
         ended: false,
         lastContact: new Map(p.lastContact),
@@ -580,6 +666,31 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const setStage = (a: ActiveShot, stage: ShotStage): void => {
     a.stage = stage;
     emit((eventId, shotId) => ({ type: 'shotStage', eventId, shotId, stage }));
+  };
+
+  // ---- A3: the seesaw tray, a band falling prizes pass through above the collection height
+  const tray = options.rewardDevices?.seesawTray ?? null;
+  const lastPos = new Map<string, Vec3>();
+  const inBox = (pt: Vec3, b: { center: Vec3; halfExtents: Vec3 }): boolean =>
+    Math.abs(pt.x - b.center.x) <= b.halfExtents.x && Math.abs(pt.y - b.center.y) <= b.halfExtents.y && Math.abs(pt.z - b.center.z) <= b.halfExtents.z;
+  const detectTray = (a: ActiveShot): void => {
+    if (!tray || !a.expanded?.rewards) return;
+    for (const p of live.values()) {
+      const id = p.src.instanceId as string;
+      const now = vec(p.body.translation());
+      const before = lastPos.get(id) ?? now;
+      lastPos.set(id, now);
+      if (p.mounted || a.seesaw.includes(p.src.instanceId)) continue;
+      // the path of this step, so a fast fall cannot skip the band
+      for (let k = 0; k <= 4; k++) {
+        const t = k / 4;
+        const pt = { x: before.x + (now.x - before.x) * t, y: before.y + (now.y - before.y) * t, z: before.z + (now.z - before.z) * t };
+        if (inBox(pt, tray)) {
+          a.seesaw.push(p.src.instanceId);
+          break;
+        }
+      }
+    }
   };
 
   const detectCollections = (a: ActiveShot): void => {
@@ -669,8 +780,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       remainingPrizes: remaining,
       simTimeSec: a.elapsed,
       ...(a.expanded && a.barrierId ? { barrierId: a.barrierId, appliedTransforms: a.applied, deferredTransforms: a.deferred } : {}),
+      ...(a.expanded?.rewards ? { rewardContacts: { targetHit: a.targetHit, chimeAfterReflection: a.chimeAfterReflection, seesawInstances: [...a.seesaw], piggyDeposit: a.piggyDeposit } } : {}),
     };
     outcomes.clear();
+    removeRewardTarget();
     active = null;
   };
 
@@ -879,6 +992,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     }
     world.step();
     if (a && active === a) {
+      // A3: record a pass through the tray BEFORE collection removes the prize (same step counts).
+      detectTray(a);
       detectCollections(a);
       advanceStage(a, fixedDt);
     }
@@ -993,6 +1108,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return `hidden:${t.targetId}`;
       case 'cell':
         return cellAtPoint(contact, t.cellId);
+      case 'rewardTarget':
+        return REWARD_TARGET_SURFACE_ID;
+      case 'rewardChime':
+        return REWARD_CHIME_SURFACE_ID;
+      case 'rewardPiggy':
+        return REWARD_PIGGY_SURFACE_ID;
       case 'prize':
         return t.id;
     }
@@ -1040,8 +1161,14 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       barrierId: null,
       applied: [],
       deferred: [],
+      targetHit: null,
+      chimeAfterReflection: false,
+      piggyDeposit: false,
+      seesaw: [],
     };
     active = a;
+    if (context.expanded?.rewardTarget) addRewardTarget(context.expanded.rewardTarget);
+    else removeRewardTarget();
     const corks = launchCorks(request, d, context.expanded?.modifiers ?? null);
     for (const proj of corks) a.projectiles.push(proj);
     a.nextProjectileIndex = corks.length;

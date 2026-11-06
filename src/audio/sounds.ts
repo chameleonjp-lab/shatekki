@@ -112,6 +112,13 @@ export const SOUNDS = {
   'effect.neutral': def(2, 0.3, [t('sine', 740, 0, 0.22, 0.24), t('sine', 740, 0.12, 0.2, 0.1)]),
   'assortment.change': def(2, 0.4, [t('triangle', 523, 0, 0.1, 0.2, 784), t('triangle', 784, 0.09, 0.1, 0.2, 1175), t('sine', 1568, 0.2, 0.25, 0.2), n('highpass', 6500, 0.18, 0.18, 0.08)]),
   'outline.show': def(2, 0.4, [t('sine', 1568, 0, 0.1, 0.2), t('sine', 1976, 0.1, 0.18, 0.2), n('highpass', 7500, 0, 0.04, 0.07)]),
+  // ---- rewards (plan P1/P3): one prize "kotón", 2-3 rising xylophone notes, 4+ a short taiko; a festival flourish
+  'take.1': def(2, 0.15, [t('sine', 392, 0, 0.1, 0.32, 262), n('lowpass', 900, 0, 0.04, 0.18)]),
+  'take.2': def(2, 0.2, [t('triangle', 1047, 0, 0.09, 0.28), t('triangle', 1319, 0.08, 0.16, 0.28)]),
+  'take.3': def(2, 0.25, [t('triangle', 1047, 0, 0.08, 0.28), t('triangle', 1319, 0.07, 0.08, 0.28), t('triangle', 1568, 0.14, 0.18, 0.3)]),
+  'take.taiko': def(2, 0.3, [t('sine', 120, 0, 0.28, 0.65, 70), n('lowpass', 260, 0, 0.12, 0.3), t('sine', 98, 0.14, 0.2, 0.4, 60)]),
+  'load.latch': def(1, 0.1, [t('square', 2400, 0, 0.025, 0.14, 1800), n('highpass', 5500, 0, 0.03, 0.12)]),
+  'lastShot.hayashi': def(2, 0.6, [t('sine', 1568, 0, 0.1, 0.24, 1760), t('sine', 1760, 0.1, 0.1, 0.24), t('sine', 2093, 0.2, 0.22, 0.24), t('sine', 140, 0, 0.12, 0.45, 90), t('sine', 140, 0.22, 0.12, 0.4, 90)]),
   // ---- settlement
   collectDrop: def(0, 0.1, [t('sine', 700, 0, 0.08, 0.2, 300)]),
   collect: def(2, 0.15, [t('sine', 1047, 0, 0.3, 0.3), t('sine', 1319, 0.05, 0.3, 0.22)]),
@@ -246,6 +253,9 @@ export const UI_CUE_SOUND: Record<UiCueName, SoundId> = {
   collect: 'collect',
   penalty: 'penalty',
   ammoBonus: 'ammo',
+  takeTier: 'take.1',
+  lastShotContinue: 'lastShot.hayashi',
+  critLatch: 'load.latch',
 };
 
 const TIER_SOUND: Record<LoadTier, SoundId> = {
@@ -261,6 +271,10 @@ export function soundsForUiCue(cue: UiCueExt): readonly SoundRequest[] {
       return [req(TIER_SOUND[cue.tier ?? 'normal'])];
     case 'collect':
       return (cue.count ?? 1) >= 2 ? [req('collect'), req('chain')] : [req('collect')];
+    case 'takeTier': {
+      const n = cue.count ?? 1;
+      return [req(n >= 4 ? 'take.taiko' : n === 3 ? 'take.3' : n === 2 ? 'take.2' : 'take.1')];
+    }
     default:
       return [req(UI_CUE_SOUND[cue.cue])];
   }

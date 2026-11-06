@@ -5,9 +5,9 @@
  * and hints.
  *
  * Text comes from src/i18n/expanded-content.ts: the locale, then English, then
- * the Japanese source in data/expansion-v2. Locales whose content is still
- * pending therefore show English. Unknown keys resolve to '' so a raw key is
- * never shown to the player.
+ * the Japanese source in data/expansion-v2. All 15 locales are complete; the
+ * English fallback only covers an entry a future locale leaves out. Unknown keys
+ * resolve to '' so a raw key is never shown to the player.
  */
 import type { Locale } from './locales';
 import {

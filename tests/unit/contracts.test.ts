@@ -88,6 +88,7 @@ describe('parseCommand: UI input is narrowed and cannot carry results', () => {
       { type: 'ABANDON' },
       { type: 'SKIP_PRESENTATION' },
       { type: 'ANSWER_SHOPKEEPER', shotId: 's03', questionId: 'Q017', choice: 'B' },
+      { type: 'ORDER', accept: true },
     ];
     const parsed = samples.map((s) => parseCommand(s));
     expect(parsed.every((p) => p.ok)).toBe(true);
@@ -99,6 +100,8 @@ describe('parseCommand: UI input is narrowed and cannot carry results', () => {
     [{ type: 'SET_SCORE', score: 999 }, 'score cannot be set'],
     [{ type: 'COLLECT', instanceId: 'i0001' }, 'collection cannot be set'],
     [{ type: 'FIRE', score: 999 }, 'extra fields are rejected'],
+    [{ type: 'ORDER', accept: 'yes' }, 'an order answer is a boolean'],
+    [{ type: 'ORDER', accept: true, ammo: 2 }, 'an order cannot carry ammo'],
     [{ type: 'FIRE', ammo: 20 }, 'ammo cannot be set'],
     [{ type: 'STOP_LOAD', barValue: 0.5 }, 'load quality is computed by the core, not sent by the UI'],
     [{ type: 'AIM', yaw: Number.NaN, pitch: 0 }, 'non-finite numbers are rejected'],

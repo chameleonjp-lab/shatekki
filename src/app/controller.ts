@@ -39,6 +39,7 @@ import {
   type ViewState,
   type ExpansionCatalog,
 } from '../contracts';
+import { rewardConfigOf, rewardViewState } from '../core/rewards';
 
 export interface RulesApi {
   createRun(config: RunConfig, catalog: RuntimeCatalog): RunState;
@@ -151,6 +152,8 @@ export class GameController {
       aimPreview: s.phase === 'aiming' && reservation.hint === 'aimPreview' ? this.aimPreview(s, effectiveAim) : null,
       question: question && s.inFlight ? { shotId: s.inFlight.shotId, questionId: question.questionId, answer: question.answer } : null,
     };
+    const rewards = rewardViewState(s, rewardConfigOf(this.deps.expansion), this.deps.layout, this.deps.tuning);
+    if (rewards) (expansion as { rewards?: typeof rewards }).rewards = rewards;
     return { ...base, ballistic: ballisticForModifiers(this.deps.tuning, s.bulletType, reservation.modifiers), expansion };
   }
 
@@ -190,7 +193,18 @@ export class GameController {
         runId: after.runId,
         chooseTransform: this.deps.rules.transformChooser(after, this.deps.catalog),
         ...(active && isExpandedRunState(after)
-          ? { expanded: { modifiers: active.modifiers, usableCells: after.expansion.cells.filter((c) => !c.used).map((c) => c.cellId) } }
+          ? {
+              expanded: {
+                modifiers: active.modifiers,
+                usableCells: after.expansion.cells.filter((c) => !c.used).map((c) => c.cellId),
+                ...(after.expansion.rewards
+                  ? {
+                      rewards: true,
+                      rewardTarget: after.expansion.rewards.target?.forShot === after.shotsFired ? after.expansion.rewards.target.geometry : null,
+                    }
+                  : {}),
+              },
+            }
           : {}),
       });
     }

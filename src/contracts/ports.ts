@@ -5,7 +5,8 @@
 import type { ShotSummary, SimEvent, SimulationFrame } from './events';
 import type { AimAngles, FinalResult, LoadTier, Phase } from './game';
 import type { AimPreview, BallisticSpec } from './aim';
-import type { BackgroundCellId, EffectId, PrizeTypeId, QuestionId, SeriesId, SetId, ShotId } from './ids';
+import type { BackgroundCellId, EffectId, PrizeInstanceId, PrizeTypeId, QuestionId, SeriesId, SetId, ShotId } from './ids';
+import type { RewardDeviceLayout, RewardId, RewardOrderState, RewardTargetGeometry } from './rewards';
 import type { HintKind, QuestionChoice } from './expansion';
 
 /**
@@ -27,6 +28,33 @@ export interface ExpansionViewState {
   readonly aimPreview: AimPreview | null;
   /** Shown while the shot waits for the shopkeeper answer. */
   readonly question: { readonly shotId: ShotId; readonly questionId: QuestionId; readonly answer: QuestionChoice | null } | null;
+  /** Rules versions with rewards (r002+): what to draw and show. Never read back into the run. */
+  readonly rewards?: RewardViewState;
+}
+
+/** Display-only facts about A1-A10 for the view and the panel. */
+export interface RewardViewState {
+  readonly bagInstanceId: PrizeInstanceId | null;
+  /** A1: the most the bag can give now (its value, capped by the room left). */
+  readonly bagOffer: number;
+  /** A5: a fixed target ('fixed') after the stand is confirmed; a preview that follows the stand before that. */
+  readonly target: { readonly geometry: RewardTargetGeometry; readonly offered: { readonly outer: number; readonly center: number }; readonly mode: 'preview' | 'fixed' } | null;
+  readonly order: RewardOrderState | null;
+  /** Shots left for an accepted order, counting the one being prepared. */
+  readonly orderShotsLeft: number | null;
+  readonly lanternsLit: readonly number[];
+  readonly lanternZones: number;
+  readonly prizesWon: number;
+  readonly nextStamp: number | null;
+  readonly piggyDeposits: number;
+  readonly enabled: readonly RewardId[];
+  /** A2-A4 device geometry (drawn exactly where the physics has it) and whether each is spent. */
+  readonly devices: RewardDeviceLayout;
+  readonly chimeUsed: boolean;
+  readonly seesawUsed: boolean;
+  readonly piggyDone: boolean;
+  /** P4: the next shot already has a reservation (a modifier or a hint). */
+  readonly nextReserved: boolean;
 }
 
 /** What the camera/HUD needs besides the physics frame. */
@@ -69,7 +97,11 @@ export type UiCue =
       readonly cue:
         | 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus'
         // Expanded rules (D35-D37): question, answer and one coalesced effect cue per shot.
-        | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown';
+        | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown'
+        // Rewards (plan P1/P3): prizes won in one shot (count), and continuing from the last cork.
+        | 'takeTier' | 'lastShotContinue'
+        // P5: a metal latch at the same moment as the perfect-load sound.
+        | 'critLatch';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */

@@ -82,7 +82,7 @@
 | 38 | acceptance「stays on the same question, loses no time, answers nothing by itself, then takes exactly one answer」、unit/expanded-controller「rejects answers while paused …」 | Node | 一部 | 本物のアプリ切替・横向き（イベントの届き方）は実機が必要。ここでは司令役の一時停止の入口を直接呼んだ。 |
 | 39 | integration/expanded-checkpoint「two tabs conflict like today」「a failed pre-shot save keeps the flags as before」、unit/profile-versions「two stores (tabs) never lose a discovery or a higher best」「keeps playing in memory when storage fails …」 | Node（保存先は模擬） | 一部 | 本物の複数タブ・保存失敗は試していない。 |
 | 40 | unit/profile-versions（13件。旧自己ベストを旧ルールの最高として保ち、v1の保存を書き換えない）、integration/expanded-checkpoint「never touches the rules-v1 key …」、e2e/expanded-smoke「… saved under its own key …」 | Node・Chromium | 一部 | 旧ルールの「送信待ち」を保つ試験は追加機能側にはない。名前・設定は旧ルールの保存を触らないことで代えている。 |
-| 41 | unit/expanded-i18n（70件）、unit/shopkeeper-panel「keeps long texts in the panel」、unit/effect-results「has all new keys in every locale」、e2e/expanded-gameplay（質問と2択が画面内に収まる） | Node・Chromium | 一部 | 15言語のうち、追加機能の文言が完成しているのは登録上10言語（日・英・西・葡・簡体字・仏・独・韓・露・伊）で、残りの5言語は英語に代わる表示（試験が「未完成」と正直に数えている）。翻訳はClaudeが作ったもので、母語話者の確認はなし。長文の2択は日本語だけをブラウザで確認。音を聞いての確認はなし。 |
+| 41 | unit/expanded-i18n（96件）、unit/result-expanded（結果と図鑑の名前が15言語で一致）、unit/shopkeeper-panel「keeps long texts in the panel」、unit/effect-results「has all new keys in every locale」、e2e/expanded-gameplay（質問と2択が画面内に収まる） | Node・Chromium | 一部 | 2026年11月7日（計画T1）に、残っていた5言語（繁体字中国語・インドネシア語・トルコ語・ベトナム語・タイ語）を足し、15言語すべての辞書に300組の名前とヒント、200問・400択、6区分、100効果の名前と結果、20シリーズ、固定文がそろった。試験は各言語の辞書そのものを数える。英語で補う動きは、わざと項目を外した試験用の辞書で確かめる。繁体字は簡体字版をOpenCC（s2twp）で変換し、既存の繁体字の景品名に合わせた。ほかの4言語は英語版からClaudeが訳した。どの言語も母語話者の確認はなし。長文の2択は日本語だけをブラウザで確認。音を聞いての確認はなし。 |
 | 42 | integration/expanded-performance（重い3場面）、e2e/expanded-performance、記録は [expanded-performance.md](expanded-performance.md) | Node・Chromium | 一部 | iPhone実機の毎秒のコマ数・発熱は未計測。縁の表示と追加案内を全部出した状態も実機では未計測。 |
 | 43 | acceptance「confirms the whole chain once and the game goes on because the cell gave a bullet」「the same chain without any bullet gained ends the game only after the answer …」 | Node | 自動確認 | 実機での通しの操作は未確認。 |
 | 44 | unit/app-bundle（2件：旧ルールが既定、追加機能は内部指定のみ）、unit/expansion-catalog「is never ranking-eligible …」、unit/release-config「starts approved rules-v1 runs with all existing … values unchanged」、e2e/expanded-smoke「a URL parameter cannot switch the public build to the prototype」、unit/profile-versions「leaves the v1 key byte-identical after expanded writes …」 | Node・Chromium | 自動確認 | ランキング・実験場の本番側は、追加機能では触っていないことを試験で確認したのみ（本番通信は未確認）。 |
@@ -99,7 +99,7 @@
 | AC17 追加弾の上限 | acceptance（累計10発で終了、最大20射）、unit/gameplay-effects・shot-effect-plan（板と背景の弾が共通の上限） | 自動確認 |
 | AC18 最後の弾 | acceptance（CH-AC43・CH-AC26：続行と終了、最後の連鎖の景品・セットを結果に含む） | 自動確認 |
 | AC25 店主の初回加点 | acceptance（2回目の質問で加点なし、質問回数は別管理）、e2e/expanded-gameplay | 自動確認 |
-| AC35 言語 | unit/expanded-i18n。完成10言語・未完成5言語 | 一部（CH-AC41と同じ） |
+| AC35 言語 | unit/expanded-i18n。15言語とも辞書がそろう（母語話者の確認は未実施） | 一部（CH-AC41と同じ） |
 | AC36 音 | unit/audio（27件）。追加機能の音の接続は EG09 で入ったが、聞いての確認はなし | 一部（試聴なし） |
 | AC37 一時停止 | acceptance（CH-AC38）、unit/expanded-controller | 一部（実機未確認） |
 | AC38 保存 | integration/expanded-checkpoint | 一部（保存先は模擬） |
@@ -120,7 +120,7 @@
 ## まだ確かめていないこと
 
 - iPhone Safari実機での操作（位置移動と照準、全体図、両端・上下段・店主）、縦／横／アプリ切替、音、最大負荷、発熱。
-- 15言語のうち未完成5言語の表示と、すべての言語の母語話者による確認。
+- すべての言語の母語話者による確認（15言語の辞書はそろったが、読んだ人の確認はまだない）。
 - 本物のブラウザでの複数タブ・保存失敗。
 - 人が遊んだときの取れ方や、セットの成立のしやすさ（自動の打ち手の数字だけで決めない）。
 
