@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GameController } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
+import { completedSetsFor } from '../../src/catalog/sets';
 import { createExpandedRun } from '../../src/core/expanded-run';
 import { spawnPrize } from '../../src/core/replenish';
 import { validateRunState } from '../../src/core/session';
@@ -506,6 +507,10 @@ describe('CH-AC12: one question per shot, however many corks and reflections tou
     expect(sc.answer('B')).toBe(true);
     sc.settle();
     expect(sc.state.expansion.questionCursor).toBe(2);
+    // CH-AC17: the shopkeeper part scored on the first shot only; the second question paid nothing for the body again
+    expect(sc.settled[0]!.ledger.items.filter((i) => i.kind === 'shopkeeper').length).toBeGreaterThanOrEqual(1);
+    expect(sc.settled[1]!.ledger.items.filter((i) => i.kind === 'shopkeeper' && i.refId === 'body')).toEqual([]);
+    expect(sc.state.firstHitsScored.filter((k) => k === 'shopkeeper:body')).toHaveLength(1);
     expectConfirmedOnce(sc, sc.settled[1]!, 2);
     sc.dispose();
   });
@@ -633,6 +638,11 @@ describe('CH-AC38: leaving the app or turning the phone during a question', () =
     expect(now.ammo).toBe(shown.ammo);
     expect(sc.world.frame().prizes).toEqual(frozenPrizes);
     expect(sc.c.dispatch({ type: 'FIRE' })).toBe(false); // no accidental second shot
+    // skipping the presentation is not an answer (CH-AC16)
+    sc.c.dispatch({ type: 'SKIP_PRESENTATION' });
+    for (let i = 0; i < 60; i++) sc.c.frame(1 / 60);
+    expect(sc.c.awaitingAnswer).toBe(true);
+    expect(sc.c.current.inFlight!.plan!.question!.answer).toBeNull();
 
     // one answer is taken, once
     expect(sc.answer('B')).toBe(true);
@@ -642,5 +652,33 @@ describe('CH-AC38: leaving the app or turning the phone during a question', () =
     expect(sc.state.expansion.questionCursor).toBe(1);
     expectConfirmedOnce(sc, sc.settled[0]!, 1);
     sc.dispose();
+  });
+});
+
+// ------------------------------------------------------- data checks on the real catalog
+
+describe('CH-AC11 / CH-AC18: the real question, group and series data', () => {
+  it('every question has two choices pointing to existing groups with different candidate sets', () => {
+    expect(EXP.questions.size).toBe(200);
+    for (const q of EXP.questions.values()) {
+      const a = EXP.groups.get(q.choices.A.groupId);
+      const b = EXP.groups.get(q.choices.B.groupId);
+      expect(a, q.questionId).toBeDefined();
+      expect(b, q.questionId).toBeDefined();
+      expect(q.choices.A.groupId, q.questionId).not.toBe(q.choices.B.groupId);
+      expect([...a!.effectIds].sort(), q.questionId).not.toEqual([...b!.effectIds].sort());
+      for (const id of [...a!.effectIds, ...b!.effectIds]) expect(EXP.effects.has(id), `${q.questionId} ${id}`).toBe(true);
+    }
+  });
+
+  it('collecting every kind of a series completes only catalog sets inside it: membership itself pays nothing', () => {
+    expect(EXP.series.size).toBe(20);
+    for (const series of EXP.series.values()) {
+      for (const t of series.typeIds) expect(bundle.catalog.prizes.has(t), `${series.seriesId} ${t}`).toBe(true);
+      const members = new Set(series.typeIds);
+      const expected = [...bundle.catalog.sets.values()].filter((set) => set.requiredTypeIds.every((t) => members.has(t))).map((set) => set.setId).sort();
+      expect(completedSetsFor(bundle.catalog, members, []), series.seriesId).toEqual(expected);
+      for (const id of expected) expect(/^(S\d{3}|PAIR\d{3})$/.test(id)).toBe(true);
+    }
   });
 });
