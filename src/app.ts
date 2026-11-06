@@ -9,10 +9,10 @@
 import './app.css';
 import { environmentPauseReasons, type EnvironmentSnapshot } from './environment';
 import {
-  BOOTH_LAYOUT,
   catalogValueStatus,
   mintId,
   type FinalResult,
+  type GameplayBundle,
   type KeyValueStorage,
   type PauseReason,
   type RunState,
@@ -22,7 +22,8 @@ import {
 } from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
-import { RELEASE_CATALOG, RELEASE_TUNING } from './catalog/release-config';
+import { OFFICIAL_BUNDLE } from './app/bundle';
+import { createExpandedRun } from './core/expanded-run';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
 import { controlsModel } from './ui/controls/model';
@@ -32,6 +33,8 @@ import {
   createProfileStore,
   createRunStore,
   createSettingsStore,
+  createVersionedProfileStore,
+  expandedRunKey,
   STORAGE_KEYS,
   type RestoreResult,
   type RunStore,
@@ -135,23 +138,30 @@ function loadHeavyModules(): Promise<HeavyModules> {
   return heavyModules;
 }
 
-export function createApp(root: HTMLElement, win: Window): AppHandle {
+export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle = OFFICIAL_BUNDLE): AppHandle {
   const doc = win.document;
-  const catalog: RuntimeCatalog = RELEASE_CATALOG;
-  const tuning: TuningConfig = RELEASE_TUNING;
+  // One bundle for start, restore, physics, view and persistence (plan EG01/EG08).
+  const catalog: RuntimeCatalog = bundle.catalog;
+  const tuning: TuningConfig = bundle.tuning;
+  const layout = bundle.layout;
+  const expansion = bundle.expansion;
   const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
 
   // ------------------------------------------------------------ stores
   const storage = browserStorage(win);
-  const runStore: RunStore = createRunStore(storage, newRunId(win), { catalog, tuning, layout: BOOTH_LAYOUT });
-  const profile = createProfileStore(storage);
+  // Expanded rules write their own keys (EG06); rules-v1 keys and records are never touched by them.
+  const runStore: RunStore = expansion
+    ? createRunStore(storage, newRunId(win), { catalog, tuning, layout, expansion, key: expandedRunKey(catalog.rulesVersion) })
+    : createRunStore(storage, newRunId(win), { catalog, tuning, layout });
+  const profile = expansion ? createVersionedProfileStore(storage, { rulesVersion: catalog.rulesVersion }) : createProfileStore(storage);
   const settingsStore = createSettingsStore(storage);
   const nameStore = createPlayerNameStore(storage);
   const ranking = createRankingService({ storage });
   const links = publicLinks();
-  const rankingAvailable = RANKING_CONFIG.gameSlug !== null;
+  // The expanded prototype is never ranked (prototype values, internal builds only).
+  const rankingAvailable = RANKING_CONFIG.gameSlug !== null && expansion === null;
   let restore: RestoreResult = runStore.load();
   // An abandoned or finished run is shown once and never resumed or ranked from here (decision 27).
   if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
@@ -352,11 +362,11 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const ensureEngine = async (): Promise<ShotWorld> => {
     if (world) return world;
     const { sim, view } = await loadHeavyModules();
-    const w = await sim.createShotWorld(BOOTH_LAYOUT, catalog, tuning);
+    const w = await sim.createShotWorld(layout, catalog, tuning);
     world = w;
     try {
       renderer = view.createThreeRenderer(canvas, {
-        layout: BOOTH_LAYOUT,
+        layout,
         corkRadius: tuning.cork.radius,
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
         // Miss / near-miss are decided only after settlement (AC27).
@@ -405,7 +415,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         renderer,
         catalog,
         tuning,
-        layout: BOOTH_LAYOUT,
+        layout,
+        expansion,
         onChange,
         onSimEvents: (events) => {
           for (const e of events) audio.handle(e, audioSettings);
@@ -448,7 +459,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         runName = initial.playerName;
       } else {
         runName = rankingAvailable ? opts.name : null;
-        initial = CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName }, catalog);
+        const config = { runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName };
+        initial = expansion ? createExpandedRun(config, { catalog, tuning, layout, expansion }) : CORE_RULES.createRun(config, catalog);
         runStore.saveStable(initial);
       }
       if (rankingAvailable) ranking.beginRun({ runId: initial.runId, playerName: runName, valueStatus: initial.valueStatus });

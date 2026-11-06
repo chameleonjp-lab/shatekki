@@ -59,7 +59,9 @@ describe('no secrets in the shipped code', () => {
   it('the production build output contains no service_role key or secret-looking value', () => {
     const outDir = join(ROOT, 'test-results', 'dist-security');
     rmSync(outDir, { recursive: true, force: true });
-    execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], { cwd: ROOT, stdio: 'pipe' });
+    // The public build: no internal bundle switch set (D34-D37 prototype stays out of it).
+    const env = { ...process.env, VITE_SHATEKKI_BUNDLE: '' };
+    execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], { cwd: ROOT, stdio: 'pipe', env });
     expect(existsSync(join(outDir, 'index.html'))).toBe(true);
     const files = walk(outDir);
     expect(files.length).toBeGreaterThan(1);
@@ -67,6 +69,10 @@ describe('no secrets in the shipped code', () => {
     // the build must not ship the old submit endpoint either
     const joined = files.filter((f) => /\.js$/.test(f)).map((f) => readFileSync(f, 'utf8')).join('\n');
     expect(joined).not.toMatch(/rpc\/submit_score['"`]/);
+    // ...nor the expanded prototype's rules, data or the code that loads them (EG08: build-time switch only).
+    expect(joined).not.toContain('rules-v2-proposed');
+    expect(joined).not.toContain('PAIR001');
+    expect(joined).not.toContain('gameplay-config');
     rmSync(outDir, { recursive: true, force: true });
   });
 });

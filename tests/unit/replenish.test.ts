@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isSlotBlocked, replenish } from '../../src/core/replenish';
 import { resolveShot } from '../../src/core/settlement';
-import { BOOTH_LAYOUT, type PrizeInstanceState, type RunState } from '../../src/contracts';
+import { createRun } from '../../src/core/state';
+import { BOOTH_LAYOUT, BOOTH_LAYOUT_V2, mintId, type PrizeInstanceState, type RunState } from '../../src/contracts';
 import { CAT, T, fired, newRun, syntheticRecord } from './helpers';
 
 const slotGeom = (id: string) => BOOTH_LAYOUT.slots.find((s) => s.slotId === id)!;
@@ -116,5 +117,51 @@ describe('replenishment after a shot', () => {
     expect(state.phase).toBe('ended');
     expect(state.shelf.prizes).toHaveLength(8);
     expect(state.draw).toEqual(f.draw);
+  });
+});
+
+describe('replenishment with 36 slots and an assortment subset (EG03)', () => {
+  const T36 = { ...T, shelfSlotCount: 36, draw: { ...T.draw, tierTargets: { easy: 12, normal: 16, hard: 8 } } };
+  const start = () => createRun({ runId: mintId.run('r36'), seed: 3, tuning: T36, playerName: null }, CAT, BOOTH_LAYOUT_V2);
+
+  it('createRun fills all 36 distinct v2 slots', () => {
+    const s = start();
+    expect(s.shelf.prizes).toHaveLength(36);
+    expect(new Set(s.shelf.prizes.map((p) => p.homeSlot)).size).toBe(36);
+    expect(s.shelf.nextInstanceNumber).toBe(37);
+  });
+
+  it('refills emptied slots from the subset only', () => {
+    const s = start();
+    const subset = [...CAT.prizes.keys()].slice(0, 3);
+    const gone = s.shelf.prizes.filter((p) => ['slot-r1-c01', 'slot-r3-c12', 'slot-r2-c06'].includes(p.homeSlot));
+    const shelf = { ...s.shelf, prizes: s.shelf.prizes.filter((p) => !gone.includes(p)) };
+    const r = replenish({ shelf, draw: s.draw, newlyEmptySlots: gone.map((p) => p.homeSlot), motionSec: 0, candidateTypeIds: subset }, CAT, T36, BOOTH_LAYOUT_V2);
+    expect(r.spawned).toHaveLength(3);
+    for (const p of r.spawned) expect(subset).toContain(p.typeId);
+    expect(r.shelf.prizes).toHaveLength(36);
+    expect(r.shelf.deferredSlots).toEqual([]);
+  });
+
+  it('defers a blocked v2 slot and never moves or deletes the blocking prize', () => {
+    const s = start();
+    const gone = s.shelf.prizes.find((p) => p.homeSlot === 'slot-r2-c05')!;
+    const neighbor = s.shelf.prizes.find((p) => p.homeSlot === 'slot-r2-c04')!;
+    const slid = moveX(neighbor, 0.42);
+    const shelf = { ...s.shelf, prizes: s.shelf.prizes.filter((p) => p !== gone).map((p) => (p === neighbor ? slid : p)) };
+    const r = replenish({ shelf, draw: s.draw, newlyEmptySlots: [gone.homeSlot], motionSec: 0 }, CAT, T36, BOOTH_LAYOUT_V2);
+    expect(r.spawned).toHaveLength(0);
+    expect(r.shelf.deferredSlots).toEqual([gone.homeSlot]);
+    expect(r.shelf.prizes).toContain(slid);
+    expect(r.draw).toBe(s.draw);
+  });
+
+  it('without a subset the draw is the same as with null', () => {
+    const s = start();
+    const gone = s.shelf.prizes[7]!;
+    const shelf = { ...s.shelf, prizes: s.shelf.prizes.filter((p) => p !== gone) };
+    const a = replenish({ shelf, draw: s.draw, newlyEmptySlots: [gone.homeSlot], motionSec: 0 }, CAT, T36, BOOTH_LAYOUT_V2);
+    const b = replenish({ shelf, draw: s.draw, newlyEmptySlots: [gone.homeSlot], motionSec: 0, candidateTypeIds: null }, CAT, T36, BOOTH_LAYOUT_V2);
+    expect(a).toEqual(b);
   });
 });
