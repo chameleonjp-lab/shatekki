@@ -8,7 +8,8 @@ export default defineConfig({
   testDir: 'tests/e2e',
   testMatch: '**/*.spec.ts',
   forbidOnly: true,
-  fullyParallel: false,
+  fullyParallel: Boolean(process.env.CI),
+  workers: process.env.CI ? 2 : undefined,
   retries: 0,
   reporter: [['list'], ['json', { outputFile: 'test-results/e2e-report.json' }]],
   use: {
@@ -18,7 +19,7 @@ export default defineConfig({
     locale: 'ja-JP',
   },
   webServer: {
-    command: 'npm run build && npm run preview',
+    command: process.env.CI_PREBUILT === 'true' ? 'npm run preview' : 'npm run build && npm run preview',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

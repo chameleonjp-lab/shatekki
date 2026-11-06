@@ -223,14 +223,14 @@ describe('result view-model', () => {
     });
 
     it('leaves own rank unconfirmed even when name and score match once', () => {
-      expect(resultViewModel(resultInput({ submit: submitted, top }), 'ja').rankText).toBe('順位は下の上位30名で確認してください。');
+      expect(resultViewModel(resultInput({ submit: submitted, top }), 'ja').rankText).toBe('本人の順位を確認できません。上位30名は下に表示しています。');
     });
 
     it('does not guess a rank outside the top 30 or for same-name ties', () => {
       const out = resultViewModel(resultInput({ submit: submitted, top: { state: 'ready', fetchedAt: 't', rows: [row(1, 'あ', 900)] } }), 'ja');
-      expect(out.rankText).toBe('順位は下の上位30名で確認してください。');
+      expect(out.rankText).toBe('本人の順位を確認できません。上位30名は下に表示しています。');
       const dup = resultViewModel(resultInput({ submit: submitted, top: { state: 'ready', fetchedAt: 't', rows: [row(2, 'たろう', 870), row(2, 'たろう', 870)] } }), 'ja');
-      expect(dup.rankText).toBe('順位は下の上位30名で確認してください。');
+      expect(dup.rankText).toBe('本人の順位を確認できません。上位30名は下に表示しています。');
     });
 
     it('anonymous play never shows a rank', () => {

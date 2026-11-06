@@ -75,7 +75,7 @@ export const KO: Record<UiKey, string> = {
   'result.newBest': '최고 기록 갱신!',
   'result.prevBest': '이전 최고 기록: {score}점',
   'result.rank': '등록 후 순위: {rank}위',
-  'result.rank.unknown': '순위는 아래 상위 30명에서 확인하세요.',
+  "result.rank.unknown": "본인의 순위를 확인할 수 없습니다. 아래에 상위 30명이 표시됩니다.",
   'result.prizes': '획득한 경품',
   'result.prizes.none': '획득한 경품이 없습니다.',
   'result.sets': '완성한 세트',

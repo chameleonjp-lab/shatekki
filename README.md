@@ -1,6 +1,6 @@
 # shatekki — 屋台の射的ゲーム
 
-2026年11月6日更新。要件33項目に沿った試作を実装し、PR #7・#11をmainへマージ済みです。**一般公開・正式ランキング接続・数値の正式採用・iPhone Safari実機確認はまだです。** 正式タイトルも未確定です。
+2026年11月6日更新。要件33項目に沿った試作を実装し、PR #7・#11・#13をmainへマージ済みです。**一般公開・正式ランキング接続・数値の正式採用・iPhone Safari実機確認はまだです。** 正式タイトルも未確定です。
 
 [最新の残作業と今回の修正](docs/release/follow-up-status.md)に、実施済みの修正、確認結果、次の順序、利用者に判断いただく内容をまとめています。[タスク台帳](docs/architecture/task-ledger.md)と[受入確認の証拠](docs/qa/acceptance-evidence.md)も参照してください。
 
@@ -19,8 +19,14 @@ Claudeは初期実装と美術・演出・音、ChatGPTは要件管理と統合�
 
 変更は専用ブランチからmainへのPRで提出し、マージは利用者が行います。現在のGitHub Actionsは試験のみを行います。マージしても本番公開やデータベース登録は行いません。
 
+## 自動確認と公開準備
+
+[変更範囲ごとの自動確認](docs/qa/ci-scope.md)で、文書だけの変更・機能ごとの試験・全試験を分けます。Node試験とビルドを並行し、画面試験を2分割して同じビルド結果を使います。必要な試験が省略された場合や実行件数が0件だった場合は成功にしません。
+
+[iPhone確認用ページの公開準備](docs/release/preview-ready.md)と[本人順位の追加設計案](docs/release/ranking-identity-plan.md)も用意しています。公開用設定は実行されないテンプレートで、まだ外部へ公開していません。
+
 ## 開発の確認
 
-Node 22以上で `npm ci`、`npm run check`（型検査・単体・統合・ビルド）、`npm run test:e2e`（Chromiumで画面操作）を実行します。iPhone程度の画面幅をまねる試験はSafari実機の確認とは別です。
+変更に応じて[確認範囲](docs/qa/ci-scope.md)を選びます。全体を確かめる場合は、Node 22以上で `npm ci`、`npm run check`（型検査・単体・統合・ビルド）、`npm run test:e2e`（Chromiumで画面操作）を実行します。iPhone程度の画面幅をまねる試験はSafari実機の確認とは別です。
 
 [実装の基準](docs/architecture/implementation-baseline.md)・[一射の処理設計](docs/architecture/shot-pipeline.md)・[公開前の確認と承認事項](docs/release/approval-request.md)も保存しています。

@@ -75,7 +75,7 @@ export const ID: Record<UiKey, string> = {
   'result.newBest': 'Rekor baru!',
   'result.prevBest': 'Rekor sebelumnya: {score} poin',
   'result.rank': 'Peringkat setelah terdaftar: #{rank}',
-  'result.rank.unknown': 'Lihat peringkat Anda di 30 teratas di bawah.',
+  "result.rank.unknown": "Peringkat pribadi Anda belum dapat dipastikan. Daftar 30 teratas ada di bawah.",
   'result.prizes': 'Hadiah didapat',
   'result.prizes.none': 'Belum ada hadiah.',
   'result.sets': 'Set terselesaikan',

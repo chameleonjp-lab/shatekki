@@ -1,0 +1,159 @@
+# REVIEW TEMPLATE ONLY: outside .github/workflows, so this file cannot publish.
+# Activate only after separate approval; see docs/release/preview-ready.md.
+# Reuses the exact successful ci run's build; no checkout, npm install or tests.
+name: preview-pages
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+# Serialize deployments. Recheck main immediately before each deployment so an
+# older completed run cannot overwrite a newer main deployment.
+concurrency:
+  group: preview-pages-main
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.event == 'push' ||
+       github.event.workflow_run.event == 'workflow_dispatch') &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ready: ${{ steps.source.outputs.ready }}
+      source-sha: ${{ steps.source.outputs.source-sha }}
+    steps:
+      - name: Verify source CI, final gate and build artifact
+        id: source
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setOutput('ready', 'false');
+            const eventRun = context.payload.workflow_run;
+            const ownRepository = `${context.repo.owner}/${context.repo.repo}`;
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: eventRun.id,
+            });
+            // The REST API may append a ref, e.g. ci.yml@main, to the path.
+            const workflowPath = run.path?.split('@')[0];
+            if (run.name !== 'ci' || workflowPath !== '.github/workflows/ci.yml' ||
+                !['push', 'workflow_dispatch'].includes(run.event) ||
+                run.head_branch !== 'main' ||
+                run.head_repository?.full_name !== ownRepository ||
+                run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.head_sha !== eventRun.head_sha ||
+                run.run_attempt !== eventRun.run_attempt) {
+              throw new Error('Source is not the exact successful, trusted main CI attempt.');
+            }
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              { ...context.repo, run_id: run.id, filter: 'latest', per_page: 100 },
+            );
+            const gates = jobs.filter(job => job.name === 'test');
+            if (gates.length !== 1 || gates[0].conclusion !== 'success') {
+              throw new Error('The final CI gate test must have succeeded.');
+            }
+            const builds = jobs.filter(job => job.name === 'build');
+            if (builds.length !== 1) throw new Error('Expected one CI job named build.');
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              { ...context.repo, run_id: run.id, per_page: 100 },
+            );
+            const dist = artifacts.filter(artifact => artifact.name === 'site-dist');
+            if (builds[0].conclusion === 'skipped' && dist.length === 0) {
+              core.notice('CI skipped the build (documentation-only change); keep the current preview.');
+              return;
+            }
+            if (builds[0].conclusion !== 'success' || dist.length !== 1 || dist[0].expired) {
+              throw new Error('A successful build and one unexpired site-dist artifact are required.');
+            }
+            const { data: main } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'main',
+            });
+            if (main.commit.sha !== run.head_sha) {
+              core.notice('Main has moved; skip this older CI build.');
+              return;
+            }
+            core.setOutput('source-sha', run.head_sha);
+            core.setOutput('ready', 'true');
+
+      - name: Download only this source run's site-dist
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: ${{ runner.temp }}/preview-site
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check the static entry file
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        env:
+          PREVIEW_SITE: ${{ runner.temp }}/preview-site
+        run: test -s "$PREVIEW_SITE/index.html"
+
+      - name: Package the existing build for Pages
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/preview-site
+          retention-days: 1
+
+  deploy:
+    needs: prepare
+    if: needs.prepare.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Read the already enabled Pages configuration
+        uses: actions/configure-pages@v5
+        with:
+          enablement: false
+
+      - name: Recheck main after any environment approval wait
+        id: latest
+        uses: actions/github-script@v8
+        env:
+          SOURCE_SHA: ${{ needs.prepare.outputs.source-sha }}
+        with:
+          script: |
+            const { data: main } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'main',
+            });
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: context.payload.workflow_run.id,
+            });
+            const current = main.commit.sha === process.env.SOURCE_SHA &&
+              run.head_sha === process.env.SOURCE_SHA &&
+              run.status === 'completed' && run.conclusion === 'success' &&
+              run.run_attempt === context.payload.workflow_run.run_attempt;
+            core.setOutput('current', String(current));
+            if (!current) core.notice('Source CI is no longer current and successful; skip deployment.');
+
+      - name: Deploy the prepared artifact
+        if: steps.latest.outputs.current == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

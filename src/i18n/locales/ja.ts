@@ -78,7 +78,7 @@ export const JA = {
   'result.newBest': '自己ベスト更新！',
   'result.prevBest': '更新前の自己ベスト：{score}点',
   'result.rank': '登録後の順位：{rank}位',
-  'result.rank.unknown': '順位は下の上位30名で確認してください。',
+  "result.rank.unknown": "本人の順位を確認できません。上位30名は下に表示しています。",
   'result.prizes': '獲得景品',
   'result.prizes.none': '獲得した景品はありません。',
   'result.sets': '成立したセット',

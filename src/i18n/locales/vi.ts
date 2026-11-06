@@ -75,7 +75,7 @@ export const VI: Record<UiKey, string> = {
   'result.newBest': 'Kỷ lục mới!',
   'result.prevBest': 'Kỷ lục trước: {score} điểm',
   'result.rank': 'Hạng sau khi đăng ký: {rank}',
-  'result.rank.unknown': 'Hãy xem hạng của bạn trong top 30 bên dưới.',
+  "result.rank.unknown": "Chưa thể xác nhận hạng của riêng bạn. Danh sách 30 người đứng đầu ở bên dưới.",
   'result.prizes': 'Quà đã nhận',
   'result.prizes.none': 'Chưa nhận được quà nào.',
   'result.sets': 'Bộ đã hoàn thành',

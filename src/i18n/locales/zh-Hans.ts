@@ -75,7 +75,7 @@ export const ZH_HANS: Record<UiKey, string> = {
   'result.newBest': '刷新最高分！',
   'result.prevBest': '此前最高分：{score}分',
   'result.rank': '登记后的名次：第{rank}名',
-  'result.rank.unknown': '请在下方前30名中查看名次。',
+  "result.rank.unknown": "无法确认你本人的名次。下方显示前30名。",
   'result.prizes': '获得的奖品',
   'result.prizes.none': '没有获得奖品。',
   'result.sets': '达成的套组',
