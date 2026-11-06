@@ -90,7 +90,8 @@
 .booth-map {
   position: fixed;
   right: 8px;
-  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  /* Below the HUD and its prototype line, which wraps to the full width. */
+  top: calc(env(safe-area-inset-top, 0px) + 84px);
   z-index: 9;
   padding: 4px 5px 5px;
   border-radius: 8px;

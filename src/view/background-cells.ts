@@ -20,7 +20,7 @@ export type CellVisual = 'unused' | 'used';
 const DECAL = 0.002;
 
 const COLORS: Readonly<Record<CellVisual, { panel: number; frame: number; mark: number }>> = {
-  unused: { panel: 0xf1e2bd, frame: 0xc2603a, mark: 0x6b3a22 },
+  unused: { panel: 0xe0cc9f, frame: 0xc2603a, mark: 0x6b3a22 },
   used: { panel: 0x3d322c, frame: 0x6b5a4a, mark: 0xd9e6b4 },
 };
 
@@ -66,12 +66,15 @@ function paintCell(k: Kit, cell: BackgroundCellGeometry, visual: CellVisual): vo
   k.box(col.frame, f, h.y * 2, DECAL, [c.x - h.x + f / 2, c.y, face]);
   k.box(col.frame, f, h.y * 2, DECAL, [c.x + h.x - f / 2, c.y, face]);
   const z = face + DECAL;
-  const u = Math.min(h.x, h.y) * 1.5; // mark scale
+  // A small mark in the upper corner, so the prize standing in front stays easy to see.
+  const u = Math.min(h.x, h.y) * 0.42; // mark scale
+  const mx = c.x + h.x - 0.075;
+  const my = c.y + h.y - 0.085;
   if (visual === 'unused') {
-    stroke(k, col.mark, QUESTION, u, 0.024, c.x, c.y - 0.01, z);
-    k.box(col.mark, 0.03, 0.03, DECAL, [c.x, c.y - 0.01 - 0.34 * u, z]);
+    stroke(k, col.mark, QUESTION, u, 0.011, mx, my, z);
+    k.box(col.mark, 0.013, 0.013, DECAL, [mx, my - 0.34 * u, z]);
   } else {
-    stroke(k, col.mark, CHECK, u, 0.03, c.x, c.y, z);
+    stroke(k, col.mark, CHECK, u, 0.014, mx, my, z);
   }
 }
 
