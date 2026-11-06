@@ -4,6 +4,9 @@
  */
 import * as THREE from 'three';
 import type { BoothLayout, Vec3 } from '../contracts';
+import { V2_HORIZONTAL_FOV_DEG, fovForAspect } from './camera-math';
+
+export { V2_HORIZONTAL_FOV_DEG, fovForAspect };
 
 export interface CameraPose {
   readonly eye: Vec3;
@@ -16,23 +19,11 @@ export interface CameraPose {
 const LOOK_FOLLOW = 0.6;
 
 /**
- * Wide enough that the side devices stay discoverable on a tall phone, but
- * capped so perspective does not turn into a fish-eye (vertical fov 52..70).
- */
-export function fovForAspect(aspect: number, horizontalDeg = 40): number {
-  const wantHorizontal = (horizontalDeg * Math.PI) / 180;
-  const v = 2 * Math.atan(Math.tan(wantHorizontal / 2) / Math.max(aspect, 0.2));
-  return Math.min(70, Math.max(52, (v * 180) / Math.PI));
-}
-
-/**
  * Layout v2 (12 columns): the camera looks straight ahead from the stand
  * position and follows it continuously, so the zero aim, the reticle and the
  * picture agree. 34 degrees of horizontal view shows about three and a half
  * columns of the middle board (0.42 m pitch) whatever the phone's aspect.
  */
-export const V2_HORIZONTAL_FOV_DEG = 34;
-
 export function cameraPose(layout: BoothLayout, standX: number, aspect: number): CameraPose {
   const mid = layout.tiers[1]!;
   if (layout.slotModel === 'v2-36') {

@@ -1,0 +1,135 @@
+/* Expanded gameplay UI (plan EG07/EG08): shopkeeper question panel and booth overview map. */
+
+/* ------------------------------------------------------------ question panel */
+.shopq {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  box-sizing: border-box;
+  background: rgba(10, 6, 4, 0.72);
+  touch-action: none;
+}
+.shopq[hidden] { display: none; }
+.shopq-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  box-sizing: border-box;
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  background: #2a160e;
+  border: 2px solid rgba(255, 211, 107, 0.7);
+  color: var(--fg, #fff7ec);
+  outline: none;
+  overflow-wrap: anywhere;
+}
+.shopq-title { margin: 0; font-size: 0.9rem; font-weight: 800; color: #ffd36b; flex: 0 0 auto; }
+.shopq-body {
+  flex: 1 1 auto;
+  min-height: 3.2em;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+.shopq-question { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; line-height: 1.45; }
+.shopq-hint, .shopq-paused { margin: 0; font-size: 0.78rem; line-height: 1.4; opacity: 0.85; }
+.shopq-paused { margin-top: 4px; font-weight: 700; color: #ffd36b; opacity: 1; }
+.shopq-choices {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 62%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+.shopq-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: #6b4a35;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+.shopq-choice:disabled { opacity: 0.5; }
+.shopq-letter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff7ec;
+  color: #2a160e;
+  font-weight: 800;
+}
+.shopq-choice-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.shopq-choice-main { font-size: 1rem; font-weight: 700; line-height: 1.35; }
+.shopq-range { font-size: 0.74rem; line-height: 1.3; opacity: 0.9; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.3); align-self: flex-start; }
+.shopq-range[hidden] { display: none; }
+.shopq[data-paused='1'] .shopq-card { opacity: 0.8; }
+
+/* ------------------------------------------------------------------ booth map */
+.booth-map {
+  position: fixed;
+  right: 8px;
+  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  z-index: 9;
+  padding: 4px 5px 5px;
+  border-radius: 8px;
+  background: rgba(24, 14, 10, 0.86);
+  border: 1px solid rgba(255, 247, 236, 0.45);
+  pointer-events: none;
+  color: #fff7ec;
+}
+.booth-map.booth-map-live { pointer-events: auto; }
+.booth-map-title { font-size: 9px; font-weight: 700; line-height: 1.2; margin-bottom: 2px; opacity: 0.85; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.booth-map-body { position: relative; }
+.booth-map-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--bm-cols, 12), 13px);
+  grid-auto-rows: 11px;
+  gap: 1px;
+}
+.bm-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1px;
+  box-sizing: border-box;
+  border-radius: 2px;
+  font-size: 7px;
+  line-height: 1;
+  overflow: hidden;
+}
+.bm-tile[data-cell='unused'] { background: #f1e2bd; color: #6b3a22; }
+.bm-tile[data-cell='used'] { background: #3d322c; color: #d9e6b4; }
+.bm-tile[data-cell='none'] { background: #5a3d2b; color: #fff7ec; }
+.bm-pip { font-size: 6px; }
+.bm-mark { font-size: 8px; font-weight: 800; }
+.booth-map-view {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  box-sizing: border-box;
+  border: 2px solid #ffd36b;
+  border-radius: 3px;
+  pointer-events: none;
+}
