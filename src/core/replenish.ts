@@ -70,6 +70,8 @@ export interface ReplenishInput {
   /** Slots whose prize was collected in the shot just settled. */
   readonly newlyEmptySlots: readonly SlotId[];
   readonly motionSec: number;
+  /** Expanded rules: draw only from these kinds (assortment series members). Absent/null = all kinds. */
+  readonly candidateTypeIds?: readonly PrizeTypeId[] | null;
 }
 
 export interface ReplenishResult {
@@ -97,7 +99,7 @@ export function replenish(
       stillDeferred.push(slot.slotId);
       continue;
     }
-    const r = drawPrize(catalog, draw, prizes.map((p) => p.typeId), tuning);
+    const r = drawPrize(catalog, draw, prizes.map((p) => p.typeId), tuning, input.candidateTypeIds);
     draw = r.draw;
     const inst = spawnPrize(catalog, r.typeId, slot, next, input.motionSec);
     next += 1;

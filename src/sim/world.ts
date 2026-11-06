@@ -13,9 +13,12 @@
  */
 import RAPIER from '@dimforge/rapier3d-compat';
 import type {
+  BackgroundCellGeometry,
+  BackgroundCellId,
   BoothLayout,
   DeviceActivation,
   DeviceKind,
+  EffectRequest,
   EventId,
   FirstHitKey,
   ImpactTarget,
@@ -79,7 +82,8 @@ type StaticTarget =
   | { readonly t: 'surface'; readonly id: string; readonly material: SurfaceMaterial }
   | { readonly t: 'device'; readonly deviceId: ReturnType<typeof mintId.device>; readonly kind: DeviceKind }
   | { readonly t: 'shopkeeper'; readonly part: ShopkeeperPart }
-  | { readonly t: 'hidden'; readonly targetId: string };
+  | { readonly t: 'hidden'; readonly targetId: string }
+  | { readonly t: 'cell'; readonly cellId: BackgroundCellId };
 type Target = StaticTarget | { readonly t: 'prize'; readonly id: PrizeInstanceId };
 
 const SURFACE_FRICTION: Readonly<Record<SurfaceMaterial, number>> = { wood: 0.5, cloth: 0.8, paper: 0.6, metal: 0.35, plastic: 0.45 };
@@ -127,6 +131,20 @@ interface ActiveShot {
   transformReserved: boolean;
   transforms: PrizeTransformedEvent[];
   nextProjectileIndex: number;
+  /** Expanded rules only (null = rules-v1 pipeline). */
+  readonly expanded: NonNullable<ShotContext['expanded']> | null;
+  readonly usableCells: ReadonlySet<BackgroundCellId>;
+  readonly activatedCells: Set<BackgroundCellId>;
+  readonly requests: PendingRequest[];
+  /** Contact sequence inside the current fixed step (reset every step). */
+  contactSeq: number;
+}
+
+interface PendingRequest {
+  readonly source: EffectRequest['source'];
+  readonly simTimeSec: number;
+  readonly contactOrder: number;
+  readonly targetId: string;
 }
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
@@ -159,6 +177,18 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   for (const d of layout.devices) addStatic(d.box, SURFACE_FRICTION.metal, { t: 'device', deviceId: d.deviceId, kind: d.kind });
   for (const p of layout.shopkeeper) addStatic(p.box, SURFACE_FRICTION.cloth, { t: 'shopkeeper', part: p.part });
   for (const h of layout.hiddenTargets) addStatic(h.box, SURFACE_FRICTION.wood, { t: 'hidden', targetId: h.targetId });
+  // Layout v2: thin solid boxes on the back wall. Real surfaces (corks reflect, prizes in front block them).
+  const cellGeoms: readonly BackgroundCellGeometry[] = [...(layout.backgroundCells ?? [])].sort((a, b) => (a.cellId < b.cellId ? -1 : 1));
+  for (const c of cellGeoms) addStatic(c.box, SURFACE_FRICTION.wood, { t: 'cell', cellId: c.cellId });
+  /** One cell per contact: the cell whose face contains the point (boundary tolerance, then lowest id). */
+  const CELL_EDGE_EPS = 1e-6;
+  const cellAtPoint = (pt: Vec3, hitCell: BackgroundCellId): BackgroundCellId => {
+    for (const c of cellGeoms) {
+      const b = c.box;
+      if (Math.abs(pt.x - b.center.x) <= b.halfExtents.x + CELL_EDGE_EPS && Math.abs(pt.y - b.center.y) <= b.halfExtents.y + CELL_EDGE_EPS) return c.cellId;
+    }
+    return hitCell;
+  };
 
   // ---- state
   let simTime = 0;
@@ -294,6 +324,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return { kind: 'shopkeeper', part: t.part };
       case 'hidden':
         return { kind: 'hidden', targetId: t.targetId };
+      case 'cell':
+        return { kind: 'cell', cellId: t.cellId, activated };
       case 'prize': {
         const p = live.get(t.id)!;
         return { kind: 'prize', instanceId: t.id, typeId: p.src.typeId, material: p.cfg.material };
@@ -310,6 +342,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return `k:${t.part}`;
       case 'hidden':
         return `h:${t.targetId}`;
+      case 'cell':
+        return `c:${t.cellId}`;
       case 'prize':
         return `p:${t.id}`;
     }
@@ -323,6 +357,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       case 'shopkeeper':
         return 'cloth';
       case 'hidden':
+      case 'cell':
         return 'wood';
       case 'prize':
         return live.get(t.id)!.cfg.material;
@@ -359,12 +394,13 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (!lp.mounted) lp.body.applyImpulseAtPoint(scale(dir, impulse), point, true);
   };
 
-  const onCorkHit = (a: ActiveShot, p: Projectile, target: Target, hitNormal: Vec3): void => {
+  const onCorkHit = (a: ActiveShot, p: Projectile, hitTarget: Target, hitNormal: Vec3, hitTimeSec: number): void => {
     const speed = len(p.velocity);
     const dir = normalize(p.velocity);
     let n = normalize(hitNormal);
     if (len(n) === 0 || dot(n, p.velocity) > 0) n = len(n) === 0 ? scale(dir, -1) : scale(n, -1);
     const point = add(p.position, scale(n, -tuning.cork.radius));
+    const target: Target = hitTarget.t === 'cell' ? { t: 'cell', cellId: cellAtPoint(point, hitTarget.cellId) } : hitTarget;
     const key = targetKey(target);
     const last = p.lastContact.get(key);
     const continuing = last !== undefined && simTime - last <= CONTACT_DEDUPE_SEC;
@@ -373,7 +409,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     let splitNow = false;
     if (!continuing) {
       const reflectionIndex = p.reflections;
-      const activated = target.t === 'device' && !a.usedDevices.has(target.deviceId);
+      const activated =
+        (target.t === 'device' && !a.usedDevices.has(target.deviceId)) ||
+        (target.t === 'cell' && a.usableCells.has(target.cellId) && !a.activatedCells.has(target.cellId));
       emit((eventId, shotId) => ({
         type: 'impact',
         eventId,
@@ -386,7 +424,11 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         speed,
         reflectionIndex,
       }));
-      if (target.t === 'device' && activated) splitNow = activateDevice(a, p, target.deviceId, target.kind);
+      if (target.t === 'device' && activated) splitNow = activateDevice(a, p, target.deviceId, target.kind, hitTimeSec);
+      if (target.t === 'cell' && activated) {
+        a.activatedCells.add(target.cellId);
+        recordRequest(a, { kind: 'cell', cellId: target.cellId }, hitTimeSec, target.cellId);
+      }
       if (target.t === 'prize') hitPrize(a, p, live.get(target.id)!, point, speed, dir);
       if (target.t === 'shopkeeper') a.firstHit.push(`shopkeeper:${target.part}`);
       if (target.t === 'hidden') a.firstHit.push(`hidden:${target.targetId}`);
@@ -404,8 +446,13 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     else if (wouldHitLimit) endProjectile(a, p, 'reflectionLimit');
   };
 
+  /** Expanded rules: remember a post-flight request; ids and final order are fixed at the barrier. */
+  const recordRequest = (a: ActiveShot, source: EffectRequest['source'], simTimeSec: number, targetId: string): void => {
+    a.requests.push({ source, simTimeSec, contactOrder: a.contactSeq++, targetId });
+  };
+
   /** Record the activation and apply what happens at once. Returns true when the cork should split. */
-  const activateDevice = (a: ActiveShot, p: Projectile, deviceId: DeviceActivation['deviceId'], kind: DeviceKind): boolean => {
+  const activateDevice = (a: ActiveShot, p: Projectile, deviceId: DeviceActivation['deviceId'], kind: DeviceKind, hitTimeSec: number): boolean => {
     a.usedDevices.add(deviceId);
     a.activations.push({ deviceId, kind, projectileId: p.id });
     emit((eventId, shotId) => ({ type: 'deviceActivated', eventId, shotId, deviceId, deviceKind: kind, projectileId: p.id }));
@@ -415,11 +462,14 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return false;
       case 'transform':
         a.transformReserved = true; // applied after the flight ends (decision 32)
+        if (a.expanded) recordRequest(a, { kind: 'device', deviceId, deviceKind: kind }, hitTimeSec, deviceId);
         return false;
       case 'split':
         return true;
       default:
-        return false; // penalty / ammo / bulletType: the run applies them at settlement
+        // penalty / ammo / bulletType: the run applies them at settlement (expanded: as post-flight requests)
+        if (a.expanded) recordRequest(a, { kind: 'device', deviceId, deviceKind: kind }, hitTimeSec, deviceId);
+        return false;
     }
   };
 
@@ -486,7 +536,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         p.position = add(p.position, scale(p.velocity, remaining));
         break;
       }
-      onCorkHit(a, p, target, vec(hit.normal1));
+      onCorkHit(a, p, target, vec(hit.normal1), a.elapsed - remaining);
     }
     if (!p.ended && !inBounds(p.position)) endProjectile(a, p, 'outOfBounds');
   };
@@ -683,6 +733,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     updateMounted();
     const a = active;
     if (a) {
+      a.contactSeq = 0;
       a.elapsed += fixedDt;
       if (a.stage === 'flight') for (const p of [...a.projectiles]) if (!p.ended) stepProjectile(a, p, fixedDt);
     }
@@ -726,6 +777,11 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       transformReserved: false,
       transforms: [],
       nextProjectileIndex: 1,
+      expanded: context.expanded ?? null,
+      usableCells: new Set(context.expanded?.usableCells ?? []),
+      activatedCells: new Set(),
+      requests: [],
+      contactSeq: 0,
     };
     active = a;
     const speed = initialSpeed(request.bulletType, tuning);

@@ -244,3 +244,52 @@ describe('catalog helper typing', () => {
     expect(asPrizeTypeId('P001')).toBe('P001');
   });
 });
+
+describe('draw with a candidate subset (assortment series, EG03)', () => {
+  const ids = [...PROTOTYPE_CATALOG.prizes.keys()];
+  const subset = ids.slice(0, 4);
+  const T36: TuningConfig = { ...T, shelfSlotCount: 36, draw: { ...T.draw, tierTargets: { easy: 12, normal: 16, hard: 8 } } };
+
+  it('without a subset the draw is identical to before (same rng sequence)', () => {
+    let a = createDrawState(5);
+    let b = createDrawState(5);
+    for (let i = 0; i < 30; i++) {
+      const x = drawPrize(PROTOTYPE_CATALOG, a, [], T);
+      const y = drawPrize(PROTOTYPE_CATALOG, b, [], T, null);
+      expect(x).toEqual(y);
+      a = x.draw;
+      b = y.draw;
+    }
+  });
+
+  it('draws only inside the subset and keeps weights positive', () => {
+    const w = computeWeights(PROTOTYPE_CATALOG, createDrawState(1), [], T36, subset);
+    expect(w.map((x) => x.typeId).sort()).toEqual([...subset].sort());
+    for (const x of w) expect(x.weight).toBeGreaterThan(0);
+    let d = createDrawState(2);
+    for (let i = 0; i < 200; i++) {
+      const r = drawPrize(PROTOTYPE_CATALOG, d, [], T36, subset);
+      expect(subset).toContain(r.typeId);
+      d = r.draw;
+    }
+  });
+
+  it('keeps the recent-kind penalty inside the subset', () => {
+    const d: DrawState = { ...createDrawState(1), history: [subset[0]!] };
+    const w = computeWeights(PROTOTYPE_CATALOG, d, [], T36, subset);
+    const tier = (id: PrizeTypeId) => PROTOTYPE_CATALOG.prizes.get(id)!.difficulty;
+    const recent = w.find((x) => x.typeId === subset[0])!;
+    const same = w.filter((x) => x.typeId !== subset[0] && tier(x.typeId) === tier(subset[0]!));
+    for (const o of same) expect(recent.weight).toBeCloseTo(o.weight * T36.draw.recentPenalty, 9);
+  });
+
+  it('a single-kind subset still draws (no forced missing tier)', () => {
+    const one = [ids[0]!];
+    expect(drawPrize(PROTOTYPE_CATALOG, createDrawState(3), [], T36, one).typeId).toBe(one[0]);
+  });
+
+  it('rejects an empty subset and unknown kinds instead of mixing in other kinds', () => {
+    expect(() => drawPrize(PROTOTYPE_CATALOG, createDrawState(1), [], T36, [])).toThrow(RangeError);
+    expect(() => drawPrize(PROTOTYPE_CATALOG, createDrawState(1), [], T36, [asPrizeTypeId('P999')])).toThrow(RangeError);
+  });
+});
