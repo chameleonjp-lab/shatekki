@@ -44,3 +44,22 @@ ko 주먹밥, zh 饭团/飯糰), dango (kept in Latin scripts; zh 丸子/糰子,
 
 Have a native speaker per locale check names (especially cultural items), hint tone, and length on small screens before
 public release; record the result against O16.
+
+## Expanded gameplay text (EG09, part 1)
+
+Scope: player-facing text for D34-D37 - 300 pair names/hints (PAIR001-300), 200 shopkeeper questions with A/B choices,
+6 group labels, 100 effect names and result lines (FX001-100), 20 series labels/symbols (SER01-20) and four fixed lines.
+Code: `src/i18n/expanded/` (types, `ja.ts`, `en.ts` + parts), resolver `src/i18n/expanded-content.ts`
+(`pairName`, `pairHint`, `questionText`, `choiceText`, `groupLabel`, `effectName`, `effectResult`, `seriesLabel`,
+`seriesSymbol`, `expandedLine`, `contentCoverage`). Fallback: locale -> en -> ja data -> id.
+
+- Status (open item O16 style): all texts are machine-produced by Claude, **not reviewed by a native speaker**. The ja
+  pair hints and result lines are written here (not in the data) and are prototypes like the existing set hints (O02).
+- Done: ja (source texts from `data/expansion-v2/*_ja` + written hints/results/lines) and en, complete for every field.
+- Pending (fall back to English until filled): es, pt-BR, zh-Hans, fr, de, ko, ru, it, zh-Hant, id, tr, vi, th.
+  `contentCoverage()` lists per-locale counts; a pending locale may hold partial content, a complete one must hold all.
+- Hints: a gentle scene/category clue plus "needs 2 kinds"; they never name both prizes and never paste the designer note.
+  Some clues are close to the scene in the designer note and may still be easy to guess; review before release.
+- Result lines say what happened and never promise success. `{n}` is the real amount (only FX001-003, FX021-023);
+  `{series}` is the series label (FX041-080). Texts never change ids, numbers, probabilities or which effect a choice leads to.
+- Series symbols: one short symbol per series in every place it appears (ja `[菓]` from data, en `[Sweets]`).
