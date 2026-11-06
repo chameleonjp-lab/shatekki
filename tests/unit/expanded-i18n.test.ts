@@ -10,6 +10,7 @@ import {
   EXPANDED_REGISTRY,
   choiceText,
   contentCoverage,
+  createExpandedText,
   effectName,
   effectResult,
   expandedLine,
@@ -23,7 +24,7 @@ import {
 } from '../../src/i18n/expanded-content';
 import { EN_CONTENT } from '../../src/i18n/expanded/en';
 import { JA_SUPPLEMENT } from '../../src/i18n/expanded/ja';
-import { EXPANDED_LINE_KEYS } from '../../src/i18n/expanded/types';
+import { EXPANDED_LINE_KEYS, type ExpandedLocaleContent } from '../../src/i18n/expanded/types';
 import { LOCALES } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/locales';
 
@@ -45,6 +46,11 @@ const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
   ko: /2종류/,
   ru: /2 вида/,
   it: /2 tipi/,
+  'zh-Hant': /2種/,
+  id: /2 jenis/,
+  tr: /2 çeşit/,
+  vi: /2 loại/,
+  th: /2 ชนิด/,
 };
 const BAD = /\bTODO\b|FIXME|XXX|xxx|\?\?\?|[Ll]orem|undefined|\[object/; // case-sensitive TODO: Spanish "todo/todos" is a word
 const pairRows = pairs as { id: string; name_ja: string; prizeIds: string[]; designNote_ja: string }[];
@@ -229,15 +235,21 @@ describe('series symbols', () => {
 });
 
 describe('fallback order', () => {
-  it('pending locales fall back to English, then ja data, then the id', () => {
-    expect(pairName('zh-Hant', 'PAIR001')).toBe(pairName('en', 'PAIR001'));
-    expect(questionText('th', 'Q001')).toBe(questionText('en', 'Q001'));
-    expect(choiceText('id', 'Q002', 'B')).toBe(choiceText('en', 'Q002', 'B'));
-    expect(effectResult('tr', 'FX041')).toBe(effectResult('en', 'FX041'));
-    expect(expandedLine('vi', 'noOutlineTarget')).toBe(expandedLine('en', 'noOutlineTarget'));
+  // Every shipped locale is complete, so the fallback is checked on a test registry that leaves
+  // entries out on purpose (plan T1): a real translation is never compared with English here.
+  const partialTh: Partial<ExpandedLocaleContent> = { pairNames: { PAIR001: 'ชุดทดสอบ' } };
+  const testRegistry = { ...EXPANDED_REGISTRY, th: { status: 'pending' as const, content: partialTh }, vi: { status: 'pending' as const, content: {} } };
+  const test = createExpandedText(testRegistry);
+
+  it('a locale missing entries falls back to English, then ja data, then the id', () => {
+    expect(test.pairName('vi', 'PAIR001')).toBe(pairName('en', 'PAIR001'));
+    expect(test.questionText('th', 'Q001')).toBe(questionText('en', 'Q001'));
+    expect(test.choiceText('vi', 'Q002', 'B')).toBe(choiceText('en', 'Q002', 'B'));
+    expect(test.effectResult('th', 'FX041')).toBe(effectResult('en', 'FX041'));
+    expect(test.expandedLine('vi', 'noOutlineTarget')).toBe(expandedLine('en', 'noOutlineTarget'));
     // unknown ids: ja data has nothing either, so the id itself comes back
     expect(pairName('en', 'PAIR999')).toBe('PAIR999');
-    expect(pairHint('zh-Hant', 'PAIR999')).toBe('PAIR999');
+    expect(test.pairHint('vi', 'PAIR999')).toBe('PAIR999');
     expect(effectName('en', 'FX999')).toBe('FX999');
     expect(choiceText('en', 'Q999', 'A')).toBe('Q999.A');
   });
@@ -248,9 +260,17 @@ describe('fallback order', () => {
     expect(effectName('ja', 'FX001')).toBe('弾を1発もらう');
     expect(groupLabel('ja', 'GAIN')).toBe('弾を増やす・弾を変える');
   });
-  it('a pending locale that gains a partial entry overrides only that field', () => {
-    const entry = EXPANDED_REGISTRY['zh-Hant'];
-    expect(entry.status).toBe('pending');
+  it('a locale with a partial entry overrides only that field', () => {
+    expect(test.pairName('th', 'PAIR001')).toBe('ชุดทดสอบ');
+    expect(test.pairName('th', 'PAIR002')).toBe(pairName('en', 'PAIR002'));
+    expect(test.pairHint('th', 'PAIR001')).toBe(pairHint('en', 'PAIR001'));
+  });
+  it('the shipped translations themselves never equal English (all 15 dictionaries are filled in)', () => {
+    for (const l of COMPLETE_LOCALES.filter((x) => x !== 'en' && x !== 'ja')) {
+      expect(pairName(l, 'PAIR001'), l).not.toBe(pairName('en', 'PAIR001'));
+      expect(questionText(l, 'Q001'), l).not.toBe(questionText('en', 'Q001'));
+      expect(expandedLine(l, 'noOutlineTarget'), l).not.toBe(expandedLine('en', 'noOutlineTarget'));
+    }
   });
 });
 

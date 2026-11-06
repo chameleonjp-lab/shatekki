@@ -18,22 +18,25 @@ import { PT_BR_CONTENT } from './expanded/pt-BR';
 import { RU_CONTENT } from './expanded/ru';
 import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
 import { IT_CONTENT } from './expanded/it';
+import { ZH_HANT_CONTENT } from './expanded/zh-Hant';
+import { ID_CONTENT } from './expanded/id';
+import { TR_CONTENT } from './expanded/tr';
+import { VI_CONTENT } from './expanded/vi';
+import { TH_CONTENT } from './expanded/th';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
   EXPANDED_COUNTS,
   type ExpandedLineKey,
-  type ExpandedLocaleEntry,
   type ExpandedRegistry,
   type PartialExpandedContent,
 } from './expanded/types';
 import type { Locale } from './locales';
 
-const PENDING: ExpandedLocaleEntry = { status: 'pending', content: {} };
 
 /**
- * Registry for every locale except ja (ja is the data files + supplement).
- * Locales still `pending` carry no (or partial) text and fall back to English; fill them
- * in `src/i18n/expanded/<locale>.ts` and switch their entry to `complete`.
+ * Registry for every locale except ja (ja is the data files + supplement). All 14 are
+ * complete (plan T1). A locale added later may start as `{ status: 'pending', content: {} }`:
+ * a missing entry falls back to English, then the ja data, then the id.
  */
 export const EXPANDED_REGISTRY: ExpandedRegistry = {
   en: { status: 'complete', content: EN_CONTENT },
@@ -45,11 +48,11 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   ko: { status: 'complete', content: KO_CONTENT },
   ru: { status: 'complete', content: RU_CONTENT },
   it: { status: 'complete', content: IT_CONTENT },
-  'zh-Hant': PENDING,
-  id: PENDING,
-  tr: PENDING,
-  vi: PENDING,
-  th: PENDING,
+  'zh-Hant': { status: 'complete', content: ZH_HANT_CONTENT },
+  id: { status: 'complete', content: ID_CONTENT },
+  tr: { status: 'complete', content: TR_CONTENT },
+  vi: { status: 'complete', content: VI_CONTENT },
+  th: { status: 'complete', content: TH_CONTENT },
 };
 
 interface NamedJa {
@@ -63,86 +66,6 @@ const Q_JA = indexBy(questionsJa as readonly { id: string; text_ja: string; A: {
 const GROUP_JA = indexBy(groupsJa as readonly { id: string; label_ja: string }[]);
 const FX_JA = indexBy(effectsJa as readonly { id: string; name_ja: string }[]);
 const SER_JA = indexBy(seriesJa as readonly { id: string; name_ja: string; symbol_ja: string }[]);
-
-function partial(locale: Locale): PartialExpandedContent | undefined {
-  return locale === 'ja' ? undefined : EXPANDED_REGISTRY[locale]?.content;
-}
-function en(): PartialExpandedContent {
-  return EN_CONTENT;
-}
-const nonEmpty = (s: string | undefined): s is string => typeof s === 'string' && s.length > 0;
-
-export function pairName(locale: Locale, id: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.pairNames?.[id] ?? en().pairNames?.[id];
-    if (nonEmpty(t)) return t;
-  }
-  return PAIR_JA.get(id)?.name_ja ?? id;
-}
-
-export function pairHint(locale: Locale, id: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.pairHints?.[id] ?? en().pairHints?.[id];
-    if (nonEmpty(t)) return t;
-  }
-  return JA_SUPPLEMENT.pairHints[id] ?? id;
-}
-
-export function questionText(locale: Locale, qid: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.questions?.[qid]?.text ?? en().questions?.[qid]?.text;
-    if (nonEmpty(t)) return t;
-  }
-  return Q_JA.get(qid)?.text_ja ?? qid;
-}
-
-export function choiceText(locale: Locale, qid: string, choice: 'A' | 'B'): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.questions?.[qid]?.[choice] ?? en().questions?.[qid]?.[choice];
-    if (nonEmpty(t)) return t;
-  }
-  return Q_JA.get(qid)?.[choice].text_ja ?? `${qid}.${choice}`;
-}
-
-export function groupLabel(locale: Locale, groupId: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.groups?.[groupId] ?? en().groups?.[groupId];
-    if (nonEmpty(t)) return t;
-  }
-  return GROUP_JA.get(groupId)?.label_ja ?? groupId;
-}
-
-export function effectName(locale: Locale, fx: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.effectNames?.[fx] ?? en().effectNames?.[fx];
-    if (nonEmpty(t)) return t;
-  }
-  return FX_JA.get(fx)?.name_ja ?? fx;
-}
-
-export function seriesLabel(locale: Locale, ser: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.seriesLabels?.[ser] ?? en().seriesLabels?.[ser];
-    if (nonEmpty(t)) return t;
-  }
-  return SER_JA.get(ser)?.name_ja ?? ser;
-}
-
-export function seriesSymbol(locale: Locale, ser: string): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.seriesSymbols?.[ser] ?? en().seriesSymbols?.[ser];
-    if (nonEmpty(t)) return t;
-  }
-  return SER_JA.get(ser)?.symbol_ja ?? ser;
-}
-
-export function expandedLine(locale: Locale, key: ExpandedLineKey): string {
-  if (locale !== 'ja') {
-    const t = partial(locale)?.lines?.[key] ?? en().lines?.[key];
-    if (nonEmpty(t)) return t;
-  }
-  return JA_SUPPLEMENT.lines[key] ?? key;
-}
 
 /** FX041-FX060 and FX061-FX080 name the series SER01-SER20 in order. */
 export function seriesOfEffect(fx: string): string | null {
@@ -160,19 +83,107 @@ export interface EffectResultParams {
   readonly applicable?: boolean;
 }
 
-export function effectResult(locale: Locale, fx: string, params: EffectResultParams = {}): string {
-  if (params.applicable === false) return expandedLine(locale, 'effectNotApplicable');
-  let raw: string | undefined;
-  if (locale !== 'ja') {
-    const t = partial(locale)?.effectResults?.[fx] ?? en().effectResults?.[fx];
-    if (nonEmpty(t)) raw = t;
+/** The text resolvers over one registry (tests build one with entries left out on purpose). */
+export function createExpandedText(registry: ExpandedRegistry) {
+  function partial(locale: Locale): PartialExpandedContent | undefined {
+    return locale === 'ja' ? undefined : registry[locale]?.content;
   }
-  raw ??= JA_SUPPLEMENT.effectResults[fx] ?? fx;
-  const ser = seriesOfEffect(fx);
-  return raw
-    .replace(/\{n\}/g, params.n === undefined ? '' : String(params.n))
-    .replace(/\{series\}/g, ser ? seriesLabel(locale, ser) : '');
+  function en(): PartialExpandedContent {
+    return EN_CONTENT;
+  }
+  const nonEmpty = (s: string | undefined): s is string => typeof s === 'string' && s.length > 0;
+
+  function pairName(locale: Locale, id: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.pairNames?.[id] ?? en().pairNames?.[id];
+      if (nonEmpty(t)) return t;
+    }
+    return PAIR_JA.get(id)?.name_ja ?? id;
+  }
+
+  function pairHint(locale: Locale, id: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.pairHints?.[id] ?? en().pairHints?.[id];
+      if (nonEmpty(t)) return t;
+    }
+    return JA_SUPPLEMENT.pairHints[id] ?? id;
+  }
+
+  function questionText(locale: Locale, qid: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.questions?.[qid]?.text ?? en().questions?.[qid]?.text;
+      if (nonEmpty(t)) return t;
+    }
+    return Q_JA.get(qid)?.text_ja ?? qid;
+  }
+
+  function choiceText(locale: Locale, qid: string, choice: 'A' | 'B'): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.questions?.[qid]?.[choice] ?? en().questions?.[qid]?.[choice];
+      if (nonEmpty(t)) return t;
+    }
+    return Q_JA.get(qid)?.[choice].text_ja ?? `${qid}.${choice}`;
+  }
+
+  function groupLabel(locale: Locale, groupId: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.groups?.[groupId] ?? en().groups?.[groupId];
+      if (nonEmpty(t)) return t;
+    }
+    return GROUP_JA.get(groupId)?.label_ja ?? groupId;
+  }
+
+  function effectName(locale: Locale, fx: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.effectNames?.[fx] ?? en().effectNames?.[fx];
+      if (nonEmpty(t)) return t;
+    }
+    return FX_JA.get(fx)?.name_ja ?? fx;
+  }
+
+  function seriesLabel(locale: Locale, ser: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.seriesLabels?.[ser] ?? en().seriesLabels?.[ser];
+      if (nonEmpty(t)) return t;
+    }
+    return SER_JA.get(ser)?.name_ja ?? ser;
+  }
+
+  function seriesSymbol(locale: Locale, ser: string): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.seriesSymbols?.[ser] ?? en().seriesSymbols?.[ser];
+      if (nonEmpty(t)) return t;
+    }
+    return SER_JA.get(ser)?.symbol_ja ?? ser;
+  }
+
+  function expandedLine(locale: Locale, key: ExpandedLineKey): string {
+    if (locale !== 'ja') {
+      const t = partial(locale)?.lines?.[key] ?? en().lines?.[key];
+      if (nonEmpty(t)) return t;
+    }
+    return JA_SUPPLEMENT.lines[key] ?? key;
+  }
+
+  function effectResult(locale: Locale, fx: string, params: EffectResultParams = {}): string {
+    if (params.applicable === false) return expandedLine(locale, 'effectNotApplicable');
+    let raw: string | undefined;
+    if (locale !== 'ja') {
+      const t = partial(locale)?.effectResults?.[fx] ?? en().effectResults?.[fx];
+      if (nonEmpty(t)) raw = t;
+    }
+    raw ??= JA_SUPPLEMENT.effectResults[fx] ?? fx;
+    const ser = seriesOfEffect(fx);
+    return raw
+      .replace(/\{n\}/g, params.n === undefined ? '' : String(params.n))
+      .replace(/\{series\}/g, ser ? seriesLabel(locale, ser) : '');
+  }
+
+  return { pairName, pairHint, questionText, choiceText, groupLabel, effectName, seriesLabel, seriesSymbol, expandedLine, effectResult };
 }
+
+const DEFAULT_TEXT = createExpandedText(EXPANDED_REGISTRY);
+export const { pairName, pairHint, questionText, choiceText, groupLabel, effectName, seriesLabel, seriesSymbol, expandedLine, effectResult } = DEFAULT_TEXT;
 
 export interface ExpandedCoverage {
   readonly locale: Locale;
