@@ -52,6 +52,8 @@ export interface RulesApi {
   planFlightEnd?(state: RunState, barrier: FlightBarrier, ctx: RulesContext): RunState;
   /** Expanded rules: accept one answer for the pending question; returns the same object when rejected. */
   answerShopkeeper?(state: RunState, command: AnswerShopkeeperCommand, ctx: RulesContext): RunState;
+  /** Expanded rules: confirm the shot from the completed plan and the final record (the only settlement entry). */
+  resolveExpandedShot?(state: RunState, record: ShotRecord, ctx: RulesContext): { state: RunState; summary: ShotSummary };
 }
 
 export interface RulesContext {
@@ -282,7 +284,12 @@ export class GameController {
       // Expanded rules: only a shot whose effect plan was completed and accepted can be confirmed.
       return;
     }
-    const { state, summary } = this.deps.rules.resolveShot(this.state, record, this.deps.catalog, this.deps.tuning);
+    const expanded = isExpandedRunState(this.state);
+    if (expanded && !this.deps.rules.resolveExpandedShot) throw new Error('expanded run without an expanded settlement');
+    const { state, summary } =
+      expanded && this.deps.rules.resolveExpandedShot
+        ? this.deps.rules.resolveExpandedShot(this.state, record, this.ctx)
+        : this.deps.rules.resolveShot(this.state, record, this.deps.catalog, this.deps.tuning);
     this.state = state;
     this.lastSummary = summary;
     if (state.phase !== 'ended') this.deps.world.syncShelf(state.shelf, state.clocks.motionSec);

@@ -71,7 +71,7 @@ const fakeRules: RulesApi = {
     if (!plan?.question || plan.question.answer || cmd.shotId !== state.inFlight!.shotId || cmd.questionId !== plan.question.questionId) return state;
     return { ...state, inFlight: { ...state.inFlight!, stage: 'postEffects', plan: { ...plan, question: { ...plan.question, answer: cmd.choice }, complete: true } } };
   },
-  resolveShot: (state, record) => ({
+  resolveExpandedShot: (state, record) => ({
     state: { ...state, phase: 'position', inFlight: null, expansion: { ...state.expansion!, active: null } },
     summary: { shotId: record.shotId } as never,
   }),
