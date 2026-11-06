@@ -41,6 +41,10 @@ const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
   'pt-BR': /2 tipos/,
   'zh-Hans': /2种/,
   fr: /2 types/,
+  de: /2 Sorten/,
+  ko: /2종류/,
+  ru: /2 вида/,
+  it: /2 tipi/,
 };
 const BAD = /\bTODO\b|FIXME|XXX|xxx|\?\?\?|[Ll]orem|undefined|\[object/; // case-sensitive TODO: Spanish "todo/todos" is a word
 const pairRows = pairs as { id: string; name_ja: string; prizeIds: string[]; designNote_ja: string }[];
@@ -226,14 +230,14 @@ describe('series symbols', () => {
 
 describe('fallback order', () => {
   it('pending locales fall back to English, then ja data, then the id', () => {
-    expect(pairName('de', 'PAIR001')).toBe(pairName('en', 'PAIR001'));
+    expect(pairName('zh-Hant', 'PAIR001')).toBe(pairName('en', 'PAIR001'));
     expect(questionText('th', 'Q001')).toBe(questionText('en', 'Q001'));
-    expect(choiceText('ko', 'Q002', 'B')).toBe(choiceText('en', 'Q002', 'B'));
+    expect(choiceText('id', 'Q002', 'B')).toBe(choiceText('en', 'Q002', 'B'));
     expect(effectResult('tr', 'FX041')).toBe(effectResult('en', 'FX041'));
-    expect(expandedLine('ru', 'noOutlineTarget')).toBe(expandedLine('en', 'noOutlineTarget'));
+    expect(expandedLine('vi', 'noOutlineTarget')).toBe(expandedLine('en', 'noOutlineTarget'));
     // unknown ids: ja data has nothing either, so the id itself comes back
     expect(pairName('en', 'PAIR999')).toBe('PAIR999');
-    expect(pairHint('de', 'PAIR999')).toBe('PAIR999');
+    expect(pairHint('zh-Hant', 'PAIR999')).toBe('PAIR999');
     expect(effectName('en', 'FX999')).toBe('FX999');
     expect(choiceText('en', 'Q999', 'A')).toBe('Q999.A');
   });
@@ -245,7 +249,7 @@ describe('fallback order', () => {
     expect(groupLabel('ja', 'GAIN')).toBe('弾を増やす・弾を変える');
   });
   it('a pending locale that gains a partial entry overrides only that field', () => {
-    const entry = EXPANDED_REGISTRY.de;
+    const entry = EXPANDED_REGISTRY['zh-Hant'];
     expect(entry.status).toBe('pending');
   });
 });

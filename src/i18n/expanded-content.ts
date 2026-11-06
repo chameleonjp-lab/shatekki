@@ -9,11 +9,15 @@ import groupsJa from '../../data/expansion-v2/groups.json';
 import pairsJa from '../../data/expansion-v2/pair-sets.json';
 import questionsJa from '../../data/expansion-v2/questions.json';
 import seriesJa from '../../data/expansion-v2/series.json';
+import { DE_CONTENT } from './expanded/de';
 import { EN_CONTENT } from './expanded/en';
 import { ES_CONTENT } from './expanded/es';
 import { FR_CONTENT } from './expanded/fr';
+import { KO_CONTENT } from './expanded/ko';
 import { PT_BR_CONTENT } from './expanded/pt-BR';
+import { RU_CONTENT } from './expanded/ru';
 import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
+import { IT_CONTENT } from './expanded/it';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
   EXPANDED_COUNTS,
@@ -37,10 +41,10 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   'pt-BR': { status: 'complete', content: PT_BR_CONTENT },
   'zh-Hans': { status: 'complete', content: ZH_HANS_CONTENT },
   fr: { status: 'complete', content: FR_CONTENT },
-  de: PENDING,
-  ko: PENDING,
-  ru: PENDING,
-  it: PENDING,
+  de: { status: 'complete', content: DE_CONTENT },
+  ko: { status: 'complete', content: KO_CONTENT },
+  ru: { status: 'complete', content: RU_CONTENT },
+  it: { status: 'complete', content: IT_CONTENT },
   'zh-Hant': PENDING,
   id: PENDING,
   tr: PENDING,
