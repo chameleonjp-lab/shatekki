@@ -259,6 +259,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // Expanded rules only (EG07/EG08): the shopkeeper question and the 3×12 overview.
   let questionPanel: QuestionPanelHandle | null = null;
   let boothMap: BoothMapHandle | null = null;
+  let effectResults: ReturnType<ExpandedUiKit['mountEffectResults']> | null = null;
   let mapUpdatedAt = -Infinity;
   let screenHandle: ScreenHandle<never> | null = null;
   let bookHandle: ScreenHandle<never> | null = null;
@@ -398,6 +399,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     questionPanel = null;
     boothMap?.destroy();
     boothMap = null;
+    effectResults?.destroy();
+    effectResults = null;
     if (expansion && expandedUi) {
       boothMap = expandedUi.mountBoothMap(ui, {
         layout,
@@ -416,6 +419,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (ok) cue('confirm');
           return ok;
         },
+      });
+      effectResults = expandedUi.mountEffectResults(ui, {
+        t: expText,
+        line: (key) => expandedUi.expandedLine(i18n.locale, key),
       });
       mapUpdatedAt = -Infinity;
     }
@@ -487,6 +494,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
+          effectResults?.hide();
           runStore.saveAfterFire(s);
           markStale();
         },
@@ -494,6 +502,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
+          effectResults?.show({ effects: summary.effects, deferredTransforms: summary.deferredTransforms });
           if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
           if (summary.newlyCompletedSets.length > 0) {
             cue('setComplete');
