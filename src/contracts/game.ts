@@ -6,12 +6,17 @@
  * in tests. Physics bodies live in src/sim and are rebuilt from RunState.
  */
 import type { PrizeInstanceId, PrizeTypeId, RunId, SetId, ShotId, SlotId, DeviceId } from './ids';
+import { isQuestionId } from './ids';
+import type { AnswerShopkeeperCommand, EffectPlan, ExpansionRunState, FlightBarrier, QuestionChoice } from './expansion';
 import type { Pose, Vec3 } from './geometry';
 import type { BulletType, CollectedPrize, ScoreLedgerEntry } from './events';
 import type { ShopkeeperPart } from './layout';
 import type { ValueStatus } from './catalog';
 
 export const RUN_STATE_SCHEMA_VERSION = 1;
+/** Expanded gameplay state (D34-D37). Never written to the rules-v1 save keys. */
+export const EXPANDED_RUN_STATE_SCHEMA_VERSION = 2;
+export type RunStateSchemaVersion = typeof RUN_STATE_SCHEMA_VERSION | typeof EXPANDED_RUN_STATE_SCHEMA_VERSION;
 
 // ------------------------------------------------------------------ tuning
 
@@ -34,7 +39,7 @@ export interface TuningConfig {
   readonly valueStatus: ValueStatus;
   readonly initialAmmo: number; // decided: 10
   readonly maxBonusAmmoTotal: number; // decided: 10
-  readonly shelfSlotCount: number; // decided: 9
+  readonly shelfSlotCount: number; // decided: 9 (rules-v1); 36 for the expanded layout (D36)
   readonly loading: {
     readonly barPeriodSec: number;
     readonly sweetSpot: number;
@@ -140,6 +145,12 @@ export interface PrizeInstanceState {
   /** True while held by its periodic mount (cannot fall by itself, AC13). */
   readonly mounted: boolean;
   readonly collected: boolean;
+  /**
+   * Expanded rules: the kind whose periodic motion the mount keeps running
+   * after a transform (a new kind's motion starts only with a new refill).
+   * Absent = drawnTypeId (rules-v1 behaviour).
+   */
+  readonly motionTypeId?: PrizeTypeId;
 }
 
 export interface ShelfState {
@@ -167,10 +178,20 @@ export interface InFlightMarker {
   /** 1-based number of this shot among fired shots. */
   readonly shotNumber: number;
   readonly request: ShotRequest;
+  /**
+   * Expanded rules only. The top-level phase stays 'resolving'; waiting for the
+   * shopkeeper answer is a stage here, never a pause reason. rules-v1 markers
+   * have none of these fields.
+   */
+  readonly stage?: InFlightStage;
+  readonly barrier?: FlightBarrier;
+  readonly plan?: EffectPlan;
 }
 
+export type InFlightStage = 'flight' | 'question' | 'postEffects';
+
 export interface RunState {
-  readonly schemaVersion: typeof RUN_STATE_SCHEMA_VERSION;
+  readonly schemaVersion: RunStateSchemaVersion;
   readonly runId: RunId;
   readonly rulesVersion: string;
   readonly valueStatus: ValueStatus;
@@ -212,6 +233,30 @@ export interface RunState {
   /** Name fixed at START (null = anonymous). Changing the home field later does not affect this run. */
   readonly playerName: string | null;
   readonly seed: number;
+  /** Expanded rules: ammo really removed by effects (after the keep-one floor). */
+  readonly ammoLostTotal?: number;
+  /** Expanded rules: cells, questions, reservations, series, deferred transforms. */
+  readonly expansion?: ExpansionRunState;
+}
+
+/** State of the expanded rules. Shared functions narrow with isExpandedRunState. */
+export type ExpandedRunState = RunState & {
+  readonly schemaVersion: typeof EXPANDED_RUN_STATE_SCHEMA_VERSION;
+  readonly ammoLostTotal: number;
+  readonly expansion: ExpansionRunState;
+};
+
+export function isExpandedRunState(s: RunState): s is ExpandedRunState {
+  return s.schemaVersion === EXPANDED_RUN_STATE_SCHEMA_VERSION && s.expansion !== undefined && typeof s.ammoLostTotal === 'number';
+}
+
+/**
+ * Save invariant. rules-v1: shotsFired + ammo === initialAmmo + bonusAmmoTotal.
+ * Expanded: shotsFired + ammo + ammoLostTotal === initialAmmo + bonusAmmoTotal.
+ */
+export function isAmmoBalanced(s: RunState, initialAmmo: number): boolean {
+  const lost = isExpandedRunState(s) ? s.ammoLostTotal : 0;
+  return s.shotsFired + s.ammo + lost === initialAmmo + s.bonusAmmoTotal;
 }
 
 // ---------------------------------------------------------------- commands
@@ -229,7 +274,9 @@ export type GameCommand =
   | { readonly type: 'PAUSE'; readonly reason: PauseReason }
   | { readonly type: 'RESUME'; readonly reason: PauseReason }
   | { readonly type: 'ABANDON' }
-  | { readonly type: 'SKIP_PRESENTATION' };
+  | { readonly type: 'SKIP_PRESENTATION' }
+  /** Expanded rules only; rejected by rules-v1. */
+  | AnswerShopkeeperCommand;
 
 export type GameCommandType = GameCommand['type'];
 export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
@@ -242,6 +289,7 @@ export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
   'RESUME',
   'ABANDON',
   'SKIP_PRESENTATION',
+  'ANSWER_SHOPKEEPER',
 ];
 
 export type CommandParseResult =
@@ -286,6 +334,13 @@ export function parseCommand(input: unknown): CommandParseResult {
         return { ok: false, reason: 'invalid pause reason' };
       }
       return { ok: true, command: { type, reason: o.reason as PauseReason } };
+    }
+    case 'ANSWER_SHOPKEEPER': {
+      if (!hasOnlyKeys(o, ['type', 'shotId', 'questionId', 'choice'])) return { ok: false, reason: 'unexpected fields' };
+      if (typeof o.shotId !== 'string' || !/^s\d{2}$/.test(o.shotId)) return { ok: false, reason: 'invalid shotId' };
+      if (!isQuestionId(o.questionId)) return { ok: false, reason: 'invalid questionId' };
+      if (o.choice !== 'A' && o.choice !== 'B') return { ok: false, reason: 'invalid choice' };
+      return { ok: true, command: { type, shotId: o.shotId as ShotId, questionId: o.questionId, choice: o.choice as QuestionChoice } };
     }
     case 'CONFIRM_POSITION':
     case 'STOP_LOAD':

@@ -11,6 +11,7 @@ import type { AimAngles, TuningConfig } from './game';
 import type { BoothLayout } from './layout';
 import type { Vec3 } from './geometry';
 import type { BulletType } from './events';
+import type { ShotModifiers } from './expansion';
 
 export const GRAVITY_MPS2 = 9.81;
 
@@ -42,6 +43,8 @@ export interface BallisticSpec {
   readonly gravity: number;
   readonly fixedStepSec: number;
   readonly bulletType: BulletType;
+  /** Expanded rules: cork radius when FX083/084 changed it (absent = tuning.cork.radius). */
+  readonly corkRadius?: number;
 }
 
 /**
@@ -63,6 +66,17 @@ export function corkFreeFlightPath(origin: Vec3, direction: Vec3, spec: Ballisti
   return pts;
 }
 
+/**
+ * FX098 "first contact" estimate. Always approximate: moving prizes and
+ * reflections after the first contact are not predicted.
+ */
+export interface AimPreview {
+  readonly points: readonly Vec3[];
+  /** Instance id, surface id, device id, cell id, "shopkeeper:<part>" or "hidden:<id>"; null = nothing within the flight limit. */
+  readonly firstHitTargetId: string | null;
+  readonly approximate: true;
+}
+
 /** Ballistic spec of the next cork; the sim's initial speed and gravity use the same numbers. */
 export function ballisticFor(tuning: TuningConfig, bulletType: BulletType): BallisticSpec {
   return {
@@ -70,5 +84,21 @@ export function ballisticFor(tuning: TuningConfig, bulletType: BulletType): Ball
     gravity: GRAVITY_MPS2 * tuning.cork.gravityScale,
     fixedStepSec: tuning.limits.fixedStepSec,
     bulletType,
+  };
+}
+
+/**
+ * Expanded rules: ballistic spec of a shot with reserved modifiers. The sim
+ * uses exactly these numbers for the original and split corks, so the
+ * reticle, the FX098 preview and the real flight agree.
+ */
+export function ballisticForModifiers(tuning: TuningConfig, runBulletType: BulletType, m: ShotModifiers): BallisticSpec {
+  const bulletType = m.bulletType ?? runBulletType;
+  return {
+    speed: tuning.cork.speed * tuning.bulletTypes[bulletType].speed * m.speedMult,
+    gravity: GRAVITY_MPS2 * tuning.cork.gravityScale * m.gravityMult,
+    fixedStepSec: tuning.limits.fixedStepSec,
+    bulletType,
+    corkRadius: tuning.cork.radius * m.radiusMult,
   };
 }

@@ -4,7 +4,30 @@
  */
 import type { ShotSummary, SimEvent, SimulationFrame } from './events';
 import type { AimAngles, FinalResult, LoadTier, Phase } from './game';
-import type { BallisticSpec } from './aim';
+import type { AimPreview, BallisticSpec } from './aim';
+import type { BackgroundCellId, EffectId, PrizeTypeId, QuestionId, SeriesId, SetId, ShotId } from './ids';
+import type { HintKind, QuestionChoice } from './expansion';
+
+/**
+ * Expanded rules: checked state the view may draw. The view never draws
+ * effects, consumes RNG or creates commands from this.
+ */
+export interface ExpansionViewState {
+  /** 36 cells in row/column order. effectId is null until the cell was used (hidden until hit). */
+  readonly cells: readonly { readonly cellId: BackgroundCellId; readonly used: boolean; readonly effectId: EffectId | null }[];
+  readonly outlineSeries: SeriesId | null;
+  /** Refill series after FX041-FX060 (shown in the legend); null = normal assortment. */
+  readonly assortmentSeries: SeriesId | null;
+  /** Confirmed this run (for FX094/FX095 hints only; never used for scoring by the view). */
+  readonly collectedTypeIds: readonly PrizeTypeId[];
+  readonly completedSets: readonly SetId[];
+  /** The next-shot hint while positioning/loading/aiming; the active one during the flight. */
+  readonly hint: HintKind | null;
+  /** FX098 only, computed by the controller from ShotWorld.previewFirstContact. */
+  readonly aimPreview: AimPreview | null;
+  /** Shown while the shot waits for the shopkeeper answer. */
+  readonly question: { readonly shotId: ShotId; readonly questionId: QuestionId; readonly answer: QuestionChoice | null } | null;
+}
 
 /** What the camera/HUD needs besides the physics frame. */
 export interface ViewState {
@@ -17,6 +40,8 @@ export interface ViewState {
   readonly paused: boolean;
   /** Cork speed/gravity for the next shot, so the reticle shows where the cork really goes. */
   readonly ballistic: BallisticSpec;
+  /** Expanded rules only. */
+  readonly expansion?: ExpansionViewState;
 }
 
 export interface PresentOptions {

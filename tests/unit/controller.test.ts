@@ -74,9 +74,9 @@ function fakeWorld(stepsUntilRecord: number) {
     },
     step(dt): SimulationStep {
       this.steps.push(dt);
-      if (!inShot || !current) return { frame: emptyFrame, record: null };
+      if (!inShot || !current) return { frame: emptyFrame, record: null, barrier: null };
       remaining -= 1;
-      if (remaining > 0) return { frame: emptyFrame, record: null };
+      if (remaining > 0) return { frame: emptyFrame, record: null, barrier: null };
       inShot = false;
       const record: ShotRecord = {
         runId: mintId.run('r'),
@@ -90,9 +90,11 @@ function fakeWorld(stepsUntilRecord: number) {
         remainingPrizes: [],
         simTimeSec: 1,
       };
-      return { frame: emptyFrame, record };
+      return { frame: emptyFrame, record, barrier: null };
     },
     frame: () => emptyFrame,
+    resumeAfterEffects: () => false,
+    previewFirstContact: () => ({ points: [], firstHitTargetId: null, approximate: true }),
     get shotInProgress() {
       return inShot;
     },

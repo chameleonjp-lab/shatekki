@@ -7,7 +7,7 @@
  * - weights are always finite and > 0: the same kind may reappear (no ban),
  *   and nothing steers the draw toward completing a set (unapproved).
  */
-import type { DifficultyTier, DrawState, PrizeTypeId, RuntimeCatalog, TuningConfig } from '../contracts';
+import type { DifficultyTier, DrawState, PrizeRuntimeConfig, PrizeTypeId, RuntimeCatalog, TuningConfig } from '../contracts';
 import { rngNext, seedRng } from './rng';
 
 /** Prototype: each missing prize of a tier multiplies its weight by this (and each surplus divides). */
@@ -28,6 +28,7 @@ export function computeWeights(
   draw: DrawState,
   visibleTypeIds: readonly PrizeTypeId[],
   tuning: TuningConfig,
+  candidateTypeIds?: readonly PrizeTypeId[] | null,
 ): WeightedKind[] {
   const { historyWindow, recentPenalty, tierTargets } = tuning.draw;
   if (!(recentPenalty > 0 && recentPenalty <= 1) || !Number.isFinite(recentPenalty)) {
@@ -48,8 +49,18 @@ export function computeWeights(
   const recent = new Set<PrizeTypeId>(draw.history.slice(-historyWindow));
   for (const id of visibleTypeIds) recent.add(id);
 
+  // Expanded rules (assortment series): draw only inside the subset, in catalog order.
+  // Unknown or empty subsets are errors; nothing outside is mixed in silently, and a tier with no
+  // candidate is simply absent (its deficit is not forced).
+  let pool: Iterable<PrizeRuntimeConfig> = catalog.prizes.values();
+  if (candidateTypeIds) {
+    if (candidateTypeIds.length === 0) throw new RangeError('empty candidate set');
+    const allowed = new Set<PrizeTypeId>(candidateTypeIds);
+    for (const id of allowed) if (!catalog.prizes.has(id)) throw new RangeError(`unknown candidate kind: ${id}`);
+    pool = [...catalog.prizes.values()].filter((p) => allowed.has(p.typeId));
+  }
   const out: WeightedKind[] = [];
-  for (const p of catalog.prizes.values()) {
+  for (const p of pool) {
     out.push({ typeId: p.typeId, weight: tierFactor(p.difficulty) * (recent.has(p.typeId) ? recentPenalty : 1) });
   }
   return out;
@@ -79,8 +90,9 @@ export function drawPrize(
   draw: DrawState,
   visibleTypeIds: readonly PrizeTypeId[],
   tuning: TuningConfig,
+  candidateTypeIds?: readonly PrizeTypeId[] | null,
 ): { readonly typeId: PrizeTypeId; readonly draw: DrawState } {
-  const weighted = computeWeights(catalog, draw, visibleTypeIds, tuning);
+  const weighted = computeWeights(catalog, draw, visibleTypeIds, tuning, candidateTypeIds);
   const r = rngNext(draw.rng);
   const idx = pickWeighted(
     weighted.map((w) => w.weight),

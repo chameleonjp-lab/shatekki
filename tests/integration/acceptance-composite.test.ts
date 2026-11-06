@@ -11,7 +11,6 @@ import {
   mintId,
   type DeviceActivation,
   type RunState,
-  type ShotRecord,
   type ShotWorld,
   type SimulationFrame,
 } from '../../src/contracts';
@@ -112,12 +111,14 @@ describe('AC42: last shot → split → +2 → two prizes → two sets → skip 
       const world: ShotWorld = {
         syncShelf: () => undefined,
         fire: () => undefined,
-        step: (): { frame: SimulationFrame; record: ShotRecord | null } => {
-          if (delivered) return { frame, record: null };
+        step: () => {
+          if (delivered) return { frame, record: null, barrier: null };
           delivered = true;
-          return { frame, record };
+          return { frame, record, barrier: null };
         },
         frame: () => frame,
+        resumeAfterEffects: () => false,
+        previewFirstContact: () => ({ points: [], firstHitTargetId: null, approximate: true }),
         shotInProgress: false,
         dispose: () => undefined,
       };

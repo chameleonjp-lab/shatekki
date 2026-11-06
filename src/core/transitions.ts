@@ -10,9 +10,9 @@
  * The position cannot change after loading starts (AC05: no re-roll).
  */
 import type { BoothLayout, GameCommand, PauseReason, RunState, ShotRequest, TuningConfig } from '../contracts';
-import { BOOTH_LAYOUT, mintId } from '../contracts';
+import { BASE_SHOT_MODIFIERS, BOOTH_LAYOUT, isExpandedRunState, mintId } from '../contracts';
 import { aimToDirection, clampAim, effectiveAim, heartBpm, muzzleAt } from './aim';
-import { classifyLoad, loadingBarValue } from './loading';
+import { classifyLoad, loadingBarValue, loadPeriodMultiplierFor } from './loading';
 
 export interface GameContext {
   readonly tuning: TuningConfig;
@@ -65,7 +65,7 @@ export function reduceGame(state: RunState, command: GameCommand, ctx: GameConte
     }
     case 'STOP_LOAD': {
       if (state.phase !== 'loading') return state;
-      const load = classifyLoad(loadingBarValue(state.clocks.loadingSec, ctx.tuning), ctx.tuning);
+      const load = classifyLoad(loadingBarValue(state.clocks.loadingSec, ctx.tuning, loadPeriodMultiplierFor(state)), ctx.tuning);
       return {
         ...state,
         phase: 'aiming',
@@ -82,20 +82,27 @@ export function reduceGame(state: RunState, command: GameCommand, ctx: GameConte
       if (state.phase !== 'aiming' || state.inFlight !== null || state.ammo < 1 || state.load === null) return state;
       const shotNumber = state.shotsFired + 1;
       const shotId = mintId.shot(shotNumber);
+      const expanded = isExpandedRunState(state) ? state.expansion : null;
+      // Expanded rules: a reserved bullet type (FX016/017/081) is used by this shot only.
+      const bulletType = expanded?.next.modifiers.bulletType ?? state.bulletType;
       const request: ShotRequest = {
         shotId,
         origin: muzzleAt(state.standX, layout),
         direction: aimToDirection(state.standX, effectiveAim(state, ctx.tuning), layout),
         load: state.load,
-        bulletType: state.bulletType,
+        bulletType,
       };
-      return {
+      const fired: RunState = {
         ...state,
         phase: 'resolving',
         ammo: state.ammo - 1,
         shotsFired: shotNumber,
-        inFlight: { shotId, shotNumber, request },
+        inFlight: expanded ? { shotId, shotNumber, request, stage: 'flight' } : { shotId, shotNumber, request },
       };
+      if (!expanded) return fired;
+      // The reservation is consumed only by an accepted FIRE (effects appendix §3.1): it becomes
+      // this shot's settings, and nothing is reserved for the shot after it yet.
+      return { ...fired, expansion: { ...expanded, active: expanded.next, next: { modifiers: BASE_SHOT_MODIFIERS, hint: null } } };
     }
     default:
       return state;

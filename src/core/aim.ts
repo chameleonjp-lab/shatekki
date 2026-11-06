@@ -67,10 +67,33 @@ export function clampAim(aim: AimAngles, layout: BoothLayout = BOOTH_LAYOUT): Ai
   };
 }
 
-/** The aim the player sees: requested aim + sway. */
-export function effectiveAim(state: SwayInput & Pick<RunState, 'aim'>, tuning: TuningConfig): AimAngles {
+/**
+ * Expanded rules: the sway multiplier reserved for the shot being aimed
+ * (FX012/013/035/036). 1 for rules-v1 states.
+ */
+export function swayMultiplierFor(state: Partial<Pick<RunState, 'expansion'>>): number {
+  const m = state.expansion?.next.modifiers.swayMult;
+  return typeof m === 'number' && Number.isFinite(m) && m > 0 ? m : 1;
+}
+
+/**
+ * Factor applied to the sway offset: the amplitude times the multiplier, still
+ * capped by tuning.aim.maxAmplitudeRad (effects appendix §3.2).
+ */
+export function swayScale(state: Pick<RunState, 'clocks'> & Partial<Pick<RunState, 'expansion'>>, tuning: TuningConfig): number {
+  const mult = swayMultiplierFor(state);
+  if (mult === 1) return 1;
+  const amp = swayAmplitude(state.clocks.aimingSec, tuning);
+  if (!(amp > 0)) return 1;
+  return Math.min(tuning.aim.maxAmplitudeRad, amp * mult) / amp;
+}
+
+/** The aim the player sees: requested aim + sway. The reticle and FIRE both use exactly this. */
+export function effectiveAim(state: SwayInput & Pick<RunState, 'aim'> & Partial<Pick<RunState, 'expansion'>>, tuning: TuningConfig): AimAngles {
   const s = swayOffset(state, tuning);
-  return { yaw: state.aim.yaw + s.yaw, pitch: state.aim.pitch + s.pitch };
+  const k = swayScale(state, tuning);
+  if (k === 1) return { yaw: state.aim.yaw + s.yaw, pitch: state.aim.pitch + s.pitch };
+  return { yaw: state.aim.yaw + s.yaw * k, pitch: state.aim.pitch + s.pitch * k };
 }
 
 /** Muzzle position for a stand position (shared convention in src/contracts/aim.ts). */

@@ -103,8 +103,11 @@ export interface PrizeRuntimeConfig {
 
 export interface SetRuntimeConfig {
   readonly setId: SetId;
-  /** Exactly three distinct prize types (decision 11). */
-  readonly requiredTypeIds: readonly [PrizeTypeId, PrizeTypeId, PrizeTypeId];
+  /**
+   * Distinct prize types, each needed once: three for S001-S100 (decision 11),
+   * two for the expanded PAIR001-PAIR300 (D34).
+   */
+  readonly requiredTypeIds: readonly [PrizeTypeId, PrizeTypeId] | readonly [PrizeTypeId, PrizeTypeId, PrizeTypeId];
   readonly bonusScore: number;
   /** i18n key of the hint shown while undiscovered (decision 15). */
   readonly hintKey: string;

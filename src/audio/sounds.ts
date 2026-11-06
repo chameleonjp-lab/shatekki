@@ -173,6 +173,10 @@ export function soundsForSimEvent(ev: SimEvent): readonly SoundRequest[] {
         case 'hidden':
           out.push(req('hidden', gain));
           break;
+        case 'cell':
+          // EG09 gives a used/unused cell its own short cue; until then the dull device sound.
+          out.push(req('hit.deviceDull', gain));
+          break;
       }
       if (ev.reflectionIndex > 0 && t.kind === 'surface') out.push(req('reflect', gain));
       return out;
