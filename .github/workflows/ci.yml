@@ -103,7 +103,13 @@ jobs:
     needs: [plan, build]
     if: needs.plan.outputs.browser == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Setup and tests have their own step limits below; this only bounds the whole job.
+    timeout-minutes: 20
+    # Browser, system libraries and fonts come prebuilt in the image of the lockfile's exact
+    # Playwright version (checked by tests/ci/browser-env.test.mjs). Downloading them at run
+    # time once took 9 min 7 s on a slow apt mirror and cancelled the tests (run 42260041719).
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     strategy:
       fail-fast: false
       matrix:
@@ -119,6 +125,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        timeout-minutes: 5
       - uses: actions/download-artifact@v4
         with:
           name: site-dist
@@ -127,8 +134,14 @@ jobs:
         with:
           name: internal-expanded-dist
           path: dist-expanded/
-      - run: npx playwright install --with-deps chromium
+      - name: Check the browser version and the fonts for Japanese, Chinese and Thai text
+        timeout-minutes: 2
+        run: |
+          npx playwright --version
+          test "$(npx playwright --version)" = "Version $(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          dpkg-query -W fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf
       - name: Run selected browser tests
+        timeout-minutes: 12
         run: node scripts/ci/run-tests.mjs e2e --shard=${{ matrix.shard }}/2
       - if: failure()
         uses: actions/upload-artifact@v4

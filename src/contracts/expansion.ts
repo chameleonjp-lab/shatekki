@@ -331,6 +331,12 @@ export interface PlannedEffect {
   readonly reason: string | null;
   /** Real ammo change after caps (+ added, − removed, 0). */
   readonly ammoDelta: number;
+  /**
+   * Ammo grants only (legacy "+2" plate, FX ammo adds): the amount asked for before the caps.
+   * Lets the result tell "+1 of 2" and "0 at the cap" apart from "cannot be used". Absent otherwise
+   * and in saves made before it existed.
+   */
+  readonly ammoRequested?: number;
   readonly targets: readonly PrizeInstanceId[];
 }
 

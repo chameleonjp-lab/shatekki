@@ -60,8 +60,17 @@ function envFor(state: ExpandedRunState, barrier: FlightBarrier, ctx: ExpandedPl
   };
 }
 
-function plannedFrom(request: Pick<EffectRequest, 'requestId' | 'source'>, effectId: PlannedEffect['effectId'], r: { outcome: PlannedEffect['outcome']; reason: string | null; ammoDelta: number; targets: readonly PrizeInstanceId[] }): PlannedEffect {
-  return { requestId: request.requestId, source: request.source, effectId, outcome: r.outcome, reason: r.reason, ammoDelta: r.ammoDelta, targets: r.targets };
+function plannedFrom(request: Pick<EffectRequest, 'requestId' | 'source'>, effectId: PlannedEffect['effectId'], r: { outcome: PlannedEffect['outcome']; reason: string | null; ammoDelta: number; ammoRequested?: number | undefined; targets: readonly PrizeInstanceId[] }): PlannedEffect {
+  return {
+    requestId: request.requestId,
+    source: request.source,
+    effectId,
+    outcome: r.outcome,
+    reason: r.reason,
+    ammoDelta: r.ammoDelta,
+    ...(r.ammoRequested !== undefined ? { ammoRequested: r.ammoRequested } : {}),
+    targets: r.targets,
+  };
 }
 
 const skipped = (request: Pick<EffectRequest, 'requestId' | 'source'>, effectId: PlannedEffect['effectId'], reason: string): PlannedEffect =>
@@ -104,8 +113,9 @@ function applyLegacyDevice(request: EffectRequest, work: EffectWork, env: Effect
   flags.devicesSeen.add(deviceId);
   switch (deviceKind) {
     case 'ammo': {
-      const r = withAmmoAdded(work, tuning.devices.ammoBonus, env.shotsFired, tuning);
-      return { work: r.work, planned: plannedFrom(request, null, r.delta > 0 ? { outcome: 'applied', reason: null, ammoDelta: r.delta, targets: [] } : { outcome: 'notApplicable', reason: 'noAmmoRoom', ammoDelta: 0, targets: [] }) };
+      const asked = tuning.devices.ammoBonus;
+      const r = withAmmoAdded(work, asked, env.shotsFired, tuning);
+      return { work: r.work, planned: plannedFrom(request, null, r.delta > 0 ? { outcome: 'applied', reason: null, ammoDelta: r.delta, ammoRequested: asked, targets: [] } : { outcome: 'notApplicable', reason: 'noAmmoRoom', ammoDelta: 0, ammoRequested: asked, targets: [] }) };
     }
     case 'penalty':
       return { work: { ...work, penaltyPoints: work.penaltyPoints + tuning.devices.penaltyPoints }, planned: plannedFrom(request, null, { outcome: 'applied', reason: null, ammoDelta: 0, targets: [] }) };

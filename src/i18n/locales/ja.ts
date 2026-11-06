@@ -193,6 +193,17 @@ export const JA = {
   'xhint.angle': '左右 {yaw}°／上下 {pitch}°',
   'xhint.cork': 'コルク{n}',
   'fx.offscreen.cell': '背景マス',
+  "result.lastShot.title": "最後の一射（{n}射目）",
+  "result.lastShot.none": "この一射で働いた効果はありませんでした。",
+  "result.end.noAmmo": "弾がなくなったので、ゲームを終えました。",
+  "result.end.capped": "弾を増やす効果はありましたが、追加できる弾の上限に達していたため、増えませんでした。",
+  "fxres.ammo.added": "弾が{n}発増えました",
+  "fxres.ammo.partial": "上限のため、{req}発のうち{n}発だけ増えました",
+  "fxres.ammo.noRoom": "追加できる弾の上限に達していて、弾は増えませんでした",
+  "fxres.device.penalty": "点数が減りました",
+  "fxres.device.bulletType": "次の弾の種類が変わります",
+  "fxres.device.transform": "景品が1個、別の種類に変わります",
+  "fxres.device.used": "この一射では、すでに働いています",
 } as const;
 
 export type UiKey = keyof typeof JA;

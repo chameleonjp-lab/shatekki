@@ -65,6 +65,8 @@ export interface EffectApplication {
   readonly reason: string | null;
   /** Real ammo change after caps (+ added, - removed, 0). */
   readonly ammoDelta: number;
+  /** Ammo adds only: the amount asked for before the caps (see PlannedEffect.ammoRequested). */
+  readonly ammoRequested?: number;
   readonly targets: readonly PrizeInstanceId[];
 }
 
@@ -190,11 +192,11 @@ const applied = (work: EffectWork, ammoDelta = 0, targets: readonly PrizeInstanc
  */
 export function applyOperation(op: EffectOperation, requestId: EffectRequestId, work: EffectWork, env: EffectEnv): EffectApplication {
   const why = inapplicableReason(op, work, env);
-  if (why !== null) return notApplicable(work, why);
+  if (why !== null) return op.kind === 'ammoAdd' ? { ...notApplicable(work, why), ammoRequested: op.amount } : notApplicable(work, why);
   switch (op.kind) {
     case 'ammoAdd': {
       const r = withAmmoAdded(work, op.amount, env.shotsFired, env.tuning);
-      return applied(r.work, r.delta);
+      return { ...applied(r.work, r.delta), ammoRequested: op.amount };
     }
     case 'ammoRemove': {
       const removed = realAmmoRemove(op.amount, work.ammo);

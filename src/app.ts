@@ -17,6 +17,7 @@ import {
   type PauseReason,
   type RunState,
   type RuntimeCatalog,
+  type ShotSummary,
   type ShotWorld,
   type TuningConfig,
 } from './contracts';
@@ -47,7 +48,7 @@ import { finalResult } from './core/result';
 import { createI18n, LANGUAGE_STORAGE_KEY, type I18n, type UiKey } from './i18n';
 import { JA as UI_KEYS } from './i18n/locales/ja';
 import { mountHome } from './ui/home';
-import { mountResult } from './ui/result';
+import { mountResult, type LastShotInput, type ResultTextOptions } from './ui/result';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
 import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
@@ -470,8 +471,15 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     return w;
   };
 
-  const onRunEnded = (state: RunState) => {
+  /** The settled summary of the shot that ended the run (expanded rules show it on the result). */
+  const lastShotOf = (summary: ShotSummary | null): LastShotInput | null =>
+    expansion && summary
+      ? { shotNumber: summary.shotNumber, effects: summary.effects ?? [], deferredTransforms: summary.deferredTransforms ?? [], ammoAfter: summary.ammoAfter }
+      : null;
+
+  const onRunEnded = (state: RunState, summary: ShotSummary | null) => {
     const result = finalResult(state);
+    const lastShot = lastShotOf(summary);
     const selfBestBefore = profile.load().bestScore;
     const { newBest } = profile.recordRunEnd(result);
     cue('runEnd');
@@ -482,7 +490,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     // Let the last settle presentation play briefly before the result screen.
     win.setTimeout(() => {
       if (disposed || controller?.current.runId !== state.runId) return;
-      showResult(result, selfBestBefore, newBest);
+      showResult(result, selfBestBefore, newBest, lastShot);
     }, 900);
   };
 
@@ -522,7 +530,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           }
           if (summary.ledger.nominalPenalty > 0) cue('penalty');
           if (summary.bonusAmmoGranted > 0) cue('ammoBonus');
-          if (s.phase === 'ended') onRunEnded(s);
+          if (s.phase === 'ended') onRunEnded(s, summary);
           else runStore.saveStable(s);
         },
       },
@@ -621,7 +629,16 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
 
   let stopCelebration: (() => void) | null = null;
-  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false) => {
+  // Expanded build: pair-set names from the same source as the book, every last-shot line (no 5-line cap).
+  const resultText: ResultTextOptions | undefined =
+    expansion && expandedUi
+      ? {
+          expandedText: (k: string) => expText(k),
+          describeEffects: (i) => expandedUi.effectResultsModel(i, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity }),
+        }
+      : undefined;
+
+  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null) => {
     clearScreen();
     setScreen('result');
     cue('resultShow');
@@ -635,8 +652,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         onRetrySubmit: () => void ranking.retryPending({ includePermanent: false }).catch(() => undefined),
         onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
         onOpenSetBook: openSetBook,
+        ...(resultText ? { text: resultText } : {}),
       },
-      { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable },
+      { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable, lastShot },
     );
     screenHandle = handle;
     void loadHeavyModules().then(({ view }) => {

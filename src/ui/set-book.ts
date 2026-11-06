@@ -70,6 +70,17 @@ export interface SetBookViewModel {
   readonly entries: readonly SetBookEntryView[];
 }
 
+/**
+ * The one name lookup of a set for the book and the result screen alike (plan T1): three-kind
+ * sets from the rules-v1 tables, pair sets (PAIR001..) from the expanded text. '' when unknown,
+ * so a bare id is never shown.
+ */
+export function setDisplayName(locale: Locale, setId: string, expandedText?: SetBookExpandedText): string {
+  if (setId.startsWith('PAIR')) return expandedText?.(`exp.pair.${setId}.name`) ?? '';
+  const name = setName(locale, setId);
+  return name === setId ? '' : name;
+}
+
 /** Adapt the runtime catalog (owned by src/catalog) to the book's input. */
 export function setBookEntriesFromCatalog(catalog: RuntimeCatalog): SetBookEntryInput[] {
   return [...catalog.sets.values()].map((s) => ({ setId: String(s.setId), requiredTypeIds: s.requiredTypeIds.map(String) }));
@@ -82,9 +93,8 @@ export function setBookViewModel(input: SetBookInput, locale: Locale, options: S
   const all = sorted.map<SetBookEntryView>((s) => {
     const discovered = found.has(s.setId);
     const isPair = s.setId.startsWith('PAIR');
-    const pairText = (part: 'name' | 'hint'): string => (isPair ? (options.expandedText?.(`exp.pair.${s.setId}.${part}`) ?? '') : '');
-    const name = isPair ? pairText('name') : setName(locale, s.setId);
-    const hint = isPair ? pairText('hint') : setHint(locale, s.setId);
+    const name = setDisplayName(locale, s.setId, options.expandedText);
+    const hint = isPair ? (options.expandedText?.(`exp.pair.${s.setId}.hint`) ?? '') : setHint(locale, s.setId);
     return {
       setId: s.setId,
       discovered,
