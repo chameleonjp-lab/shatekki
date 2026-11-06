@@ -2,6 +2,7 @@
 
 最初に読む：
 - **追加要件**：[2026-11-06 要件修正書](docs/changes/2026-11-06-expanded-gameplay-requirements.md)。D34〜D37（2景品300セット・店主200質問/2択・縦3×横12・背景100効果）は利用者の追加指定。具体案は提案として区別し、旧9枠・3種類限定を新実装へ流用しない。現行ゲームと正式データはまだrules-v1。
+- **追加実装**：[追加実装計画](docs/superpowers/plans/2026-11-06-expanded-gameplay.md)のEG01〜EG10と[44項目の対応表](docs/reviews/2026-11-06-expanded-gameplay-plan-traceability.md)。今回の開始順序・共有型・所有の引渡しはこの計画に従い、旧Task 00〜18は既存実装の履歴と継続する制約として参照する。計画作成・文書PRのマージを新機能の実装完了や提案値の正式採用と扱わない。
 - `docs/requirements.md`、`docs/decision-log.md`：確定01〜33。
 - `docs/acceptance-criteria.md`：AC01〜45、未実施。
 - `docs/open-items.md`、`data/catalog-candidates.json`：残る詳細と候補。nullは0ではない。
