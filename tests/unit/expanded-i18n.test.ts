@@ -25,8 +25,24 @@ import { EN_CONTENT } from '../../src/i18n/expanded/en';
 import { JA_SUPPLEMENT } from '../../src/i18n/expanded/ja';
 import { EXPANDED_LINE_KEYS } from '../../src/i18n/expanded/types';
 import { LOCALES } from '../../src/i18n';
+import type { Locale } from '../../src/i18n/locales';
 
-const BAD = /TODO|FIXME|xxx|\?\?\?|lorem|undefined|\[object/i;
+/** ja plus every locale whose registry entry is complete: all of them get the same checks. */
+const COMPLETE_LOCALES: readonly Locale[] = [
+  'ja',
+  ...(Object.keys(EXPANDED_REGISTRY) as Exclude<Locale, 'ja'>[]).filter((l) => EXPANDED_REGISTRY[l].status === 'complete'),
+];
+const PENDING_LOCALES: readonly Locale[] = (Object.keys(EXPANDED_REGISTRY) as Exclude<Locale, 'ja'>[]).filter((l) => EXPANDED_REGISTRY[l].status === 'pending');
+/** How each language says "needs 2 kinds" in a pair hint. */
+const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
+  ja: /2種類/,
+  en: /2 kinds/,
+  es: /2 tipos/,
+  'pt-BR': /2 tipos/,
+  'zh-Hans': /2种/,
+  fr: /2 types/,
+};
+const BAD = /\bTODO\b|FIXME|XXX|xxx|\?\?\?|[Ll]orem|undefined|\[object/; // case-sensitive TODO: Spanish "todo/todos" is a word
 const pairRows = pairs as { id: string; name_ja: string; prizeIds: string[]; designNote_ja: string }[];
 const qRows = questions as { id: string; A: { group: string }; B: { group: string } }[];
 const fxIds = (effects as { id: string }[]).map((e) => e.id);
@@ -42,7 +58,7 @@ describe('expanded content counts', () => {
     expect(serIds).toHaveLength(20);
   });
 
-  for (const locale of ['ja', 'en'] as const) {
+  for (const locale of COMPLETE_LOCALES) {
     describe(locale, () => {
       it('has all 300 pair names and hints', () => {
         for (const p of pairRows) {
@@ -87,6 +103,24 @@ describe('expanded content counts', () => {
     });
   }
 
+  it('every complete locale record is complete itself (not just via fallback)', () => {
+    for (const l of COMPLETE_LOCALES.filter((x) => x !== 'ja')) {
+      const c = EXPANDED_REGISTRY[l as Exclude<Locale, 'ja'>].content;
+      expect(Object.keys(c.pairNames ?? {}), l).toHaveLength(300);
+      expect(Object.keys(c.pairHints ?? {}), l).toHaveLength(300);
+      expect(Object.keys(c.questions ?? {}), l).toHaveLength(200);
+      expect(Object.keys(c.groups ?? {}).sort(), l).toEqual(['CHAOS', 'GAIN', 'GUIDE', 'MIX', 'RISK', 'STOCK']);
+      expect(Object.keys(c.effectNames ?? {}), l).toHaveLength(100);
+      expect(Object.keys(c.effectResults ?? {}), l).toHaveLength(100);
+      expect(Object.keys(c.seriesLabels ?? {}), l).toHaveLength(20);
+      expect(Object.keys(c.seriesSymbols ?? {}), l).toHaveLength(20);
+      expect(Object.keys(c.lines ?? {}).sort(), l).toEqual([...EXPANDED_LINE_KEYS].sort());
+      for (const q of qRows) {
+        const t = c.questions![q.id]!;
+        expect(t.text && t.A && t.B, `${l} ${q.id}`).toBeTruthy();
+      }
+    }
+  });
   it('the English record itself is complete (not just via fallback)', () => {
     expect(Object.keys(EN_CONTENT.pairNames)).toHaveLength(300);
     expect(Object.keys(EN_CONTENT.pairHints)).toHaveLength(300);
@@ -105,6 +139,12 @@ describe('expanded content counts', () => {
 });
 
 describe('placeholders', () => {
+  it('{n}/{series} placeholders match the Japanese source in every complete locale', () => {
+    for (const l of COMPLETE_LOCALES.filter((x) => x !== 'ja' && x !== 'en')) {
+      const c = EXPANDED_REGISTRY[l as Exclude<Locale, 'ja'>].content;
+      for (const fx of fxIds) expect(placeholders(c.effectResults![fx]!), `${l} ${fx}`).toEqual(placeholders(JA_SUPPLEMENT.effectResults[fx]!));
+    }
+  });
   it('{n}/{series} placeholders are identical between ja and en for every effect', () => {
     for (const fx of fxIds) {
       expect(placeholders(EN_CONTENT.effectResults[fx]!), fx).toEqual(placeholders(JA_SUPPLEMENT.effectResults[fx]!));
@@ -133,7 +173,7 @@ describe('placeholders', () => {
 });
 
 describe('pair hints', () => {
-  for (const locale of ['ja', 'en'] as const) {
+  for (const locale of COMPLETE_LOCALES) {
     it(`${locale}: never name both prizes, never paste the designer note, and say 2 kinds`, () => {
       for (const p of pairRows) {
         const hint = pairHint(locale, p.id);
@@ -143,15 +183,20 @@ describe('pair hints', () => {
         const note = p.designNote_ja.replace(/。$/, '');
         expect(hint, p.id).not.toContain(note);
         expect(hint, p.id).not.toContain(p.name_ja);
-        expect(hint, p.id).toMatch(locale === 'ja' ? /2種類/ : /2 kinds/);
+        expect(hint, p.id).toMatch(TWO_KINDS[locale] ?? /^$/);
       }
     });
   }
-  it('en hints do not contain the pair name either', () => {
-    for (const p of pairRows) expect(pairHint('en', p.id)).not.toContain(pairName('en', p.id));
+  it('hints do not contain the pair name either, in any complete locale', () => {
+    for (const locale of COMPLETE_LOCALES) {
+      for (const p of pairRows) expect(pairHint(locale, p.id), `${locale} ${p.id}`).not.toContain(pairName(locale, p.id));
+    }
+  });
+  it('every complete locale has a "needs 2 kinds" pattern in this test', () => {
+    for (const l of COMPLETE_LOCALES) expect(TWO_KINDS[l], l).toBeDefined();
   });
   it('hints are distinct enough to be clues (no more than a few duplicates)', () => {
-    for (const locale of ['ja', 'en'] as const) {
+    for (const locale of COMPLETE_LOCALES) {
       const set = new Set(pairRows.map((p) => pairHint(locale, p.id)));
       expect(set.size).toBeGreaterThan(280);
     }
@@ -172,6 +217,11 @@ describe('series symbols', () => {
   it('en symbols are short bracketed words', () => {
     for (const s of serIds) expect(seriesSymbol('en', s)).toMatch(/^\[[A-Za-z]{2,10}\]$/);
   });
+  it('every complete locale uses short bracketed symbols', () => {
+    for (const l of COMPLETE_LOCALES) {
+      for (const s of serIds) expect(seriesSymbol(l, s), `${l} ${s}`).toMatch(/^\[[^\[\]\s]{1,12}\]$/);
+    }
+  });
 });
 
 describe('fallback order', () => {
@@ -179,7 +229,7 @@ describe('fallback order', () => {
     expect(pairName('de', 'PAIR001')).toBe(pairName('en', 'PAIR001'));
     expect(questionText('th', 'Q001')).toBe(questionText('en', 'Q001'));
     expect(choiceText('ko', 'Q002', 'B')).toBe(choiceText('en', 'Q002', 'B'));
-    expect(effectResult('fr', 'FX041')).toBe(effectResult('en', 'FX041'));
+    expect(effectResult('tr', 'FX041')).toBe(effectResult('en', 'FX041'));
     expect(expandedLine('ru', 'noOutlineTarget')).toBe(expandedLine('en', 'noOutlineTarget'));
     // unknown ids: ja data has nothing either, so the id itself comes back
     expect(pairName('en', 'PAIR999')).toBe('PAIR999');
@@ -211,12 +261,13 @@ describe('group and choice integrity', () => {
 
 describe('coverage', () => {
   const cov = contentCoverage();
-  it('lists all 15 locales, ja and en complete, the other 13 pending and honest', () => {
+  it('lists all 15 locales; complete ones match the registry, the rest are pending and honest', () => {
     expect(cov.map((c) => c.locale)).toEqual([...LOCALES]);
     const complete = cov.filter((c) => c.status === 'complete').map((c) => c.locale);
-    expect(complete).toEqual(['ja', 'en']);
+    expect(complete).toEqual(LOCALES.filter((l) => COMPLETE_LOCALES.includes(l)));
     const pending = cov.filter((c) => c.status === 'pending');
-    expect(pending).toHaveLength(13);
+    expect(pending.map((c) => c.locale)).toEqual(LOCALES.filter((l) => PENDING_LOCALES.includes(l)));
+    expect(complete.length + pending.length).toBe(15);
     for (const p of pending) {
       for (const v of Object.values(p.present)) expect(v, p.locale).toBe(0);
     }
