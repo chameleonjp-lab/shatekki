@@ -8,6 +8,7 @@ type Listener = (e: any) => void;
 
 export class FakeEvent {
   defaultPrevented = false;
+  stopped = false;
   constructor(
     readonly type: string,
     init: Record<string, unknown> = {},
@@ -16,6 +17,9 @@ export class FakeEvent {
   }
   preventDefault(): void {
     this.defaultPrevented = true;
+  }
+  stopPropagation(): void {
+    this.stopped = true;
   }
 }
 
@@ -89,12 +93,12 @@ export class FakeElement {
     const e = new FakeEvent(type, init);
     if (this.disabled && (type === 'click' || type.startsWith('pointer'))) return e;
     for (const fn of [...(this.listeners.get(type) ?? [])]) fn(e);
-    this.parent?.bubble(e);
+    if (!e.stopped) this.parent?.bubble(e);
     return e;
   }
   private bubble(e: FakeEvent): void {
     for (const fn of [...(this.listeners.get(e.type) ?? [])]) fn(e);
-    this.parent?.bubble(e);
+    if (!e.stopped) this.parent?.bubble(e);
   }
   find(pred: (e: FakeElement) => boolean): FakeElement | null {
     if (pred(this)) return this;

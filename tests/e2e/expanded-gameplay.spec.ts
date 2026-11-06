@@ -116,6 +116,17 @@ test('a cork on the shopkeeper asks one question; one answer continues the game 
   await b.click();
   await a.click({ force: true, timeout: 2000 }).catch(() => undefined);
   await expect(panel).toBeHidden({ timeout: 20_000 });
+  // After the shot settles, the result lines say what the answer did (text only, no raw keys).
+  const results = page.getByTestId('effect-results');
+  await expect(results).toBeVisible({ timeout: 30_000 });
+  const resultText = (await results.textContent()) ?? '';
+  expect(resultText).toContain('店主の答え');
+  expect(resultText).not.toMatch(/exp\.|fxres\.|\bFX\d{3}\b|\{\w+\}/);
+  const rb = (await results.boundingBox())!;
+  const fireBox = (await page.getByTestId('btn-confirm-position').boundingBox())!;
+  expect(rb.y + rb.height).toBeLessThan(fireBox.y + 1);
+  await results.click();
+  await expect(results).toBeHidden();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', /position|ended/, { timeout: 30_000 });
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('shatekki.run.rules-v2-proposed-r001')!));
   const st = saved.checkpoint.state;

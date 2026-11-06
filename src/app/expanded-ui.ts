@@ -7,3 +7,5 @@
 export { createExpansionTranslator } from '../i18n/expansion-text';
 export { createShopkeeperQuestionPanel, questionContentFor } from '../ui/shopkeeper-question';
 export { mountBoothMap } from '../ui/booth-map';
+export { expandedLine } from '../i18n/expanded-content';
+export { mountEffectResults, effectResultsModel } from '../ui/effect-results';

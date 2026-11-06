@@ -15,9 +15,21 @@ import type { SimEvent, SimEventType, UiCue } from '../contracts';
 export type LoadTier = 'perfect' | 'good' | 'normal' | 'weak';
 
 /** UiCue with the optional extra fields the audio engine understands (see audio-ledger.md "contract proposals"). */
-export type UiCueExt = UiCue & { readonly tier?: LoadTier; /** collect: chain count of the shot */ readonly count?: number };
+export type UiCueExt = (UiCue | ExpansionUiCue) & { readonly tier?: LoadTier; /** collect: chain count of the shot */ readonly count?: number };
 
-export type UiCueName = UiCue['cue'];
+/**
+ * Cues of the expanded gameplay (D34-D37). Kept in a local union until the
+ * lead adds the same names to `UiCue` in src/contracts/ports.ts (the audio
+ * engine already understands them); see docs/design/audio-ledger.md.
+ */
+export const EXPANSION_CUE_NAMES = ['questionShown', 'answerAccepted', 'effectGood', 'effectRisky', 'effectNeutral', 'assortmentChanged', 'outlineShown'] as const;
+export type ExpansionCueName = (typeof EXPANSION_CUE_NAMES)[number];
+export interface ExpansionUiCue {
+  readonly type: 'ui';
+  readonly cue: ExpansionCueName;
+}
+
+export type UiCueName = UiCue['cue'] | ExpansionCueName;
 
 export interface Tone {
   readonly kind: 'tone';
@@ -91,6 +103,15 @@ export const SOUNDS = {
   ammo: def(1, 0.15, [t('sine', 988, 0, 0.09, 0.3), t('sine', 1319, 0.08, 0.25, 0.3)]),
   bulletChange: def(1, 0.15, [t('triangle', 600, 0, 0.08, 0.25, 900), t('triangle', 900, 0.08, 0.1, 0.25, 1200), t('triangle', 1200, 0.16, 0.12, 0.25)]),
   transform: def(1, 0.3, [t('sine', 523, 0, 0.1, 0.25), t('sine', 659, 0.08, 0.1, 0.25), t('sine', 784, 0.16, 0.1, 0.25), t('sine', 1047, 0.24, 0.3, 0.28), n('highpass', 7000, 0.2, 0.15, 0.08)]),
+  // ---- expanded gameplay (cells, question, effect results)
+  'cell.activate': def(1, 0.15, [t('triangle', 1397, 0, 0.1, 0.28, 1760), t('sine', 2093, 0.06, 0.18, 0.18), n('bandpass', 3200, 0, 0.03, 0.12, 2)]),
+  'question.show': def(2, 0.5, [t('triangle', 659, 0, 0.1, 0.22), t('triangle', 880, 0.1, 0.2, 0.22)]),
+  'answer.accept': def(2, 0.1, [t('sine', 1100, 0, 0.05, 0.26), t('sine', 1480, 0.05, 0.1, 0.26)]),
+  'effect.good': def(2, 0.3, [t('sine', 659, 0, 0.09, 0.26), t('sine', 831, 0.07, 0.09, 0.26), t('sine', 988, 0.14, 0.25, 0.28)]),
+  'effect.risky': def(2, 0.3, [t('triangle', 392, 0, 0.12, 0.26, 330), t('triangle', 294, 0.11, 0.25, 0.26, 247)]),
+  'effect.neutral': def(2, 0.3, [t('sine', 740, 0, 0.22, 0.24), t('sine', 740, 0.12, 0.2, 0.1)]),
+  'assortment.change': def(2, 0.4, [t('triangle', 523, 0, 0.1, 0.2, 784), t('triangle', 784, 0.09, 0.1, 0.2, 1175), t('sine', 1568, 0.2, 0.25, 0.2), n('highpass', 6500, 0.18, 0.18, 0.08)]),
+  'outline.show': def(2, 0.4, [t('sine', 1568, 0, 0.1, 0.2), t('sine', 1976, 0.1, 0.18, 0.2), n('highpass', 7500, 0, 0.04, 0.07)]),
   // ---- settlement
   collectDrop: def(0, 0.1, [t('sine', 700, 0, 0.08, 0.2, 300)]),
   collect: def(2, 0.15, [t('sine', 1047, 0, 0.3, 0.3), t('sine', 1319, 0.05, 0.3, 0.22)]),
@@ -174,8 +195,8 @@ export function soundsForSimEvent(ev: SimEvent): readonly SoundRequest[] {
           out.push(req('hidden', gain));
           break;
         case 'cell':
-          // EG09 gives a used/unused cell its own short cue; until then the dull device sound.
-          out.push(req('hit.deviceDull', gain));
+          // The contact that activates a cell has its own cue; a used cell is only the ordinary small reflection.
+          out.push(req(t.activated ? 'cell.activate' : 'hit.deviceDull', gain));
           break;
       }
       if (ev.reflectionIndex > 0 && t.kind === 'surface') out.push(req('reflect', gain));
@@ -201,6 +222,13 @@ export function soundsForSimEvent(ev: SimEvent): readonly SoundRequest[] {
 
 /** The primary sound of each cue (extras such as tier / chain are in soundsForUiCue). */
 export const UI_CUE_SOUND: Record<UiCueName, SoundId> = {
+  questionShown: 'question.show',
+  answerAccepted: 'answer.accept',
+  effectGood: 'effect.good',
+  effectRisky: 'effect.risky',
+  effectNeutral: 'effect.neutral',
+  assortmentChanged: 'assortment.change',
+  outlineShown: 'outline.show',
   select: 'ui.select',
   confirm: 'ui.confirm',
   cancel: 'ui.cancel',
@@ -236,4 +264,66 @@ export function soundsForUiCue(cue: UiCueExt): readonly SoundRequest[] {
     default:
       return [req(UI_CUE_SOUND[cue.cue])];
   }
+}
+
+// ------------------------------------------------- effect results (expanded)
+
+export type EffectFeel = 'good' | 'risky' | 'neutral' | 'assortment' | 'outline';
+
+/**
+ * How an effect sounds, from its number alone (src/audio never imports the
+ * expanded data). Mapping (docs/changes/2026-11-06-effects-100.md section 1):
+ *   FX041-FX060 = assortment, FX061-FX080 = outline;
+ *   otherwise a real ammo change decides: gained = good, lost = risky;
+ *   FX001-FX020 (ammo gain, buffs) = good, except FX016-FX019 (bullet type /
+ *   split / launch changes) = neutral;
+ *   FX021-FX040 (ammo loss, nerfs) = risky, except FX038-FX039 (slow bar,
+ *   wide split: only a change of handling) = neutral;
+ *   FX081-FX100 (combinations, single transforms, information) = neutral.
+ * The sound never says more than the result line on screen.
+ */
+export function effectFeel(effectId: string, ammoDelta = 0): EffectFeel | null {
+  const m = /^FX(\d{3})$/.exec(effectId);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1 || n > 100) return null;
+  if (n >= 41 && n <= 60) return 'assortment';
+  if (n >= 61 && n <= 80) return 'outline';
+  if (ammoDelta > 0) return 'good';
+  if (ammoDelta < 0) return 'risky';
+  if (n <= 20) return n >= 16 && n <= 19 ? 'neutral' : 'good';
+  if (n <= 40) return n === 38 || n === 39 ? 'neutral' : 'risky';
+  return 'neutral';
+}
+
+const FEEL_RANK: readonly EffectFeel[] = ['assortment', 'outline', 'risky', 'good', 'neutral'];
+const FEEL_CUE = {
+  assortment: 'assortmentChanged',
+  outline: 'outlineShown',
+  risky: 'effectRisky',
+  good: 'effectGood',
+  neutral: 'effectNeutral',
+} as const satisfies Record<EffectFeel, ExpansionCueName>;
+
+export interface EffectCueInput {
+  readonly effectId: string | null;
+  readonly outcome: 'applied' | 'notApplicable';
+  readonly ammoDelta: number;
+}
+
+/**
+ * The one cue for everything a shot's plan did (coalesced: never a stack of
+ * cues). Only applied effects count; the most notable kind wins (assortment >
+ * outline > risky > good > neutral). null when nothing applied.
+ */
+export function effectCueFor(effects: readonly EffectCueInput[] | undefined): ExpansionCueName | null {
+  let best = -1;
+  for (const e of effects ?? []) {
+    if (e.outcome !== 'applied' || e.effectId === null) continue;
+    const feel = effectFeel(e.effectId, e.ammoDelta);
+    if (!feel) continue;
+    const rank = FEEL_RANK.indexOf(feel);
+    if (best === -1 || rank < best) best = rank;
+  }
+  return best === -1 ? null : FEEL_CUE[FEEL_RANK[best]!];
 }

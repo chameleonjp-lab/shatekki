@@ -53,7 +53,7 @@ import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
 import { publicLinks, RANKING_CONFIG } from './ranking/config';
 import { normalizePlayerName } from './ranking/name';
-import { createAudioEngine } from './audio';
+import { createAudioEngine, effectCueFor } from './audio';
 import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
 export interface AppHandle {
@@ -259,7 +259,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // Expanded rules only (EG07/EG08): the shopkeeper question and the 3×12 overview.
   let questionPanel: QuestionPanelHandle | null = null;
   let boothMap: BoothMapHandle | null = null;
+  let effectResults: ReturnType<ExpandedUiKit['mountEffectResults']> | null = null;
   let mapUpdatedAt = -Infinity;
+  let shownQuestion = '';
   let screenHandle: ScreenHandle<never> | null = null;
   let bookHandle: ScreenHandle<never> | null = null;
   let rankingUnsub: (() => void) | null = null;
@@ -335,8 +337,15 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     const q = ex?.question ?? null;
     if (questionPanel) {
       const content = q && q.answer === null && expansion && expandedUi ? expandedUi.questionContentFor(expansion, { shotId: q.shotId, questionId: q.questionId }, (k) => expText(k)) : null;
-      if (content) questionPanel.show(content);
-      else questionPanel.hide();
+      if (content) {
+        const key = `${content.shotId}/${content.questionId}`;
+        if (key !== shownQuestion) cue('questionShown');
+        shownQuestion = key;
+        questionPanel.show(content);
+      } else {
+        shownQuestion = '';
+        questionPanel.hide();
+      }
       questionPanel.setPaused(snap.view.paused);
     }
     // The overview is display only; a few updates per second are enough on a phone.
@@ -398,6 +407,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     questionPanel = null;
     boothMap?.destroy();
     boothMap = null;
+    effectResults?.destroy();
+    effectResults = null;
     if (expansion && expandedUi) {
       boothMap = expandedUi.mountBoothMap(ui, {
         layout,
@@ -413,9 +424,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         onAnswer: (cmd) => {
           if (markStale() || !controller) return false;
           const ok = controller.dispatch(cmd);
-          if (ok) cue('confirm');
+          if (ok) cue('answerAccepted');
           return ok;
         },
+      });
+      effectResults = expandedUi.mountEffectResults(ui, {
+        t: expText,
+        line: (key) => expandedUi.expandedLine(i18n.locale, key),
       });
       mapUpdatedAt = -Infinity;
     }
@@ -487,6 +502,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
+          effectResults?.hide();
           runStore.saveAfterFire(s);
           markStale();
         },
@@ -494,6 +510,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
+          effectResults?.show({ effects: summary.effects, deferredTransforms: summary.deferredTransforms });
+          // One coalesced cue for what the post-flight effects did (expanded rules only).
+          const effectCue = effectCueFor(summary.effects);
+          if (effectCue) cue(effectCue);
           if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
           if (summary.newlyCompletedSets.length > 0) {
             cue('setComplete');
@@ -561,6 +581,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           bookHandle?.dispose();
           bookHandle = null;
         },
+        // Pair-set names and hints (expanded build only; the public build has no PAIR sets).
+        ...(expansion ? { expandedText: (k: string) => expText(k) } : {}),
       },
       {
         sets: setBookEntriesFromCatalog(catalog),
