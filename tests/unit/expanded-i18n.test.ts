@@ -41,6 +41,7 @@ const TWO_KINDS: Partial<Record<Locale, RegExp>> = {
   'pt-BR': /2 tipos/,
   'zh-Hans': /2种/,
   'zh-Hant': /2種/,
+  id: /2 jenis/,
   fr: /2 types/,
   de: /2 Sorten/,
   ko: /2종류/,
