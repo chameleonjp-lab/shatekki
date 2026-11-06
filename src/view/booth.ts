@@ -35,7 +35,7 @@ const pos = (b: Box3): V3 => [b.center.x, b.center.y, b.center.z];
 
 // --------------------------------------------------------------------- static
 
-function paintSurface(k: Kit, s: StaticSurface): void {
+function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean): void {
   const b = s.box;
   const [w, h, d] = size(b);
   const [cx, cy, cz] = pos(b);
@@ -57,6 +57,7 @@ function paintSurface(k: Kit, s: StaticSurface): void {
       for (let i = 0; i < 14; i++) k.box(i % 2 ? 0x6b4429 : 0x5a3924, w / 14, h - 0.04, DECAL, [cx - hx + (i + 0.5) * (w / 14), cy, front]);
       // red/white scalloped valance along the top (visual only, flat)
       for (let i = 0; i < 14; i++) k.box(i % 2 ? C.white : C.red, w / 14, 0.1, DECAL * 2, [cx - hx + (i + 0.5) * (w / 14), cy + hy - 0.06, front + DECAL]);
+      if (hasCells) break; // layout v2: the 36 background cells fill the wall (src/view/background-cells.ts)
       // bullseye sign: a 的 without text
       const sx = 0.55;
       const sy = 2.0;
@@ -117,11 +118,23 @@ function buildLanterns(layout: BoothLayout): THREE.BufferGeometry {
     k.box(C.black, axis === 'x' ? 0.05 : 0.1, 0.012, axis === 'z' ? 0.05 : 0.1, [at[0], at[1] + 0.11, at[2]]);
     k.box(C.black, axis === 'x' ? 0.05 : 0.1, 0.012, axis === 'z' ? 0.05 : 0.1, [at[0], at[1] - 0.11, at[2]]);
   };
-  lantern([wallL + 0.05, 1.95, -0.9], 'x', 1);
-  lantern([wallL + 0.05, 1.95, -1.7], 'x', 1);
-  lantern([wallR - 0.05, 1.95, -1.25], 'x', -1);
-  lantern([-0.5, 1.98, back + 0.05], 'z', 1);
-  void layout;
+  if (layout.slotModel === 'v2-36') {
+    // Wide stall: side-wall lanterns at the real walls, back lanterns spread above the cell band (cells end at y 1.88).
+    const lw = layout.surfaces.find((s) => s.id === 'left-wall');
+    const rw = layout.surfaces.find((s) => s.id === 'right-wall');
+    const wl = lw ? lw.box.center.x + lw.box.halfExtents.x : wallL;
+    const wr = rw ? rw.box.center.x - rw.box.halfExtents.x : wallR;
+    lantern([wl + 0.05, 1.95, -0.9], 'x', 1);
+    lantern([wl + 0.05, 1.95, -1.7], 'x', 1);
+    lantern([wr - 0.05, 1.95, -1.25], 'x', -1);
+    const span = wr - wl - 0.6;
+    for (let i = 0; i < 5; i++) lantern([wl + 0.3 + (span * (i + 0.5)) / 5, 2.06, back + 0.05], 'z', 1);
+  } else {
+    lantern([wallL + 0.05, 1.95, -0.9], 'x', 1);
+    lantern([wallL + 0.05, 1.95, -1.7], 'x', 1);
+    lantern([wallR - 0.05, 1.95, -1.25], 'x', -1);
+    lantern([-0.5, 1.98, back + 0.05], 'z', 1);
+  }
   return mergeParts(k.parts);
 }
 
@@ -169,7 +182,7 @@ function devicePlate(d: DeviceGeometry, w: number, h: number, depth: number): Ki
     case 'penalty': {
       base(0x3a2a45);
       cross(k, 0, -h * 0.05, h * 0.5, h * 0.12, C.red, z, PI / 4);
-      k.tor(C.white, w * 0.1, w * 0.02, [0, h * 0.36, z]);
+      k.tor(C.white, w * 0.1, Math.min(w * 0.02, 0.0032), [0, h * 0.36, z]); // tube capped so the mark stays <= 5 mm proud on wide plates
       break;
     }
     case 'ammo': {
@@ -282,7 +295,8 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
 
   // static, merged
   const sk = new Kit();
-  for (const s of layout.surfaces) paintSurface(sk, s);
+  const hasCells = (layout.backgroundCells?.length ?? 0) > 0;
+  for (const s of layout.surfaces) paintSurface(sk, s, hasCells);
   paintSlotPads(sk, layout);
   // bell cord (hair thin, runs to the ceiling)
   const bell = layout.devices.find((d) => d.kind === 'transform');
@@ -329,6 +343,7 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
   for (const d of layout.devices) addProxy(d.deviceId, d.box);
   for (const p of layout.shopkeeper) addProxy(`shopkeeper-${p.part}`, p.box);
   for (const t of layout.hiddenTargets) addProxy(t.targetId, t.box);
+  for (const c of layout.backgroundCells ?? []) addProxy(c.cellId, c.box);
 
   // warm dusk lighting
   const hemi = new THREE.HemisphereLight(0xffe2b8, 0x5a3a30, 1.6);

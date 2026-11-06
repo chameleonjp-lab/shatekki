@@ -13,6 +13,7 @@ import { aimDirection, computeReticle, muzzlePosition, type ReticleResult } from
 import { Kit, ROT_X, mergeParts } from './assets/kit';
 import { C } from './assets/prize-recipes';
 import { buildBooth, type BoothBuild } from './booth';
+import { createBackgroundCells, type BackgroundCellsView } from './background-cells';
 import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec } from './prizes';
 
 export interface SceneGraphDeps {
@@ -54,6 +55,8 @@ export interface SceneGraph {
   readonly layout: BoothLayout;
   readonly scene: THREE.Scene;
   readonly booth: BoothBuild;
+  /** Layout v2 only: the 36 background cells on the back wall. */
+  readonly cells: BackgroundCellsView | null;
   readonly prizeLayer: THREE.Group;
   readonly projectileLayer: THREE.Group;
   readonly effectsLayer: THREE.Group;
@@ -173,6 +176,8 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
   const booth = buildBooth(layout, pickInflate);
   scene.add(booth.group, booth.proxies);
+  const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
+  if (cells) scene.add(cells.group);
   for (const l of booth.lights) scene.add(l);
 
   const prizeLayer = new THREE.Group();
@@ -212,6 +217,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     layout,
     scene,
     booth,
+    cells,
     prizeLayer,
     projectileLayer,
     effectsLayer,
@@ -242,6 +248,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     },
     dispose() {
       booth.dispose();
+      cells?.dispose();
       for (const n of prizes.values()) n.proxy.geometry.dispose();
       internals.proxyMaterial.dispose();
       internals.factory.dispose();
