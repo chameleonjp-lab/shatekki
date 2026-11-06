@@ -4,13 +4,15 @@
 
 [要件修正書](docs/changes/2026-11-06-expanded-gameplay-requirements.md)に、2景品セット300種、店主の200質問と2択、縦3段×横12列の36枠、各背景マスで1ゲーム1回の100効果をまとめました。[セット300組](docs/changes/2026-11-06-pair-sets-300.md)・[質問200件](docs/changes/2026-11-06-shopkeeper-questions-200.md)・[シリーズと効果100件](docs/changes/2026-11-06-effects-100.md)の候補表も含みます。
 
-**この追加要件は未実装です。** 既存の3景品セット100組を残す案、具体的な質問・効果・点数は修正書の提案として区別しています。下記の9枠・100セットは現行実装 rules-v1 の説明です。今回の文書PRで正式データやゲームの動作は変わりません。
+[PR #19](https://github.com/chameleonjp-lab/shatekki/pull/19) までに、36枠・2景品300組と既存3景品100組・店主の質問・背景効果を内部試作に実装しました。公開用は9枠・100セットの rules-v1 です。
+
+[PR #19後の実装計画](docs/superpowers/plans/2026-11-07-post-pr19-gameplay.md)では、結果画面と翻訳を直し、弾を増やす10の仕掛け、遊びの拡張4案、成功を伝える演出5案を順に組み込みます。[敵対的検証と修正の記録](docs/reviews/2026-11-07-post-pr19-gameplay-review.md)で、重なった報酬や保存中断の扱いを確認できます。
 
 [追加実装計画](docs/superpowers/plans/2026-11-06-expanded-gameplay.md)に、契約・データから36枠、質問と効果、保存、画面・15言語・音、統合確認までの10工程をまとめました。[44項目との対応表](docs/reviews/2026-11-06-expanded-gameplay-plan-traceability.md)と[計画レビュー](docs/reviews/2026-11-06-expanded-gameplay-plan-review.md)も参照できます。旧Task 00〜18を最初から実行し直す計画ではありません。
 
 ## 現行実装（rules-v1）
 
-2026年11月6日更新。要件33項目に沿った試作を実装し、PR #7・#11・#13をmainへマージ済みです。**正式値を採用し、ランキング非公開・実験場未連携での公開を準備しています。公開URLとiPhone Safari実機の確認はまだです。** 正式名はシャテッキ／Shatekkiです。
+正式名はシャテッキ／Shatekkiです。公開用の既定は正式値を採用した rules-v1 で、ランキングは非公開、実験場とは未連携です。36枠版のiPhone Safari実機での操作・音・性能は後続計画で確認します。
 
 [最新の残作業と今回の修正](docs/release/follow-up-status.md)に、実施済みの修正、確認結果、次の順序、利用者に判断いただく内容をまとめています。[タスク台帳](docs/architecture/task-ledger.md)と[受入確認の証拠](docs/qa/acceptance-evidence.md)も参照してください。
 
