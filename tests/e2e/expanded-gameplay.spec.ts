@@ -157,3 +157,41 @@ test('reloading while the question is shown abandons the shot; nothing is redone
   expect(await page.evaluate(() => localStorage.getItem('shatekki.run.rules-v2-proposed-r001'))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('shatekki.run.v1'))).toBeNull();
 });
+
+test('the result keeps the last shot and why the run ended, after the effect card is gone (plan T1, F2)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await start(page);
+  // Fire straight ahead until the run ends (20 shots at most: 10 + up to 10 extra).
+  for (let shot = 0; shot < 20; shot++) {
+    if ((await probe(page, 'screen')) === 'result' || (await probe(page, 'phase')) === 'ended') break;
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
+    await page.getByTestId('btn-confirm-position').click();
+    await page.getByTestId('btn-load').dispatchEvent('pointerdown');
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
+    const fire = page.getByTestId('btn-fire');
+    await fire.dispatchEvent('pointerdown');
+    await fire.dispatchEvent('pointerup');
+    // Settle; answer a question if the cork happened to touch the shopkeeper.
+    await expect.poll(async () => {
+      if (await page.getByTestId('shopkeeper-question').isVisible()) await page.getByTestId('shopq-choice-A').click().catch(() => undefined);
+      const screen = await probe(page, 'screen');
+      const phase = await probe(page, 'phase');
+      return screen === 'result' || phase === 'position' || phase === 'ended';
+    }, { timeout: 30_000 }).toBe(true);
+  }
+  await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 20_000 });
+  const last = page.getByTestId('result-last-shot');
+  await expect(last).toBeVisible();
+  const text = (await last.textContent()) ?? '';
+  expect(text).toMatch(/最後の一射（\d+射目）/);
+  expect(text).toContain('弾がなくなったので、ゲームを終えました。');
+  expect(text).not.toMatch(/exp\.|fxres\.|result\.|\bFX\d{3}\b|\bPAIR\d{3}\b|\{\w+\}/);
+  // Pair sets are named, never shown by id, on the result screen.
+  const sets = (await page.locator('.scr-result').textContent()) ?? '';
+  expect(sets).not.toMatch(/\bPAIR\d{3}\b/);
+  // Opening and closing the set book leaves the last-shot section readable.
+  await page.getByTestId('result-setbook').click();
+  await page.locator('.scr-book .btn.primary').click();
+  await expect(last).toBeVisible();
+  await expect(last).toContainText('弾がなくなったので');
+});
