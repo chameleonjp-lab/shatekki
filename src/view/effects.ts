@@ -212,9 +212,9 @@ function offscreenKeyFor(t: ImpactTarget): string | null {
       return 'fx.offscreen.hidden';
     case 'surface':
       return null;
-    // EG07/EG09 add the off-screen cell notice and its wording.
+    // Layout v2: a cell used by an off-screen contact gets the same kind of arrow cue as a device.
     case 'cell':
-      return null;
+      return t.activated ? 'fx.offscreen.cell' : null;
   }
 }
 
