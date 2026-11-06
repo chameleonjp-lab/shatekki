@@ -1,5 +1,13 @@
 # shatekki — 屋台の射的ゲーム
 
+## 追加要件の修正書（2026年11月6日）
+
+[要件修正書](docs/changes/2026-11-06-expanded-gameplay-requirements.md)に、2景品セット300種、店主の200質問と2択、縦3段×横12列の36枠、各背景マスで1ゲーム1回の100効果をまとめました。[セット300組](docs/changes/2026-11-06-pair-sets-300.md)・[質問200件](docs/changes/2026-11-06-shopkeeper-questions-200.md)・[シリーズと効果100件](docs/changes/2026-11-06-effects-100.md)の候補表も含みます。
+
+**この追加要件は未実装です。** 既存の3景品セット100組を残す案、具体的な質問・効果・点数は修正書の提案として区別しています。下記の9枠・100セットは現行実装 rules-v1 の説明です。今回の文書PRで正式データやゲームの動作は変わりません。
+
+## 現行実装（rules-v1）
+
 2026年11月6日更新。要件33項目に沿った試作を実装し、PR #7・#11・#13をmainへマージ済みです。**正式値を採用し、ランキング非公開・実験場未連携での公開を準備しています。公開URLとiPhone Safari実機の確認はまだです。** 正式名はシャテッキ／Shatekkiです。
 
 [最新の残作業と今回の修正](docs/release/follow-up-status.md)に、実施済みの修正、確認結果、次の順序、利用者に判断いただく内容をまとめています。[タスク台帳](docs/architecture/task-ledger.md)と[受入確認の証拠](docs/qa/acceptance-evidence.md)も参照してください。
@@ -32,3 +40,4 @@ Claudeは初期実装と美術・演出・音、ChatGPTは要件管理と統合�
 変更に応じて[確認範囲](docs/qa/ci-scope.md)を選びます。全体を確かめる場合は、Node 22以上で `npm ci`、`npm run check`（型検査・単体・統合・ビルド）、`npm run test:e2e`（Chromiumで画面操作）を実行します。iPhone程度の画面幅をまねる試験はSafari実機の確認とは別です。
 
 [実装の基準](docs/architecture/implementation-baseline.md)・[一射の処理設計](docs/architecture/shot-pipeline.md)・[公開前の確認と承認事項](docs/release/approval-request.md)も保存しています。
+
