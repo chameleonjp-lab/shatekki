@@ -1,0 +1,20 @@
+{
+  "source": "docs/superpowers/plans/2026-11-07-post-pr19-gameplay.md",
+  "valueStatus": "prototype",
+  "versions": {
+    "expanded-trial": { "rulesVersion": "rules-v2-proposed-r002", "enabled": ["A1", "A5"] },
+    "expanded-full": { "rulesVersion": "rules-v2-proposed-r003", "enabled": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"] }
+  },
+  "values": {
+    "bonusBag": 2,
+    "windChime": 2,
+    "seesaw": 2,
+    "piggyBank": { "deposits": 2, "amount": 4 },
+    "lastShotTarget": { "outer": 1, "center": 3 },
+    "stamps": { "milestones": [2, 5], "amount": 2 },
+    "multiTake": { "two": 1, "threePlus": 2 },
+    "setVoucher": { "pair": 1, "triple": 2 },
+    "order": { "amount": 2, "shots": 3 },
+    "lanterns": { "amount": 3, "zones": [[1, 4], [5, 8], [9, 12]] }
+  }
+}

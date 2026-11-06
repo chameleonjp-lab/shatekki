@@ -8,7 +8,7 @@
  * projection, the next-shot reservation, used cells, deferred transforms, the
  * question cursor, and the end check. Nothing is scored from the screen.
  */
-import type { CollectedPrize, ExpandedRunState, LedgerItem, PrizeTypeId, RunState, ShotRecord, ShotSummary, SlotId, SeriesId } from '../contracts';
+import type { CollectedPrize, ExpandedRunState, LedgerItem, PrizeTypeId, RewardOutcome, RunState, ShotRecord, ShotSummary, SlotId, SeriesId } from '../contracts';
 import { isAmmoBalanced, isExpandedRunState } from '../contracts';
 import { completedSetsFor } from '../catalog/sets';
 import { replenish } from './replenish';
@@ -17,6 +17,7 @@ import { EMPTY_RESERVATION } from './gameplay-effects';
 import { seriesDef } from './series';
 import type { SettlementResult } from './settlement';
 import type { ExpandedPlanContext } from './effect-plan';
+import { rewardConfigOf, settleRewards } from './rewards';
 
 export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: ExpandedPlanContext): SettlementResult {
   if (!isExpandedRunState(state)) throw new Error('resolveExpandedShot: not an expanded run');
@@ -66,9 +67,19 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
   const remaining = record.remainingPrizes.filter((p) => !already.has(p.instanceId) && !p.collected);
 
   const motionSec = state.clocks.motionSec + record.simTimeSec;
-  const ammoAfter = projection.ammo;
+  // Rewards (A1-A10) continue the plan's working ammo, A1 → A10, with the same caps (plan T2).
+  const rewardCfg = rewardConfigOf(ctx.expansion);
+  const rewardsBefore = state.expansion.rewards;
+  const settled =
+    rewardCfg && rewardsBefore
+      ? settleRewards({ state, cfg: rewardCfg, tuning, catalog, work: projection, shotNumber: flight.shotNumber, collectedNow, newSets, contacts: record.rewardContacts })
+      : null;
+  const rewardOutcomes: readonly RewardOutcome[] = settled?.outcomes ?? [];
+  const ammoAfter = settled ? settled.ammo : projection.ammo;
+  const bonusAmmoTotal = settled ? settled.bonusAmmoTotal : projection.bonusAmmoTotal;
+  // The end is decided only after every effect and reward of the shot.
   const runEnded = ammoAfter <= 0;
-  const bonusGranted = projection.bonusAmmoTotal - state.bonusAmmoTotal;
+  const bonusGranted = bonusAmmoTotal - state.bonusAmmoTotal;
 
   // cells used this shot (also when their effect could not act); transforms still waiting; question taken
   const usedNow = new Map(plan.processed.filter((e) => e.source.kind === 'cell' && e.reason !== 'cellAlreadyUsed' && e.reason !== 'unknownCell').map((e) => [e.source.kind === 'cell' ? e.source.cellId : '', e.requestId]));
@@ -84,6 +95,15 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     outlineSeries: projection.outlineSeries,
     deferredTransforms: (record.deferredTransforms ?? []).filter((d) => !already.has(d.instanceId)),
     rng: plan.rng,
+    ...(settled
+      ? {
+          rewards: {
+            ...settled.rewards,
+            // Kept so the result reads the same after a reload (never re-applied).
+            lastShot: { shotNumber: flight.shotNumber, effects: plan.processed, deferredTransforms: record.deferredTransforms ?? [], rewards: rewardOutcomes, ammoAfter },
+          },
+        }
+      : {}),
   };
 
   const base: ExpandedRunState = {
@@ -95,7 +115,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     completedSets: [...state.completedSets, ...newSets],
     firstHitsScored: [...state.firstHitsScored, ...firstHits.keys],
     ammo: ammoAfter,
-    bonusAmmoTotal: projection.bonusAmmoTotal,
+    bonusAmmoTotal,
     ammoLostTotal: projection.ammoLostTotal,
     bulletType: projection.bulletType,
     maxChain: Math.max(state.maxChain, collectedNow.length),
@@ -140,6 +160,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     effects: plan.processed,
     appliedTransforms: record.appliedTransforms ?? [],
     deferredTransforms: record.deferredTransforms ?? [],
+    ...(settled ? { rewards: rewardOutcomes } : {}),
   };
   return { state: next, summary };
 }

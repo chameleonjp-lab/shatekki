@@ -9,3 +9,4 @@ export * from './sim';
 export * from './aim';
 export * from './expansion';
 export * from './layout-v2';
+export * from './rewards';

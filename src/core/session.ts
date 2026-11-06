@@ -279,5 +279,43 @@ function validateExpansionState(s: Obj, exp: ExpansionCatalog, layout: BoothLayo
   }
   const rng = x.rng;
   if (!isObj(rng) || !isValidRngState(rng.cells) || !isValidRngState(rng.questions) || !isValidRngState(rng.effects)) return 'invalid expansion rng';
+  return validateRewardState(x.rewards, exp, catalog, shots);
+}
+
+/**
+ * Rewards (r002+): present exactly when the rules version has them. Checks the shape and the
+ * counters that would let a forged save pay twice (each reward paid at most once).
+ */
+function validateRewardState(r: unknown, exp: ExpansionCatalog, catalog: RuntimeCatalog, shots: number): string | null {
+  const cfg = exp.profile.rewards;
+  if (!cfg) return r === undefined ? null : 'reward state in a version without rewards';
+  if (!isObj(r)) return 'reward state missing';
+  const flags = ['targetUsed', 'chimeUsed', 'seesawUsed', 'piggyDone', 'lanternsDone'];
+  if (!flags.every((k) => typeof r[k] === 'boolean')) return 'invalid reward flags';
+  if (r.bag !== null && !(isObj(r.bag) && typeof r.bag.instanceId === 'string' && typeof r.bag.used === 'boolean')) return 'invalid reward bag';
+  if (r.target !== null) {
+    const t = r.target;
+    if (!isObj(t) || !isInt(t.forShot, 1) || t.forShot > shots + 1 || !isObj(t.geometry) || !isObj(t.offered)) return 'invalid reward target';
+    const o = t.offered;
+    if (!isInt(o.outer) || !isInt(o.center) || o.outer > cfg.lastShotTarget.outer || o.center > cfg.lastShotTarget.center) return 'reward target offers more than the version allows';
+  }
+  const ints = (v: unknown, max: number) => Array.isArray(v) && uniq(v) && v.every((n) => isInt(n) && n <= max);
+  if (!ints(r.piggyDeposits, shots)) return 'invalid piggy deposits';
+  if (!ints(r.stampsReached, Number.MAX_SAFE_INTEGER) || !(r.stampsReached as number[]).every((m) => cfg.stamps.milestones.includes(m))) return 'invalid stamps';
+  if (!ints(r.lanternsLit, cfg.lanterns.zones.length - 1)) return 'invalid lanterns';
+  if (r.order !== null) {
+    const o = r.order;
+    if (!isObj(o) || !isPrizeTypeId(o.typeId) || !catalog.prizes.has(o.typeId) || !['offered', 'accepted', 'declined', 'done', 'expired'].includes(o.status as string)) return 'invalid reward order';
+  }
+  if (!Array.isArray(r.outcomes)) return 'invalid reward outcomes';
+  const keys = new Set<string>();
+  for (const o of r.outcomes) {
+    if (!isObj(o) || typeof o.id !== 'string' || typeof o.key !== 'string' || !isInt(o.shotNumber, 1) || o.shotNumber > shots || !isInt(o.offered) || !isInt(o.granted) || o.granted > o.offered) return 'invalid reward outcome';
+    // A7 and A8 may repeat over shots; every other reward key pays once per game.
+    const k = o.id === 'A7' || o.id === 'A8' ? `${o.id}:${o.shotNumber}` : `${o.id}:${o.key}`;
+    if (keys.has(k)) return 'a reward was paid twice';
+    keys.add(k);
+  }
+  if (r.lastShot !== null && !(isObj(r.lastShot) && isInt(r.lastShot.shotNumber, 1) && Array.isArray(r.lastShot.effects) && Array.isArray(r.lastShot.rewards))) return 'invalid last shot record';
   return null;
 }

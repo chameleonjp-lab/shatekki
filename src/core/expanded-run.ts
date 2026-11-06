@@ -10,6 +10,7 @@ import { BASE_SHOT_MODIFIERS, EXPANDED_RUN_STATE_SCHEMA_VERSION } from '../contr
 import { rngNext, seedRng, type RngState } from '../catalog/rng';
 import { assignCells } from './background-cells';
 import { createRun, lowestStatus } from './state';
+import { initialRewards } from './rewards';
 
 export interface ExpandedBundleInput {
   readonly catalog: RuntimeCatalog;
@@ -44,6 +45,9 @@ export function createExpandedRun(config: RunConfig, bundle: ExpandedBundleInput
   const questionIds = [...expansion.questions.keys()].sort();
   const questions = shuffleOnce(seedRng(salt(config.seed, 0x1b873593)), questionIds);
   const effectsRng = seedRng(salt(config.seed, 0x2545f491));
+  // Rewards (r002+): the A1 bag and the A9 order, each from its own choice; the draw RNG never moves.
+  const rewardCfg = expansion.profile.rewards;
+  const withRewards = rewardCfg ? initialRewards(base.shelf, config.seed, rewardCfg, catalog, layout) : null;
 
   const exp: ExpansionRunState = {
     cells: cells.cells,
@@ -59,9 +63,11 @@ export function createExpandedRun(config: RunConfig, bundle: ExpandedBundleInput
       questions: questions.rng as ExpansionRunState['rng']['questions'],
       effects: effectsRng as ExpansionRunState['rng']['effects'],
     },
+    ...(withRewards ? { rewards: withRewards.rewards } : {}),
   };
   return {
     ...base,
+    ...(withRewards ? { shelf: withRewards.shelf } : {}),
     schemaVersion: EXPANDED_RUN_STATE_SCHEMA_VERSION,
     rulesVersion: expansion.profile.rulesVersion,
     valueStatus: lowestStatus(base.valueStatus, expansion.profile.valueStatus),

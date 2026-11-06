@@ -14,6 +14,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
     "build:expanded": "VITE_SHATEKKI_BUNDLE=expanded-proposed vite build --outDir dist-expanded --emptyOutDir",
     "preview:expanded": "vite preview --outDir dist-expanded --host 0.0.0.0 --port 4174 --strictPort",
+    "build:rewards": "VITE_SHATEKKI_BUNDLE=expanded-full vite build --outDir dist-rewards --emptyOutDir",
+    "preview:rewards": "vite preview --outDir dist-rewards --host 0.0.0.0 --port 4175 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "node scripts/run-vitest.mjs unit",
     "test:integration": "node scripts/run-vitest.mjs integration",
