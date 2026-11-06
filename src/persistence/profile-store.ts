@@ -31,6 +31,9 @@ export interface StoreStatus {
   readonly lastError: string | null;
 }
 
+/** What a profile needs from a finished run. The rules-v1 store ignores rulesVersion; the versioned store requires it. */
+export type RunEndInput = Pick<FinalResult, 'status' | 'score'> & { readonly rulesVersion?: string };
+
 export interface ProfileStore {
   load(): Profile;
   /** Add discoveries (e.g. ShotSummary.newlyCompletedSets). Returns the ones that were new to the book. */
@@ -39,7 +42,7 @@ export interface ProfileStore {
    * Record a finished run. Only completed runs can set the local best; abandoned runs never do.
    * The local best is for display and includes prototype-value runs; the official ranking is separate.
    */
-  recordRunEnd(result: Pick<FinalResult, 'status' | 'score'>): { readonly newBest: boolean };
+  recordRunEnd(result: RunEndInput): { readonly newBest: boolean };
   status(): StoreStatus;
 }
 
