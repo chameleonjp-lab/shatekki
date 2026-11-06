@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function startGame(page: Page) {
   await page.goto('/?e2e=1');
-  await page.getByTestId('btn-start').click();
+  await page.getByTestId('home-start').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
 }
 

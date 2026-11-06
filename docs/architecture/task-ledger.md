@@ -1,6 +1,6 @@
 # タスク台帳（Opusが更新）
 
-状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（P2統合後）。
+状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（P3・P4統合後）。
 
 基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`
 
@@ -18,11 +18,11 @@
 | 09 | セット・採点・一射確定 | Game 2、Opus審査 | PR_OPEN | 同上 | unit/scoring | 技・セット点は試作（O02/O03） |
 | 10 | 保存・停止・中断 | Game 2、Opus審査・配線 | PR_OPEN | 同上 | integration/checkpoint、e2e/reload 4 | 実機のlocalStorage・プライベートモードは未確認 |
 | 11 | 描画基盤・美術方針 | Visual（claude-sonnet-5-5）＋Opus（照準の当たり判定合わせ） | PR_OPEN | `feat/p1-view`→`feat/p1-integration` | integration/view-contract 22 | 店主が初期視点の画面外。配置の見直しを検討 |
-| 12 | 命中・惜しい・結果演出 | Visual 2（claude-sonnet-5-5） | WORKING | `feat/p3-visual`（基準 58d5a9a） | — | 利用枠の上限で一度中断し、再開 |
-| 13 | 100景品の実行データ・素材・音 | Game＋Visual＋UI | 未着手 | — | — | 03,09,11の後 |
-| 14 | 共通画面・名前・図鑑・結果 | UI/QA（claude-sonnet-5-5） | REVIEW | `feat/p4-ui`（78aefbf） | unit/share・integration/screens（画面の部品はブラウザ未確認） | Opusが接続 |
-| 15 | 15言語・共有 | UI/QA 2（claude-sonnet-5-5） | WORKING | `feat/p4-i18n-content` | unit/i18n（UI文言15言語） | 景品・セット名・ヒントの13言語を作業中 |
-| 16 | ランキング（模擬通信） | UI/QA＋Opus | REVIEW | `feat/p4-ui` | integration/ranking・security | 本番接続はDB登録の承認が必要 |
+| 12 | 命中・惜しい・結果演出 | Visual 2（claude-sonnet-5-5）＋Opus配線 | PR_OPEN | `feat/p3-visual`→`feat/p4-integration` | unit/effects・classify・result-vfx | 実際の画面での演出の見え方は実機未確認 |
+| 13 | 100景品の実行データ・素材・音 | Game（データ）＋Visual（形・音） | PR_OPEN | `feat/p1-game`・`feat/p1-view`・`feat/p3-visual` | unit/catalog・audio、integration/view-contract | 値はすべて試作。試聴なし |
+| 14 | 共通画面・名前・図鑑・結果 | UI/QA＋Opus配線 | PR_OPEN | `feat/p4-ui`→`feat/p4-integration` | integration/screens、e2e/screens 5×2画面 | — |
+| 15 | 15言語・共有 | UI/QA 2 | PR_OPEN | `feat/p4-i18n-content`→`feat/p4-integration` | unit/i18n・i18n-content | 母語話者の確認なし（O16） |
+| 16 | ランキング（模擬通信） | UI/QA＋Opus | PR_OPEN（本番はBLOCKED） | `feat/p4-ui`→`feat/p4-integration` | integration/ranking・security | 本番接続はDB登録の承認が必要 |
 | 17 | 公開前の統合確認 | Opus＋UI/QA | 未着手 | — | — | 03〜16の後。iPhone実機は公開承認待ち |
 | 18 | 承認済みの公開と公開後確認 | Opus | BLOCKED | — | — | 利用者の公開承認・DB登録承認が必要 |
 

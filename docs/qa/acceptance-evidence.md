@@ -2,7 +2,7 @@
 
 AC01〜45の実際の試験結果を記録する。「証拠の種類」は、単体・統合（Node上の自動試験）、ブラウザ自動（ChromiumでiPhone程度の画面幅をまねたもの）、実機（iPhone Safariでの観察）、本番（公開URL・正式ランキング）を区別する。証拠がないものは合格にしない。
 
-最終更新：2026-11-05 Opus（P2統合後）。「自動試験で確認」はNode上またはChromiumでの結果で、iPhone Safari実機の結果ではない。
+最終更新：2026-11-05 Opus（P3・P4統合後）。「自動試験で確認」はNode上またはChromiumでの結果で、iPhone Safari実機の結果ではない。
 
 | AC | 担当Task | 試験（tests/配下） | 証拠の種類 | 状態 | 証拠（コミット・コマンド・件数） |
 |---|---|---|---|---|---|
@@ -27,26 +27,26 @@ AC01〜45の実際の試験結果を記録する。「証拠の種類」は、�
 | AC19 | 05,08 | unit/collision.test.ts; unit/gimmicks.test.ts | 単体（物理） | 自動試験で確認 | unit/transform-grace「total time never exceeds maxFlight + maxSettle + grace」、unit/collision、unit/motion |
 | AC20 | 09 | unit/scoring.test.ts | 単体 | 自動試験で確認 | unit/scoring「completes across shots in any order」「three of the same kind never substitute」 |
 | AC21 | 09 | unit/scoring.test.ts | 単体 | 自動試験で確認 | unit/scoring「one collected kind may complete several sets, and several sets in one shot each score once」 |
-| AC22 | 09,10 | unit/scoring.test.ts; integration/checkpoint.test.ts | 統合 | 一部確認（図鑑画面はTask 14の統合待ち） | integration/checkpoint「a new run starts with no completed sets while the book keeps every discovery」 |
-| AC23 | 14 | integration/screens.test.ts | — | 未実施 | — |
+| AC22 | 09,10 | unit/scoring.test.ts; integration/checkpoint.test.ts | 統合＋ブラウザ自動 | 自動試験で確認（実機未確認） | integration/checkpoint（次のゲームで成立済みをリセット・図鑑は保持）、e2e/screens「set book … 100 sets」 |
+| AC23 | 14 | integration/screens.test.ts | 統合＋ブラウザ自動 | 自動試験で確認（ヒントは試作O02） | integration/screens（setBookViewModel：未発見は名前を伏せヒント、発見後は3景品）、e2e/screens「names hidden until discovered」 |
 | AC24 | 09 | unit/scoring.test.ts | 単体＋統合 | 自動試験で確認 | unit/scoring「50 + 20 - 100 -> 0 (applied 70), then +30 -> 30」、integration/devices-run「penalty plate」 |
-| AC25 | 08 | unit/gimmicks.test.ts | 単体 | 一部確認（反応の演出はTask 12） | unit/scoring「score once per run per part/target; reactions may repeat」 |
-| AC26 | 12 | unit/effects.test.ts | — | 未実施 | — |
-| AC27 | 12 | unit/effects.test.ts | — | 未実施 | — |
-| AC28 | 14,16 | integration/screens.test.ts; integration/ranking.test.ts | — | 未実施 | — |
-| AC29 | 14,16,18 | integration/screens.test.ts; integration/ranking.test.ts | — | 未実施 | — |
-| AC30 | 14 | integration/screens.test.ts | — | 未実施 | — |
-| AC31 | 16,18 | integration/ranking.test.ts | — | 未実施 | — |
-| AC32 | 16,18 | integration/ranking.test.ts | — | 未実施 | — |
-| AC33 | 16,18 | integration/ranking.test.ts | — | 未実施 | — |
-| AC34 | 15,18 | unit/share.test.ts | — | 未実施 | — |
-| AC35 | 15 | unit/i18n.test.ts; e2e/locales.spec.ts | — | 未実施 | — |
-| AC36 | 13,17 | unit/audio.test.ts | — | 未実施 | — |
+| AC25 | 08 | unit/gimmicks.test.ts | 単体 | 自動試験で確認（反応演出の実機未確認） | unit/scoring（初回だけ加点）、unit/effects（部位の反応は毎回） |
+| AC26 | 12 | unit/effects.test.ts | 単体 | 自動試験で確認（実機未確認） | unit/effects（全接触点の小反応・継続接触の重複なし）、unit/classify・offscreenIndicator（画面外の方向と対象） |
+| AC27 | 12 | unit/effects.test.ts | 単体 | 自動試験で確認 | unit/effects「skip / no skip give identical state」（凍結したフレームとsummary）、unit/classify（確定後にだけ分類） |
+| AC28 | 14,16 | integration/screens.test.ts; integration/ranking.test.ts | ブラウザ自動＋統合 | 一部確認（同名別人の統合なしは本番DB側の課題） | e2e/screens「name is fixed at start; empty means anonymous」、integration/ranking（匿名は送信しない） |
+| AC29 | 14,16,18 | integration/screens.test.ts; integration/ranking.test.ts | ブラウザ自動 | 一部確認（正式な詳細URLが未確定のため「準備中」） | e2e/screens「ranking is 準備中」。正式URLはTask 18（承認後） |
+| AC30 | 14 | integration/screens.test.ts | ブラウザ自動＋統合 | 自動試験で確認（実機未確認） | e2e/screens「a whole run of 10 shots ends on the result screen」（総得点・もう一回が最初の画面内）、integration/screens（内訳・最大連鎖） |
+| AC31 | 16,18 | integration/ranking.test.ts | 統合（模擬通信） | 一部確認（本番未接続） | integration/ranking（rank_noをそのまま使用、自己ベスト基準）。本番の集計はTask 18 |
+| AC32 | 16,18 | integration/ranking.test.ts | 統合（模擬通信） | 一部確認（本番未接続） | integration/ranking（上位30参加者の取得）。実験場との一致はTask 18 |
+| AC33 | 16,18 | integration/ranking.test.ts | 統合（模擬通信） | 一部確認（本番未接続） | integration/ranking（応答喪失後の再送で1件、古い応答で上書きしない、各状態） |
+| AC34 | 15,18 | unit/share.test.ts | 単体＋ブラウザ自動 | 一部確認（正式URL未確定のため本文にURLなし） | unit/share（黒地白字・URLSearchParams・自動投稿なし・コピー代替）、e2e/screens「X share opens a post screen only」 |
+| AC35 | 15 | unit/i18n.test.ts; e2e/locales.spec.ts | 単体＋ブラウザ自動 | 自動試験で確認（翻訳はClaude作成・母語話者の確認なし O16） | unit/i18n・i18n-content（15言語×UI文言・景品100・セット100・ヒント100）、e2e/screens「switching to English」 |
+| AC36 | 13,17 | unit/audio.test.ts | 単体 | 一部確認（実際の試聴なし） | unit/audio（初回オン・音量正、保存済みオフ/0を尊重、解除失敗、停止で滞留音を破棄、連打の抑制） |
 | AC37 | 10,17 | integration/checkpoint.test.ts; e2e/acceptance.spec.ts | ブラウザ自動＋単体 | 一部確認（実機未確認） | e2e/smoke（横向き案内・非表示の検知）、unit/controller（停止中は進まず再開で時間を飛ばさない） |
 | AC38 | 10 | integration/checkpoint.test.ts | 統合＋ブラウザ自動 | 自動試験で確認（実機未確認） | integration/checkpoint「restores shelf, ammo, score, draw state and first-hit flags exactly」、e2e/reload「reload between shots resumes」 |
 | AC39 | 10,16 | integration/checkpoint.test.ts; integration/ranking.test.ts | 統合＋ブラウザ自動 | 一部確認（ランキング送信側はTask 16の統合待ち） | integration/checkpoint「flight, transform and fall all leave the FIRE marker」、e2e/reload「reload while the shot is resolving abandons」 |
 | AC40 | 05,17 | e2e/performance.spec.ts | 単体（物理） | 一部確認（性能は未計測） | unit/collision「a very fast cork does not tunnel through a thin shelf board」 |
-| AC41 | 16,18 | integration/security.test.ts | — | 未実施 | — |
+| AC41 | 16,18 | integration/security.test.ts | 統合 | 一部確認（本番の旧記録はTask 18） | integration/security（src/と配信物に秘密鍵・service_roleなし） |
 | AC42 | 17 | e2e/acceptance.spec.ts | 単体 | 一部確認（演出省略・画面を含む通しはTask 17） | unit/scoring・settlement（最後の一発→分裂→追加弾→獲得→複数セット） |
 | AC43 | 08 | unit/gimmicks.test.ts | 単体（物理） | 自動試験で確認 | unit/devices-sim「AC43: original + split corks hitting the same plate again give one activation」 |
 | AC44 | 08,09 | unit/gimmicks.test.ts; unit/scoring.test.ts | 単体（物理）＋統合 | 自動試験で確認 | unit/transform-grace「HP 2/8 -> max 20 -> 5; the transformed prize falling in the same shot counts」、integration/devices-run「transform plate」 |

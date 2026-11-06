@@ -1,24 +1,54 @@
 /**
  * Integration wiring (owner: Opus).
  *
- * Boot screen → (start) → physics world + renderer + controller + controls.
- * Page-environment pauses (hidden / landscape) go to the controller. The
- * common home/result screens come in Task 14; this is the playable prototype.
+ * Screens: (resume prompt) → home → game → result, with the set book as an
+ * overlay. Persistence (checkpoints, profile, settings, name), the ranking
+ * client (v1 contract; sends nothing while the game is unregistered or values
+ * are prototype), 15-language i18n and page-environment pauses are wired here.
  */
 import './app.css';
 import { environmentPauseReasons, type EnvironmentSnapshot } from './environment';
-import { BOOTH_LAYOUT, mintId, type PauseReason, type RunState, type RuntimeCatalog, type TuningConfig } from './contracts';
+import {
+  BOOTH_LAYOUT,
+  catalogValueStatus,
+  mintId,
+  type FinalResult,
+  type KeyValueStorage,
+  type PauseReason,
+  type RunState,
+  type RuntimeCatalog,
+  type ShotWorld,
+  type TuningConfig,
+} from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
 import { PROTOTYPE_TUNING } from './catalog/config';
 import { PROTOTYPE_CATALOG } from './catalog/runtime-config';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
-import { createProfileStore, createRunStore, STORAGE_KEYS, type RestoreResult, type RunStore } from './persistence';
-import { finalResult } from './core/result';
-import type { KeyValueStorage } from './contracts';
 import { controlsModel } from './ui/controls/model';
-import { t } from './ui/controls/strings';
+import { setControlsLocale, t } from './ui/controls/strings';
+import {
+  createPlayerNameStore,
+  createProfileStore,
+  createRunStore,
+  createSettingsStore,
+  STORAGE_KEYS,
+  type RestoreResult,
+  type RunStore,
+} from './persistence';
+import { finalResult } from './core/result';
+import { createI18n, LANGUAGE_STORAGE_KEY, type I18n, type UiKey } from './i18n';
+import { JA as UI_KEYS } from './i18n/locales/ja';
+import { mountHome } from './ui/home';
+import { mountResult } from './ui/result';
+import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
+import type { ScreenHandle } from './ui/dom';
+import { createRankingService } from './ranking/client';
+import { publicLinks } from './ranking/config';
+import { normalizePlayerName } from './ranking/name';
+import { createAudioEngine } from './audio';
+import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
 export interface AppHandle {
   readonly root: HTMLElement;
@@ -28,13 +58,17 @@ export interface AppHandle {
 
 /** Read-only probe for browser automation (only with ?e2e=1). Exposes no way to change the game. */
 export interface E2eProbe {
+  screen(): string;
   phase(): string | null;
   prizeCount(): number;
   ammo(): number;
   score(): number;
+  playerName(): string | null;
   reticle(): { x: number; y: number; z: number } | null;
   stats(): { triangles: number; meshes: number; drawCalls: number } | null;
 }
+
+type Screen = 'resume' | 'home' | 'game' | 'result';
 
 function snapshot(win: Window): EnvironmentSnapshot {
   return { hidden: win.document.visibilityState === 'hidden', width: win.innerWidth, height: win.innerHeight };
@@ -75,17 +109,16 @@ function browserStorage(win: Window): KeyValueStorage {
   };
 }
 
-/** Boot-screen notice for what was found in storage. */
+/** Notice shown on the home screen for what was found in storage. */
 function restoreNotice(r: RestoreResult): string {
   switch (r.kind) {
-    case 'resume':
-      return '前回のプレイの続きから遊べます。';
     case 'abandoned':
       return '前回は撃っている途中で中断されたため、そのプレイは記録されません。';
     case 'ended':
       return '前回のプレイは終わっています。';
     case 'quarantined':
       return '保存データを読めなかったため、新しく始めます（データは別の場所に残しています）。';
+    case 'resume':
     case 'none':
       return '';
   }
@@ -107,53 +140,82 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const doc = win.document;
   const catalog: RuntimeCatalog = PROTOTYPE_CATALOG;
   const tuning: TuningConfig = PROTOTYPE_TUNING;
+  const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
 
+  // ------------------------------------------------------------ stores
   const storage = browserStorage(win);
   const runStore: RunStore = createRunStore(storage, newRunId(win), { catalog, tuning, layout: BOOTH_LAYOUT });
   const profile = createProfileStore(storage);
+  const settingsStore = createSettingsStore(storage);
+  const nameStore = createPlayerNameStore(storage);
+  const ranking = createRankingService({ storage });
+  const links = publicLinks();
   let restore: RestoreResult = runStore.load();
-  // An abandoned run is shown once and never resumed or ranked (decision 27).
+  const bootNotice = restoreNotice(restore);
+  // An abandoned or finished run is shown once and never resumed or ranked from here (decision 27).
   if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
 
+  // The settings store is the single saved source of the language (saved → browser → English).
+  const languageStorage: KeyValueStorage = {
+    getItem: (k) => (k === LANGUAGE_STORAGE_KEY ? settingsStore.load().language : null),
+    setItem: (k, v) => {
+      if (k === LANGUAGE_STORAGE_KEY) settingsStore.save({ language: v });
+    },
+    removeItem: () => undefined,
+  };
+  const i18n: I18n = createI18n(languageStorage, win.navigator.languages ?? [win.navigator.language]);
+  setControlsLocale(i18n.locale);
+
+  // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
+  // created/resumed from a user gesture; failures never stop the game.
+  const audio = createAudioEngine();
+  let audioSettings: AudioSettings = settingsStore.load().audio;
+  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) =>
+    audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  const unlockAudio = () => void audio.unlock().catch(() => undefined);
+  root.addEventListener('pointerdown', unlockAudio, { capture: true });
+  root.addEventListener('keydown', unlockAudio, { capture: true });
+
+  // ------------------------------------------------------------ layers
   const canvas = doc.createElement('canvas');
   canvas.className = 'stage';
   canvas.dataset.testid = 'stage';
   const ui = doc.createElement('div');
   ui.className = 'ui-layer';
+  const screens = doc.createElement('div');
+  screens.className = 'screen-layer';
+  const overlay = doc.createElement('div');
+  overlay.className = 'screen-layer overlay-layer';
 
-  const boot = doc.createElement('main');
-  boot.className = 'boot';
-  boot.dataset.testid = 'boot';
-  const title = doc.createElement('h1');
-  title.textContent = '屋台の射的ゲーム';
-  const note = doc.createElement('p');
-  note.textContent = '開発中の試作です（公開タイトル未確定）。';
-  const start = doc.createElement('button');
-  start.type = 'button';
-  start.className = 'btn btn-primary boot-start';
-  start.dataset.testid = 'btn-start';
-  start.textContent = 'はじめる';
-  const fresh = doc.createElement('button');
-  fresh.type = 'button';
-  fresh.className = 'btn boot-start';
-  fresh.dataset.testid = 'btn-new';
-  fresh.textContent = 'はじめから';
+  const resumeBox = doc.createElement('main');
+  resumeBox.className = 'boot';
+  resumeBox.dataset.testid = 'resume-prompt';
+  const resumeTitle = doc.createElement('h1');
+  resumeTitle.textContent = '前回のプレイの続きがあります';
+  const resumeBtn = doc.createElement('button');
+  resumeBtn.type = 'button';
+  resumeBtn.className = 'btn btn-primary boot-start';
+  resumeBtn.dataset.testid = 'btn-resume-run';
+  resumeBtn.textContent = '続きから';
+  const newBtn = doc.createElement('button');
+  newBtn.type = 'button';
+  newBtn.className = 'btn boot-start';
+  newBtn.dataset.testid = 'btn-new-run';
+  newBtn.textContent = 'はじめから（ホームへ）';
   const status = doc.createElement('p');
   status.className = 'boot-status';
   status.dataset.testid = 'boot-status';
-  status.textContent = restoreNotice(restore);
-  if (restore.kind === 'resume') start.textContent = '続きから';
-  fresh.hidden = restore.kind !== 'resume';
-  boot.append(title, note, start, fresh, status);
+  resumeBox.append(resumeTitle, resumeBtn, newBtn, status);
+  resumeBox.hidden = true;
 
-  const stale = doc.createElement('div');
-  stale.className = 'rotate-overlay';
-  stale.dataset.testid = 'stale-overlay';
-  stale.setAttribute('role', 'alert');
-  stale.hidden = true;
-  stale.textContent = 'このプレイは別のタブで続いています。このタブでは操作できません。';
+  const notice = doc.createElement('p');
+  notice.className = 'app-notice';
+  notice.dataset.testid = 'app-notice';
+  notice.setAttribute('role', 'status');
+  notice.textContent = bootNotice;
+  notice.hidden = bootNotice === '';
 
   const rotate = doc.createElement('div');
   rotate.className = 'rotate-overlay';
@@ -162,21 +224,53 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   rotate.hidden = true;
   rotate.textContent = t('rotate');
 
-  root.append(canvas, ui, boot, rotate, stale);
+  const stale = doc.createElement('div');
+  stale.className = 'rotate-overlay';
+  stale.dataset.testid = 'stale-overlay';
+  stale.setAttribute('role', 'alert');
+  stale.hidden = true;
+  stale.textContent = 'このプレイは別のタブで続いています。このタブでは操作できません。';
 
+  root.append(canvas, ui, screens, overlay, resumeBox, notice, rotate, stale);
+
+  // ------------------------------------------------------------ state
+  let screen: Screen = 'home';
   let reasons: PauseReason[] = [];
   let controller: GameController | null = null;
   let renderer: ThreeRenderer | null = null;
+  let world: ShotWorld | null = null;
   let panel: PanelHandle | null = null;
+  let screenHandle: ScreenHandle<never> | null = null;
+  let bookHandle: ScreenHandle<never> | null = null;
+  let rankingUnsub: (() => void) | null = null;
+  let runName: string | null = null;
   let raf = 0;
   let lastTs = 0;
   let disposed = false;
-  let worldDispose: (() => void) | null = null;
+  let starting = false;
 
+  const setScreen = (s: Screen) => {
+    screen = s;
+    root.dataset.screen = s;
+    ui.hidden = s !== 'game';
+    resumeBox.hidden = s !== 'resume';
+  };
+
+  const clearScreen = () => {
+    stopCelebration?.();
+    stopCelebration = null;
+    rankingUnsub?.();
+    rankingUnsub = null;
+    screenHandle?.dispose();
+    screenHandle = null;
+  };
+
+  // ------------------------------------------------------------ environment
   const updateEnv = () => {
     reasons = environmentPauseReasons(snapshot(win));
     rotate.hidden = !reasons.includes('landscape');
     root.dataset.pause = reasons.join(' ');
+    if (reasons.length > 0) audio.silence(); // nothing piles up while hidden / rotated (AC36)
     controller?.setEnvironmentPause(reasons);
   };
   const onResize = () => {
@@ -188,6 +282,24 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   win.addEventListener('orientationchange', onResize);
   doc.addEventListener('visibilitychange', updateEnv);
 
+  const isStale = () => runStore.status().conflict || runStore.isStale();
+  const markStale = () => {
+    if (!isStale()) return false;
+    stale.hidden = false;
+    controller?.dispatch({ type: 'PAUSE', reason: 'manual' });
+    return true;
+  };
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEYS.run && screen === 'game') markStale();
+  };
+  win.addEventListener('storage', onStorage);
+
+  // Resend queued ranking results (same submission ids) on load and when back online.
+  const retryRanking = () => void ranking.retryPending().catch(() => undefined);
+  retryRanking();
+  win.addEventListener('online', retryRanking);
+
+  // ------------------------------------------------------------ game
   const onChange = (snap: ControllerSnapshot) => {
     panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
@@ -197,107 +309,266 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     if (disposed) return;
     const dt = lastTs ? (ts - lastTs) / 1000 : 0;
     lastTs = ts;
-    controller?.frame(dt);
+    if (screen === 'game') controller?.frame(dt);
     raf = win.requestAnimationFrame(loop);
   };
 
-  const beginRun = (): RunState =>
-    CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: null }, catalog);
-
-  const isStale = () => runStore.status().conflict || runStore.isStale();
-  const markStale = () => {
-    if (!isStale()) return false;
-    stale.hidden = false;
-    controller?.dispatch({ type: 'PAUSE', reason: 'manual' });
-    return true;
-  };
-  win.addEventListener('storage', (e: StorageEvent) => {
-    if (e.key === STORAGE_KEYS.run) markStale();
-  });
-
-  const startGame = async (resume: boolean) => {
-    start.disabled = true;
-    fresh.disabled = true;
-    status.textContent = '準備中…';
-    try {
-      const { sim, view } = await loadHeavyModules();
-      const world = await sim.createShotWorld(BOOTH_LAYOUT, catalog, tuning);
-      worldDispose = () => world.dispose();
-      try {
-        renderer = view.createThreeRenderer(canvas, {
-          layout: BOOTH_LAYOUT,
-          corkRadius: tuning.cork.radius,
-          resolvePrize: (typeId) => {
-            const p = catalog.prizes.get(typeId);
-            if (!p) throw new Error(`unknown prize ${typeId}`);
-            return { shape: p.shape, modelKey: p.modelKey, material: p.material };
-          },
-        });
-        renderer.resize(canvas.clientWidth || win.innerWidth, canvas.clientHeight || win.innerHeight);
-      } catch (err) {
-        console.error('renderer init failed', err);
-        renderer = null;
-        status.textContent = '3D表示を開始できませんでした。お使いのブラウザでは表示できない可能性があります。';
-      }
-      const makeController = (initial: RunState) =>
-        new GameController(
-          {
-            rules: CORE_RULES,
-            world,
-            renderer,
-            catalog,
-            tuning,
-            layout: BOOTH_LAYOUT,
-            onChange,
-            // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
-            onShotFired: (s) => {
-              runStore.saveAfterFire(s);
-              markStale();
-            },
-            onCommandApplied: (cmd, s) => {
-              if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
-            },
-            onShotSettled: (summary, s) => {
-              runStore.saveStable(s);
-              if (summary.newlyCompletedSets.length > 0) profile.discoverSets(summary.newlyCompletedSets);
-              if (s.phase === 'ended') profile.recordRunEnd(finalResult(s));
-            },
-          },
-          initial,
-        );
-      const newRun = () => {
-        const s = beginRun();
-        runStore.saveStable(s);
-        return s;
-      };
-      const initial = resume && restore.kind === 'resume' ? restore.state : newRun();
-      restore = { kind: 'none' };
-      controller = makeController(initial);
-      panel = mountControls(ui, {
-        dispatch: (cmd) => (markStale() ? false : (controller?.dispatch(cmd) ?? false)),
-        currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
-        currentStandX: () => controller?.current.standX ?? 0,
-        onRetry: () => {
-          controller = makeController(newRun());
-          controller.setEnvironmentPause(reasons);
-          onChange(controller.snapshot());
-        },
-      });
-      controller.setEnvironmentPause(reasons);
-      onChange(controller.snapshot());
-      boot.hidden = true;
-      root.dataset.started = 'true';
-      lastTs = 0;
-      raf = win.requestAnimationFrame(loop);
-    } catch (err) {
-      console.error('start failed', err);
-      status.textContent = '開始できませんでした。ページを再読み込みしてください。';
-      start.disabled = false;
-      fresh.disabled = false;
+  const playCommandCue = (cmd: GameCommand) => {
+    const s = controller?.current;
+    switch (cmd.type) {
+      case 'CONFIRM_POSITION':
+        return cue('loadStart');
+      case 'STOP_LOAD':
+        return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
+      case 'FIRE':
+        return cue('fire');
+      case 'PAUSE':
+        audio.silence();
+        return cue('cancel');
+      case 'RESUME':
+        return cue('confirm');
+      default:
+        return undefined;
     }
   };
-  start.addEventListener('click', () => void startGame(true));
-  fresh.addEventListener('click', () => void startGame(false));
+
+  const mountPanel = () => {
+    panel?.dispose();
+    panel = mountControls(ui, {
+      dispatch: (cmd) => {
+        if (markStale() || !controller) return false;
+        const ok = controller.dispatch(cmd);
+        if (ok) playCommandCue(cmd as GameCommand);
+        return ok;
+      },
+      currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
+      currentStandX: () => controller?.current.standX ?? 0,
+      onRetry: () => void startRun({ name: runName }),
+    });
+    if (controller) onChange(controller.snapshot());
+  };
+
+  const ensureEngine = async (): Promise<ShotWorld> => {
+    if (world) return world;
+    const { sim, view } = await loadHeavyModules();
+    const w = await sim.createShotWorld(BOOTH_LAYOUT, catalog, tuning);
+    world = w;
+    try {
+      renderer = view.createThreeRenderer(canvas, {
+        layout: BOOTH_LAYOUT,
+        corkRadius: tuning.cork.radius,
+        translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
+        // Miss / near-miss are decided only after settlement (AC27).
+        onSettled: (cls) => {
+          if (cls === 'miss') cue('miss');
+          else if (cls === 'nearMiss') cue('nearMiss');
+        },
+        resolvePrize: (typeId) => {
+          const p = catalog.prizes.get(typeId);
+          if (!p) throw new Error(`unknown prize ${typeId}`);
+          return { shape: p.shape, modelKey: p.modelKey, material: p.material };
+        },
+      });
+      renderer.resize(canvas.clientWidth || win.innerWidth, canvas.clientHeight || win.innerHeight);
+    } catch (err) {
+      console.error('renderer init failed', err);
+      renderer = null;
+      notice.textContent = '3D表示を開始できませんでした。お使いのブラウザでは表示できない可能性があります。';
+      notice.hidden = false;
+    }
+    return w;
+  };
+
+  const onRunEnded = (state: RunState) => {
+    const result = finalResult(state);
+    const selfBestBefore = profile.load().bestScore;
+    const { newBest } = profile.recordRunEnd(result);
+    cue('runEnd');
+    const fireSaveFailed = runStore.status().fireSaveFailed;
+    runStore.clear();
+    // A run whose pre-shot save failed cannot prove a lost shot on reload: never submit it (persistence-design §5).
+    if (!fireSaveFailed) void ranking.submit(result).catch(() => undefined);
+    // Let the last settle presentation play briefly before the result screen.
+    win.setTimeout(() => {
+      if (disposed || controller?.current.runId !== state.runId) return;
+      showResult(result, selfBestBefore, newBest);
+    }, 900);
+  };
+
+  const makeController = (w: ShotWorld, initial: RunState): GameController =>
+    new GameController(
+      {
+        rules: CORE_RULES,
+        world: w,
+        renderer,
+        catalog,
+        tuning,
+        layout: BOOTH_LAYOUT,
+        onChange,
+        onSimEvents: (events) => {
+          for (const e of events) audio.handle(e, audioSettings);
+        },
+        // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
+        onShotFired: (s) => {
+          runStore.saveAfterFire(s);
+          markStale();
+        },
+        onCommandApplied: (cmd, s) => {
+          if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
+        },
+        onShotSettled: (summary, s) => {
+          if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
+          if (summary.newlyCompletedSets.length > 0) {
+            cue('setComplete');
+            const fresh = profile.discoverSets(summary.newlyCompletedSets);
+            if (fresh.length > 0) cue('setDiscovered');
+          }
+          if (summary.ledger.nominalPenalty > 0) cue('penalty');
+          if (summary.bonusAmmoGranted > 0) cue('ammoBonus');
+          if (s.phase === 'ended') onRunEnded(s);
+          else runStore.saveStable(s);
+        },
+      },
+      initial,
+    );
+
+  /** Start a new run with the name fixed now (null = anonymous), or continue a saved one. */
+  const startRun = async (opts: { name: string | null; resume?: RunState }): Promise<void> => {
+    if (starting) return;
+    starting = true;
+    status.textContent = '準備中…';
+    try {
+      const w = await ensureEngine();
+      clearScreen();
+      let initial: RunState;
+      if (opts.resume) {
+        initial = opts.resume;
+        runName = initial.playerName;
+      } else {
+        runName = opts.name;
+        initial = CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName }, catalog);
+        runStore.saveStable(initial);
+      }
+      ranking.beginRun({ runId: initial.runId, playerName: runName });
+      controller = makeController(w, initial);
+      controller.setEnvironmentPause(reasons);
+      setScreen('game');
+      mountPanel();
+      root.dataset.started = 'true';
+      notice.hidden = true;
+      if (!raf) {
+        lastTs = 0;
+        raf = win.requestAnimationFrame(loop);
+      }
+    } catch (err) {
+      console.error('start failed', err);
+      notice.textContent = '開始できませんでした。ページを再読み込みしてください。';
+      notice.hidden = false;
+    } finally {
+      starting = false;
+      status.textContent = '';
+    }
+  };
+
+  // ------------------------------------------------------------ screens
+  const openSetBook = () => {
+    bookHandle?.dispose();
+    const last = controller?.current;
+    bookHandle = mountSetBook(
+      overlay,
+      {
+        i18n,
+        onClose: () => {
+          bookHandle?.dispose();
+          bookHandle = null;
+        },
+      },
+      {
+        sets: setBookEntriesFromCatalog(catalog),
+        discovered: profile.load().discoveredSets,
+        completedThisRun: last && screen === 'result' ? last.completedSets : [],
+      },
+    );
+  };
+
+  const showHome = () => {
+    clearScreen();
+    setScreen('home');
+    const settings = settingsStore.load();
+    screenHandle = mountHome(
+      screens,
+      {
+        i18n,
+        links,
+        onStart: (name) => {
+          cue('start');
+          void startRun({ name: normalizePlayerName(name) });
+        },
+        onNameChange: (draft) => {
+          nameStore.set(draft);
+        },
+        onAudioChange: (next) => {
+          audioSettings = settingsStore.save({ audio: next }).audio;
+          if (!audioSettings.enabled || audioSettings.volume <= 0) audio.silence();
+          else cue('select');
+        },
+        onOpenSetBook: openSetBook,
+      },
+      { nameDraft: nameStore.get() ?? '', selfBest: profile.load().bestScore, audio: settings.audio, prototype: isPrototype },
+    );
+  };
+
+  let stopCelebration: (() => void) | null = null;
+  const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false) => {
+    clearScreen();
+    setScreen('result');
+    cue('resultShow');
+    if (newBest) cue('newBest');
+    const handle = mountResult(
+      screens,
+      {
+        i18n,
+        onRetry: () => void startRun({ name: runName }),
+        onHome: showHome,
+        onRetrySubmit: () => void ranking.retryPending({ includePermanent: false }).catch(() => undefined),
+        onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
+        onOpenSetBook: openSetBook,
+      },
+      { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links },
+    );
+    screenHandle = handle;
+    void loadHeavyModules().then(({ view }) => {
+      if (screen !== 'result') return;
+      const reducedMotion = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      const host = screens.querySelector<HTMLElement>('.scr-result') ?? screens;
+      stopCelebration = view.playResultCelebration(host, { newBest, sets: result.completedSets.length, reducedMotion });
+    });
+    rankingUnsub = ranking.subscribe(() => handle.update({ submit: ranking.getStatus(result.runId), top: ranking.getTop() }));
+    void ranking.fetchTop().catch(() => undefined);
+  };
+
+  // Language changes re-render text only: ids, scoring and the current run are untouched.
+  const unsubLocale = i18n.subscribe((locale) => {
+    setControlsLocale(locale);
+    rotate.textContent = t('rotate');
+    if (screen === 'game') mountPanel();
+  });
+
+  resumeBtn.addEventListener('click', () => {
+    if (restore.kind === 'resume') {
+      const s = restore.state;
+      restore = { kind: 'none' };
+      void startRun({ name: s.playerName, resume: s });
+    }
+  });
+  newBtn.addEventListener('click', () => {
+    restore = { kind: 'none' };
+    showHome();
+  });
+
+  if (restore.kind === 'resume') setScreen('resume');
+  else showHome();
+
   // Begin downloading the heavy chunks in the background; a failure surfaces on start.
   void loadHeavyModules().catch(() => {
     heavyModules = null;
@@ -305,10 +576,12 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
 
   if (e2e) {
     const probe: E2eProbe = {
+      screen: () => screen,
       phase: () => controller?.current.phase ?? null,
       prizeCount: () => controller?.current.shelf.prizes.length ?? 0,
       ammo: () => controller?.current.ammo ?? 0,
       score: () => controller?.current.score ?? 0,
+      playerName: () => controller?.current.playerName ?? null,
       reticle: () => {
         const r = renderer?.lastReticle();
         return r ? { x: r.point.x, y: r.point.y, z: r.point.z } : null;
@@ -329,10 +602,18 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       win.cancelAnimationFrame(raf);
       win.removeEventListener('resize', onResize);
       win.removeEventListener('orientationchange', onResize);
+      win.removeEventListener('storage', onStorage);
+      win.removeEventListener('online', retryRanking);
       doc.removeEventListener('visibilitychange', updateEnv);
+      unsubLocale();
+      audio.silence();
+      root.removeEventListener('pointerdown', unlockAudio, { capture: true });
+      root.removeEventListener('keydown', unlockAudio, { capture: true });
+      clearScreen();
+      bookHandle?.dispose();
       panel?.dispose();
       renderer?.dispose();
-      worldDispose?.();
+      world?.dispose();
       root.innerHTML = '';
     },
   };

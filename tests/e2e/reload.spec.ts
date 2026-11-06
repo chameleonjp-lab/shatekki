@@ -12,7 +12,7 @@ async function newGame(page: Page) {
   await page.goto('/?e2e=1');
   await page.evaluate(() => localStorage.clear());
   await page.goto('/?e2e=1');
-  await page.getByTestId('btn-start').click();
+  await page.getByTestId('home-start').click();
   await expect(mode(page)).toHaveAttribute('data-mode', 'position');
 }
 
@@ -34,8 +34,8 @@ test('reload between shots resumes the confirmed state, paused until resume (AC3
   expect(await ammo(page)).toBe(9);
 
   await page.reload();
-  await expect(page.getByTestId('btn-start')).toHaveText('続きから');
-  await page.getByTestId('btn-start').click();
+  await expect(page.getByTestId('btn-resume-run')).toBeVisible();
+  await page.getByTestId('btn-resume-run').click();
   await expect(mode(page)).toHaveAttribute('data-mode', 'paused');
   expect(await ammo(page)).toBe(9);
   const scoreAfter = await page.evaluate(() => (window as unknown as { __shatekki: { score(): number } }).__shatekki.score());
@@ -49,9 +49,9 @@ test('reload while the shot is resolving abandons that run and never resumes it 
   await newGame(page);
   await loadAndFire(page);
   await page.reload();
-  await expect(page.getByTestId('boot-status')).toContainText('中断');
-  await expect(page.getByTestId('btn-start')).toHaveText('はじめる');
-  await page.getByTestId('btn-start').click();
+  await expect(page.getByTestId('app-notice')).toContainText('中断');
+  await expect(page.getByTestId('btn-resume-run')).toBeHidden();
+  await page.getByTestId('home-start').click();
   await expect(mode(page)).toHaveAttribute('data-mode', 'position');
   expect(await ammo(page)).toBe(10);
 });
@@ -63,7 +63,7 @@ test('reload after loading keeps the same load result (AC05: no re-roll)', async
   await expect(mode(page)).toHaveAttribute('data-mode', 'aiming');
   const label = await page.getByTestId('load-label').textContent();
   await page.reload();
-  await page.getByTestId('btn-start').click();
+  await page.getByTestId('btn-resume-run').click();
   await page.getByTestId('btn-resume').click();
   await expect(mode(page)).toHaveAttribute('data-mode', 'aiming');
   await expect(page.getByTestId('load-label')).toHaveText(label ?? '');
@@ -79,7 +79,7 @@ test('a second tab that continues the run makes the first tab stop accepting inp
 
   const b = await context.newPage();
   await b.goto('/?e2e=1');
-  await b.getByTestId('btn-start').click(); // 続きから
+  await b.getByTestId('btn-resume-run').click(); // 続きから
   await b.getByTestId('btn-resume').click();
   const fire = b.getByTestId('btn-fire');
   await fire.dispatchEvent('pointerdown');

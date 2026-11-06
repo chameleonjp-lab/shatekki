@@ -1,0 +1,50 @@
+/**
+ * English names for the 100 prize kinds and 100 sets (ids are the stable keys,
+ * Japanese names live in data/catalog-candidates.json). Names are candidates
+ * together with the Japanese originals; they are not final copy.
+ */
+export const PRIZE_NAMES_EN: Readonly<Record<string, string>> = {
+  P001: 'Assorted snack box', P002: 'Chocolate bar', P003: 'Cookie tin', P004: 'Bag of candy', P005: 'Bag of gummies',
+  P006: 'Small shopping basket', P007: 'Bag of potato chips', P008: 'Popcorn box', P009: 'Decorative rose', P010: 'Miniature teacup',
+  P011: 'Miniature teapot', P012: 'Cake food model', P013: 'Mini round fan', P014: 'Mini lantern', P015: 'Fox mask',
+  P016: 'Ramune bottle model', P017: 'Candy apple food model', P018: 'Cotton candy food model', P019: 'Wind chime', P020: 'Moon cushion',
+  P021: 'Star ornament', P022: 'Water yo-yo balloon', P023: 'Goldfish toy', P024: 'Spinning top', P025: 'Kendama',
+  P026: 'Paper balloon', P027: 'Toy kite', P028: 'Toy drum', P029: 'Dog plush', P030: 'Cat plush',
+  P031: 'Rabbit plush', P032: 'Elephant plush', P033: 'Zebra plush', P034: 'Lion plush', P035: 'Bear plush',
+  P036: 'Fox plush', P037: 'Hedgehog plush', P038: 'Panda plush', P039: 'Penguin plush', P040: 'Cloud cushion',
+  P041: 'Tricolor dango food model', P042: 'Miniature tree', P043: 'Mushroom ornament', P044: 'Toy camera', P045: 'Toy dolphin',
+  P046: 'Toy clownfish', P047: 'Whale plush', P048: 'Sea turtle model', P049: 'Toy crab', P050: 'Seashell ornament',
+  P051: 'Starfish ornament', P052: 'Toy octopus', P053: 'Jellyfish ornament', P054: 'Ship model', P055: 'Sun ornament',
+  P056: 'Fire truck toy car', P057: 'Ambulance toy car', P058: 'Police car toy car', P059: 'Road roller toy car', P060: 'Excavator toy car',
+  P061: 'Dump truck toy car', P062: 'Train model', P063: 'Airplane model', P064: 'Bus toy car', P065: 'Mini backpack',
+  P066: 'Miniature lunch box', P067: 'Globe model', P068: 'Rocket model', P069: 'Astronaut doll', P070: 'Miniature telescope',
+  P071: 'Satellite model', P072: 'Rainbow ornament', P073: 'Sunflower ornament', P074: 'Tulip ornament', P075: 'Cherry blossom ornament',
+  P076: 'Toy butterfly', P077: 'Toy honeybee', P078: 'Acorn ornament', P079: 'Toy ladybug', P080: 'Toy trumpet',
+  P081: 'Toy tambourine', P082: 'Miniature piano', P083: 'Miniature guitar', P084: 'Toy maracas', P085: 'Mini soccer ball',
+  P086: 'Toy baseball', P087: 'Mini basketball', P088: 'Playing cards', P089: 'Rice ball food model', P090: 'Rolled omelet food model',
+  P091: 'Toast food model', P092: 'Fried egg food model', P093: 'Hamburger food model', P094: 'French fries food model', P095: 'Pizza food model',
+  P096: 'Toy plate', P097: 'Toy fork', P098: 'Toy frying pan', P099: 'Toy pot', P100: 'Toy spoon',
+};
+
+export const SET_NAMES_EN: Readonly<Record<string, string>> = {
+  S001: 'Snack Set', S002: 'Sweet Treats Set', S003: 'Candy Shop Set', S004: 'Crunchy Snacks Set', S005: 'Movie Night Set',
+  S006: 'Sweet Gift Set', S007: 'Afternoon Tea Set', S008: 'Bite-Size Snacks Set', S009: 'Sweet Break Set', S010: 'Bagged Snacks Shopping Set',
+  S011: 'Summer Festival Set', S012: 'Night Stall Treats Set', S013: 'Cool Evening Set', S014: 'Festival Lights Set', S015: 'Festival Games Set',
+  S016: 'Nostalgic Toys Set', S017: 'Playing with the Wind Set', S018: 'Bon Dance Set', S019: 'Fluffy Festival Set', S020: 'Festival Souvenir Set',
+  S021: 'Animal Gathering Set', S022: 'Zoo Set', S023: 'Forest Animals Set', S024: 'Black-and-White Animals Set', S025: 'Fox Festival Set',
+  S026: 'Sleepy Cat Set', S027: 'Rabbit Moon-Viewing Set', S028: "Bear's Forest Set", S029: 'Forest Hide-and-Seek Set', S030: 'Animal Photo Set',
+  S031: 'Aquarium Set', S032: 'Ocean Swimmers Set', S033: 'Tide Pool Play Set', S034: 'Seabed Stroll Set', S035: 'Strange Sea Shapes Set',
+  S036: 'Sea Decorations Set', S037: 'Sea Voyage Set', S038: 'Sea Photo Set', S039: 'Waterside Cool Evening Set', S040: 'Blue Sky Voyage Set',
+  S041: 'Emergency Response Set', S042: 'Construction Site Set', S043: 'Faraway Trip Set', S044: 'Cars in Town Set', S045: 'Trip to the Airport Set',
+  S046: 'Trip to the Harbor Set', S047: 'Train Journey Set', S048: 'Big Vehicles Set', S049: 'Vehicle Photo Set', S050: 'Bus Field Trip Set',
+  S051: 'Space Travel Set', S052: 'Moon Expedition Set', S053: 'Stargazing Set', S054: 'Satellite Launch Set', S055: 'Space Research Set',
+  S056: 'After the Rain Set', S057: 'Flight Above the Clouds Set', S058: 'Night Sky Gazing Set', S059: 'Space Scenery Set', S060: 'Rainbow Photo Set',
+  S061: 'Flower Shop Set', S062: 'Spring Garden Set', S063: 'Summer Garden Set', S064: 'Autumn Forest Set', S065: 'Flower Bugs Set',
+  S066: 'Little Flower Field Set', S067: 'Forest Floor Set', S068: 'Cherry Blossom Viewing Set', S069: 'Rose Tea Party Set', S070: 'Nature Photo Set',
+  S071: 'Little Band Set', S072: 'Band Performance Set', S073: 'Rhythm Play Set', S074: 'Lively Parade Set', S075: 'Starry Night Concert Set',
+  S076: 'Ball Games Set', S077: 'Sports Time Set', S078: 'After-School Playground Set', S079: 'Indoor Play Set', S080: 'Family Game Night Set',
+  S081: 'Lunch Box Set', S082: 'Breakfast Set', S083: 'Burger Shop Set', S084: 'Pizza Party Set', S085: 'Cake and Tea Set',
+  S086: 'Blossom-Viewing Snacks Set', S087: 'Bakery Set', S088: 'Rice Ball Outing Set', S089: 'Fried Egg Making Set', S090: 'Feast Day Set',
+  S091: 'Tea Preparation Set', S092: 'Play Kitchen Set', S093: 'Tableware Set', S094: 'Cooking Tools Set', S095: 'Souvenir Sweets Set',
+  S096: 'Summer Outing Set', S097: 'Forest Picnic Set', S098: 'Walking the Dog Set', S099: 'Packing a Lunch Set', S100: 'Toy Car Shop Set',
+};
