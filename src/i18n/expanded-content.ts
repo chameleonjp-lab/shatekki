@@ -10,6 +10,10 @@ import pairsJa from '../../data/expansion-v2/pair-sets.json';
 import questionsJa from '../../data/expansion-v2/questions.json';
 import seriesJa from '../../data/expansion-v2/series.json';
 import { EN_CONTENT } from './expanded/en';
+import { ES_CONTENT } from './expanded/es';
+import { FR_CONTENT } from './expanded/fr';
+import { PT_BR_CONTENT } from './expanded/pt-BR';
+import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
   EXPANDED_COUNTS,
@@ -24,15 +28,15 @@ const PENDING: ExpandedLocaleEntry = { status: 'pending', content: {} };
 
 /**
  * Registry for every locale except ja (ja is the data files + supplement).
- * The 13 pending locales carry no text yet and fall back to English; fill them
+ * Locales still `pending` carry no (or partial) text and fall back to English; fill them
  * in `src/i18n/expanded/<locale>.ts` and switch their entry to `complete`.
  */
 export const EXPANDED_REGISTRY: ExpandedRegistry = {
   en: { status: 'complete', content: EN_CONTENT },
-  es: PENDING,
-  'pt-BR': PENDING,
-  'zh-Hans': PENDING,
-  fr: PENDING,
+  es: { status: 'complete', content: ES_CONTENT },
+  'pt-BR': { status: 'complete', content: PT_BR_CONTENT },
+  'zh-Hans': { status: 'complete', content: ZH_HANS_CONTENT },
+  fr: { status: 'complete', content: FR_CONTENT },
   de: PENDING,
   ko: PENDING,
   ru: PENDING,
