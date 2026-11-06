@@ -8,7 +8,7 @@
 import type { FinalResult } from '../contracts';
 import { formatInteger, translate, type I18n, type Locale, type UiKey } from '../i18n';
 import { prizeName, setName } from '../i18n/content';
-import { findOwnRank, type RankingRow, type RankingSubmitStatus, type TopState } from '../ranking/client';
+import { type RankingRow, type RankingSubmitStatus, type TopState } from '../ranking/client';
 import type { PublicLinks } from '../ranking/config';
 import { el, replaceChildren, setHidden, setText, type ScreenHandle } from './dom';
 import { buildResultShareText, browserOpen, browserWriteText, shareOnX, shareOutcomeKey, type OpenWindow, type WriteText } from './share';
@@ -77,13 +77,6 @@ const NOT_ELIGIBLE_KEYS: Readonly<Record<string, UiKey>> = {
   not_ready: 'submit.notEligible.notReady',
 };
 
-/** Rows of the top list that are unambiguously this player's (name + best score match exactly once). */
-function ownRowIndex(rows: readonly RankingRow[], name: string | null, best: number | null): number {
-  if (name === null || best === null) return -1;
-  const idx = rows.map((r, i) => (r.display_name === name && r.best_score === best ? i : -1)).filter((i) => i >= 0);
-  return idx.length === 1 ? (idx[0] ?? -1) : -1;
-}
-
 export function resultViewModel(input: ResultInput, locale: Locale): ResultViewModel {
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
   const { result, submit, top } = input;
@@ -127,14 +120,11 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
 
   // ---- own rank: only after a successful registration, never guessed
   const registered = submit?.state === 'submitted' && result.playerName !== null && completed;
-  const ownBest = submit?.bestScore ?? result.score;
-  const topRows: readonly RankingRow[] = top.state === 'ready' || top.state === 'loading' ? top.rows : [];
-  let rankText: string | null = null;
-  if (registered && top.state === 'ready') {
-    const rank = findOwnRank(top.rows, result.playerName ?? '', ownBest);
-    rankText = rank === null ? t('result.rank.unknown') : t('result.rank', { rank });
-  }
-  const selfIdx = registered ? ownRowIndex(topRows, result.playerName, ownBest) : -1;
+  // The current RPC exposes no participant identifier or verified own rank.
+  // A unique name/score match in only 30 rows cannot prove identity: the real
+  // player could be outside the list. Leave both rank and highlighting unset
+  // until the server contract can identify this participant (AC28/AC31).
+  const rankText = registered && top.state === 'ready' ? t('result.rank.unknown') : null;
 
   // ---- submit message
   let submitVm: ResultViewModel['submit'] = null;
@@ -163,7 +153,7 @@ export function resultViewModel(input: ResultInput, locale: Locale): ResultViewM
   }
 
   // ---- top 30 area
-  const mapRows = (rs: readonly RankingRow[]) => rs.map((r, i) => ({ rank: r.rank_no, name: r.display_name, scoreText: t('unit.points', { n: r.best_score }), isSelf: i === selfIdx }));
+  const mapRows = (rs: readonly RankingRow[]) => rs.map((r) => ({ rank: r.rank_no, name: r.display_name, scoreText: t('unit.points', { n: r.best_score }), isSelf: false }));
   const topBase = { title: t('rank.title'), retryLabel: t('rank.retry'), headers: { rank: t('rank.col.rank'), name: t('rank.col.name'), score: t('rank.col.score') } };
   let topVm: ResultViewModel['top'];
   switch (top.state) {

@@ -110,17 +110,17 @@ function browserStorage(win: Window): KeyValueStorage {
 }
 
 /** Notice shown on the home screen for what was found in storage. */
-function restoreNotice(r: RestoreResult): string {
+function restoreNoticeKey(r: RestoreResult): UiKey | null {
   switch (r.kind) {
     case 'abandoned':
-      return '前回は撃っている途中で中断されたため、そのプレイは記録されません。';
+      return 'app.restore.abandoned';
     case 'ended':
-      return '前回のプレイは終わっています。';
+      return 'app.restore.ended';
     case 'quarantined':
-      return '保存データを読めなかったため、新しく始めます（データは別の場所に残しています）。';
+      return 'app.restore.quarantined';
     case 'resume':
     case 'none':
-      return '';
+      return null;
   }
 }
 
@@ -153,7 +153,6 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const ranking = createRankingService({ storage });
   const links = publicLinks();
   let restore: RestoreResult = runStore.load();
-  const bootNotice = restoreNotice(restore);
   // An abandoned or finished run is shown once and never resumed or ranked from here (decision 27).
   if (restore.kind === 'abandoned' || restore.kind === 'ended') runStore.clear();
 
@@ -167,6 +166,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   };
   const i18n: I18n = createI18n(languageStorage, win.navigator.languages ?? [win.navigator.language]);
   setControlsLocale(i18n.locale);
+  let noticeKey = restoreNoticeKey(restore);
+  const bootNotice = noticeKey ? i18n.t(noticeKey) : '';
 
   // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
   // created/resumed from a user gesture; failures never stop the game.
@@ -193,17 +194,17 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   resumeBox.className = 'boot';
   resumeBox.dataset.testid = 'resume-prompt';
   const resumeTitle = doc.createElement('h1');
-  resumeTitle.textContent = '前回のプレイの続きがあります';
+  resumeTitle.textContent = i18n.t('app.resume.title');
   const resumeBtn = doc.createElement('button');
   resumeBtn.type = 'button';
   resumeBtn.className = 'btn btn-primary boot-start';
   resumeBtn.dataset.testid = 'btn-resume-run';
-  resumeBtn.textContent = '続きから';
+  resumeBtn.textContent = i18n.t('app.resume.continue');
   const newBtn = doc.createElement('button');
   newBtn.type = 'button';
   newBtn.className = 'btn boot-start';
   newBtn.dataset.testid = 'btn-new-run';
-  newBtn.textContent = 'はじめから（ホームへ）';
+  newBtn.textContent = i18n.t('app.resume.restart');
   const status = doc.createElement('p');
   status.className = 'boot-status';
   status.dataset.testid = 'boot-status';
@@ -229,7 +230,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   stale.dataset.testid = 'stale-overlay';
   stale.setAttribute('role', 'alert');
   stale.hidden = true;
-  stale.textContent = 'このプレイは別のタブで続いています。このタブでは操作できません。';
+  stale.textContent = i18n.t('app.error.stale');
 
   root.append(canvas, ui, screens, overlay, resumeBox, notice, rotate, stale);
 
@@ -373,7 +374,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
     } catch (err) {
       console.error('renderer init failed', err);
       renderer = null;
-      notice.textContent = '3D表示を開始できませんでした。お使いのブラウザでは表示できない可能性があります。';
+      noticeKey = 'app.error.renderer';
+      notice.textContent = i18n.t(noticeKey);
       notice.hidden = false;
     }
     return w;
@@ -436,7 +438,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const startRun = async (opts: { name: string | null; resume?: RunState }): Promise<void> => {
     if (starting) return;
     starting = true;
-    status.textContent = '準備中…';
+    status.textContent = i18n.t('app.status.preparing');
     try {
       const w = await ensureEngine();
       clearScreen();
@@ -449,7 +451,7 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
         initial = CORE_RULES.createRun({ runId: mintId.run(newRunId(win)), seed: newSeed(win), tuning, playerName: runName }, catalog);
         runStore.saveStable(initial);
       }
-      ranking.beginRun({ runId: initial.runId, playerName: runName });
+      ranking.beginRun({ runId: initial.runId, playerName: runName, valueStatus: initial.valueStatus });
       controller = makeController(w, initial);
       controller.setEnvironmentPause(reasons);
       setScreen('game');
@@ -462,7 +464,8 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
       }
     } catch (err) {
       console.error('start failed', err);
-      notice.textContent = '開始できませんでした。ページを再読み込みしてください。';
+      noticeKey = 'app.error.start';
+      notice.textContent = i18n.t(noticeKey);
       notice.hidden = false;
     } finally {
       starting = false;
@@ -551,6 +554,11 @@ export function createApp(root: HTMLElement, win: Window): AppHandle {
   const unsubLocale = i18n.subscribe((locale) => {
     setControlsLocale(locale);
     rotate.textContent = t('rotate');
+    resumeTitle.textContent = i18n.t('app.resume.title');
+    resumeBtn.textContent = i18n.t('app.resume.continue');
+    newBtn.textContent = i18n.t('app.resume.restart');
+    stale.textContent = i18n.t('app.error.stale');
+    if (!notice.hidden && noticeKey) notice.textContent = i18n.t(noticeKey);
     if (screen === 'game') mountPanel();
   });
 

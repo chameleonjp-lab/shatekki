@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const EN: Record<UiKey, string> = {
+  "app.restore.abandoned": "The previous game was interrupted during a shot and will not be recorded.",
+  "app.restore.ended": "The previous game has ended.",
+  "app.restore.quarantined": "The saved game could not be read. Start a new game.",
+  "app.resume.title": "You have an unfinished game",
+  "app.resume.continue": "Continue",
+  "app.resume.restart": "Start over (home)",
+  "app.status.preparing": "Preparing…",
+  "app.error.stale": "This game is continuing in another tab. You cannot play in this tab.",
+  "app.error.renderer": "The 3D view could not start. Your browser may not support it.",
+  "app.error.start": "The game could not start. Please reload the page.",
   'app.title': 'Yatai Shooting Gallery',
   'home.tagline': 'Aim your cork gun at the prizes in a festival stall.',
   'home.start': 'Start',

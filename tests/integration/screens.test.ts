@@ -215,8 +215,15 @@ describe('result view-model', () => {
       }
     });
 
-    it('shows the rank when registered and unambiguous in the list', () => {
-      expect(resultViewModel(resultInput({ submit: submitted, top }), 'ja').rankText).toBe('登録後の順位：2位');
+    it('does not claim a different participant with the same name and score is the player', () => {
+      // The real player may be outside the top 30. One matching row proves no identity.
+      const vm = resultViewModel(resultInput({ submit: submitted, top }), 'ja');
+      expect(vm.rankText).not.toBe('登録後の順位：2位');
+      expect(vm.top.rows.every((r) => !r.isSelf)).toBe(true);
+    });
+
+    it('leaves own rank unconfirmed even when name and score match once', () => {
+      expect(resultViewModel(resultInput({ submit: submitted, top }), 'ja').rankText).toBe('順位は下の上位30名で確認してください。');
     });
 
     it('does not guess a rank outside the top 30 or for same-name ties', () => {
@@ -265,12 +272,12 @@ describe('result view-model', () => {
       expect(t({ state: 'failed', retryable: true })).toMatchObject({ state: 'failed', canRetry: true, message: 'ランキングを読み込めませんでした。' });
       expect(t({ state: 'unavailable' })).toMatchObject({ state: 'unavailable', message: 'ランキングは準備中です。', canRetry: false });
     });
-    it('shows rank_no as given (ties 1,1,3), names as plain text, and marks the own row only when unambiguous', () => {
+    it('shows rank_no as given (ties 1,1,3), names as plain text, and never guesses the own row', () => {
       const rows = [row(1, 'a<b>', 500), row(1, 'b', 500), row(3, 'たろう', 870)];
       const top = t({ state: 'ready', fetchedAt: 't', rows }, submitted);
       expect(top.rows.map((r) => r.rank)).toEqual([1, 1, 3]);
       expect(top.rows[0]?.name).toBe('a<b>');
-      expect(top.rows.map((r) => r.isSelf)).toEqual([false, false, true]);
+      expect(top.rows.map((r) => r.isSelf)).toEqual([false, false, false]);
       expect(top.rows[2]?.scoreText).toBe('870点');
     });
     it('keeps the old rows visible while a refresh is loading', () => {

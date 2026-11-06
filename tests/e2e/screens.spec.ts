@@ -81,8 +81,9 @@ test('switching to English changes text only; the run is unaffected (AC35 partia
   await expect(page.getByTestId('btn-confirm-position')).not.toHaveText('ここで構える');
   expect(await probe(page, 'ammo')).toBe(10);
   await page.reload();
-  // the saved language wins on the next visit
-  await expect(page.getByTestId('btn-resume-run')).toBeVisible();
+  // The saved language applies to the resume prompt as well as the home.
+  await expect(page.getByTestId('btn-resume-run')).toHaveText('Continue');
+  await expect(page.getByTestId('resume-prompt').locator('h1')).toHaveText('You have an unfinished game');
   await page.getByTestId('btn-new-run').click();
   await expect(page.getByTestId('home-start')).toHaveText(/start|play/i);
 });

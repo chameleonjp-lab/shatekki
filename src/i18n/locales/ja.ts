@@ -4,6 +4,16 @@
  * as a test failure. Placeholders use {name}. Logic must never branch on text.
  */
 export const JA = {
+  "app.restore.abandoned": "前回は撃っている途中で中断されたため、そのプレイは記録されません。",
+  "app.restore.ended": "前回のプレイは終わっています。",
+  "app.restore.quarantined": "保存データを読めなかったため、新しく始めます。",
+  "app.resume.title": "前回のプレイの続きがあります",
+  "app.resume.continue": "続きから",
+  "app.resume.restart": "はじめから（ホームへ）",
+  "app.status.preparing": "準備中…",
+  "app.error.stale": "このプレイは別のタブで続いています。このタブでは操作できません。",
+  "app.error.renderer": "3D表示を開始できませんでした。お使いのブラウザでは表示できない可能性があります。",
+  "app.error.start": "開始できませんでした。ページを再読み込みしてください。",
   'app.title': '屋台の射的ゲーム',
   'home.tagline': '縁日の屋台で、コルク銃を構えて景品を狙おう。',
   'home.start': 'はじめる',

@@ -12,7 +12,7 @@
  * (name fixed there), submit(finalResult) when the run ends, retryPending on
  * load / when the browser comes back online, fetchTop for the list.
  */
-import { isOfficialRankingEligible, type FinalResult, type KeyValueStorage, type RankingClient, type RunId, type SubmitStatus } from '../contracts';
+import { isOfficialRankingEligible, type FinalResult, type KeyValueStorage, type RankingClient, type RunId, type SubmitStatus, type ValueStatus } from '../contracts';
 import { MAX_SCORE, RANKING_CONFIG, type RankingConfig } from './config';
 import { normalizePlayerName } from './name';
 import { classifyHttpFailure, isRetryableReason, isUuid, PendingStore, type FailureKind, type PendingEntry } from './retry';
@@ -66,7 +66,7 @@ export interface RankingSnapshot {
 }
 
 export interface RankingService extends RankingClient {
-  beginRun(input: { runId: RunId; playerName: string | null }): RunHandle;
+  beginRun(input: { runId: RunId; playerName: string | null; valueStatus: ValueStatus }): RunHandle;
   submit(result: FinalResult): Promise<RankingSubmitStatus>;
   retryPending(options?: { includePermanent?: boolean }): Promise<readonly RankingSubmitStatus[]>;
   getStatus(runId: RunId): RankingSubmitStatus;
@@ -114,12 +114,6 @@ function safeCode(v: unknown): string | null {
 
 type RpcResult = { readonly ok: true; readonly data: unknown } | { readonly ok: false; readonly kind: FailureKind; readonly code: string };
 
-/** Find the participant's own rank in the top list, only when it is unambiguous. */
-export function findOwnRank(rows: readonly RankingRow[], displayName: string, bestScore: number): number | null {
-  const m = rows.filter((r) => r.display_name === displayName && r.best_score === bestScore);
-  return m.length === 1 ? (m[0]?.rank_no ?? null) : null;
-}
-
 export function createRankingService(options: RankingServiceOptions = {}): RankingService {
   const config = options.config ?? RANKING_CONFIG;
   const fetchImpl: typeof fetch | null = options.fetch === undefined ? (typeof fetch === 'function' ? fetch.bind(globalThis) : null) : options.fetch;
@@ -161,7 +155,6 @@ export function createRankingService(options: RankingServiceOptions = {}): Ranki
         method: 'POST',
         headers: {
           apikey: config.publishableKey,
-          Authorization: `Bearer ${config.publishableKey}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -346,10 +339,13 @@ export function createRankingService(options: RankingServiceOptions = {}): Ranki
   }
 
   const service: RankingService = {
-    beginRun({ runId, playerName }) {
+    beginRun({ runId, playerName, valueStatus }) {
       const id = String(runId);
       const name = normalizePlayerName(playerName);
-      if (!config.gameSlug || name === null) return { runId, ranked: false };
+      const existing = store.find(id);
+      if (!config.gameSlug || name === null || valueStatus !== 'approved' || (existing && existing.gameSlug !== config.gameSlug)) {
+        return { runId, ranked: false };
+      }
       if (!store.find(id) && !store.findDone(id)) {
         store.upsert({
           schema: 1, runId: id, startId: idFactory(), gameSlug: config.gameSlug, clientVersion: config.clientVersion,
@@ -364,6 +360,10 @@ export function createRankingService(options: RankingServiceOptions = {}): Ranki
     async submit(result) {
       const id = String(result.runId);
       if (!config.gameSlug) return notEligible('not_ready', id);
+      const existing = store.find(id);
+      // A resumed run retains its original game. Neither submit nor abandon
+      // may send, rewrite or remove another game's saved entry.
+      if (existing && existing.gameSlug !== config.gameSlug) return notEligible('not_ready', id);
       if (result.status === 'abandoned') {
         const pending = store.find(id);
         if (pending) store.remove(id); // decision 27: no finish, no score for an abandoned run
@@ -402,7 +402,11 @@ export function createRankingService(options: RankingServiceOptions = {}): Ranki
 
     async retryPending(opts) {
       const out: RankingSubmitStatus[] = [];
+      // Stored entries never override today's registration / game selection.
+      // Keep inapplicable entries intact so an approved build can retry later.
+      if (!config.gameSlug) return out;
       for (const e of [...store.list()]) {
+        if (e.gameSlug !== config.gameSlug) continue;
         if (e.lastFailure?.kind === 'permanent_failed' && !opts?.includePermanent) continue;
         if (!e.result) {
           // Started-only entries are retried only to obtain the play_id.

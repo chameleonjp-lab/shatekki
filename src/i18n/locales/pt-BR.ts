@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const PT_BR: Record<UiKey, string> = {
+  "app.restore.abandoned": "A partida anterior foi interrompida durante um tiro e não será registrada.",
+  "app.restore.ended": "A partida anterior terminou.",
+  "app.restore.quarantined": "Não foi possível ler a partida salva. Comece uma nova.",
+  "app.resume.title": "Você tem uma partida inacabada",
+  "app.resume.continue": "Continuar",
+  "app.resume.restart": "Recomeçar (início)",
+  "app.status.preparing": "Preparando…",
+  "app.error.stale": "Esta partida continua em outra aba. Você não pode jogar nesta aba.",
+  "app.error.renderer": "Não foi possível iniciar a visualização 3D. Seu navegador pode não ser compatível.",
+  "app.error.start": "Não foi possível iniciar a partida. Recarregue a página.",
   'app.title': 'Tiro ao Alvo de Festival',
   'home.tagline': 'Mire sua arma de rolha nos prêmios da barraca de festival.',
   'home.start': 'Começar',

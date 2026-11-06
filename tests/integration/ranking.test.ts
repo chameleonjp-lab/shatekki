@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FinalResult, KeyValueStorage, RunId } from '../../src/contracts';
-import { createRankingService, findOwnRank } from '../../src/ranking/client';
+import { createRankingService } from '../../src/ranking/client';
 import { RANKING_CONFIG, type RankingConfig } from '../../src/ranking/config';
 import { nextRetryDelayMs, classifyHttpFailure, PendingStore } from '../../src/ranking/retry';
 import { checkName, normalizePlayerName } from '../../src/ranking/name';
@@ -68,7 +68,7 @@ class FakeLab {
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
     this.calls.push({ op, body });
     const headers = init?.headers as Record<string, string>;
-    if (!headers.apikey || headers.Authorization !== `Bearer ${headers.apikey}`) return new Response('{}', { status: 401 });
+    if (!headers.apikey || 'Authorization' in headers) return new Response('{}', { status: 401 });
     const fail = this.failStatus.get(op);
     if (fail && fail.times > 0) {
       fail.times -= 1;
@@ -149,7 +149,7 @@ describe('eligibility: what is never sent', () => {
     expect(RANKING_CONFIG.canonicalUrl).toBeNull();
     expect(RANKING_CONFIG.labDetailUrl).toBeNull();
     const { lab, svc } = setup({ config: RANKING_CONFIG });
-    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     expect(h.ranked).toBe(false);
     const st = await svc.submit(result({ valueStatus: 'approved' }));
     expect(st.state).toBe('not_eligible');
@@ -159,7 +159,7 @@ describe('eligibility: what is never sent', () => {
 
   it('anonymous runs never send anything, not even a start', async () => {
     const { lab, svc } = setup();
-    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: null });
+    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: null, valueStatus: 'approved' });
     expect(h.ranked).toBe(false);
     const st = await svc.submit(result({ playerName: null }));
     expect(st).toMatchObject({ state: 'not_eligible', reason: 'anonymous' });
@@ -169,7 +169,7 @@ describe('eligibility: what is never sent', () => {
   it('prototype and proposed values are never sent (only approved)', async () => {
     for (const valueStatus of ['prototype', 'proposed'] as const) {
       const { lab, svc } = setup();
-      svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+      svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus });
       const before = lab.calls.length;
       const st = await svc.submit(result({ valueStatus }));
       expect(st).toMatchObject({ state: 'not_eligible', reason: 'prototype' });
@@ -178,9 +178,72 @@ describe('eligibility: what is never sent', () => {
     }
   });
 
+  it('prototype and proposed runs never create a start or a pending entry', async () => {
+    for (const valueStatus of ['prototype', 'proposed'] as const) {
+      const { lab, svc } = setup();
+      const handle = svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus });
+      await svc.flush();
+      expect(handle.ranked).toBe(false);
+      expect(lab.calls).toHaveLength(0);
+      expect(svc.getSnapshot().pendingCount).toBe(0);
+    }
+  });
+
+  it('disabled ranking never resends a persisted result and preserves it for later', async () => {
+    const a = setup();
+    a.lab.failStatus.set('submit_score_idempotent_v1', { status: 503, body: {}, times: 1 });
+    await a.svc.submit(result());
+    const before = a.storage!.getItem('shatekki.ranking-pending.v1');
+    const b = setup({ config: RANKING_CONFIG, storage: a.storage });
+    expect(await b.svc.retryPending()).toEqual([]);
+    expect(b.lab.calls).toHaveLength(0);
+    expect(b.storage!.getItem('shatekki.ranking-pending.v1')).toBe(before);
+    expect(b.svc.getSnapshot().pendingCount).toBe(1);
+    expect((await a.svc.retryPending())[0]?.state).toBe('submitted');
+  });
+
+  it('does not send or discard a queued result for a different game', async () => {
+    const a = setup();
+    a.lab.failStatus.set('submit_score_idempotent_v1', { status: 503, body: {}, times: 1 });
+    await a.svc.submit(result());
+    const before = a.storage!.getItem('shatekki.ranking-pending.v1');
+    const b = setup({ config: { ...CONFIG, gameSlug: 'another-test-game' }, storage: a.storage });
+    expect(await b.svc.retryPending()).toEqual([]);
+    expect(b.lab.calls).toHaveLength(0);
+    expect(b.storage!.getItem('shatekki.ranking-pending.v1')).toBe(before);
+    expect(b.svc.getSnapshot().pendingCount).toBe(1);
+  });
+
+  it('rejects resuming and submitting another game’s pending run without changing it', async () => {
+    const a = setup();
+    a.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
+    await a.svc.flush();
+    const before = a.storage!.getItem('shatekki.ranking-pending.v1');
+    for (const runStatus of ['completed', 'abandoned'] as const) {
+      const b = setup({ config: { ...CONFIG, gameSlug: 'another-test-game' }, storage: a.storage });
+      const handle = b.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
+      await b.svc.flush();
+      expect(handle.ranked).toBe(false);
+      expect((await b.svc.submit(result({ status: runStatus }))).state).toBe('not_eligible');
+      expect(b.lab.calls).toHaveLength(0);
+      expect(b.storage!.getItem('shatekki.ranking-pending.v1')).toBe(before);
+    }
+  });
+
+  it('sends the publishable key only as apikey, not as a Bearer token', async () => {
+    let sentHeaders = new Headers();
+    const svc = createRankingService({ config: CONFIG, fetch: async (_url, init) => {
+      sentHeaders = new Headers(init?.headers);
+      return new Response('[]', { status: 200 });
+    } });
+    expect((await svc.fetchTop()).state).toBe('ready');
+    expect(sentHeaders.get('apikey')).toBe(CONFIG.publishableKey);
+    expect(sentHeaders.has('authorization')).toBe(false);
+  });
+
   it('abandoned runs send no finish and no score (decision 27)', async () => {
     const { lab, svc } = setup();
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     await svc.flush();
     const st = await svc.submit(result({ status: 'abandoned' }));
     expect(st).toMatchObject({ state: 'not_eligible', reason: 'abandoned' });
@@ -200,7 +263,7 @@ describe('eligibility: what is never sent', () => {
 
   it('a name different from the one fixed at start is refused (no after-the-fact publishing)', async () => {
     const { lab, svc } = setup();
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     await svc.flush();
     const st = await svc.submit(result({ playerName: 'じろう' }));
     expect(st).toMatchObject({ state: 'not_eligible', reason: 'name_mismatch' });
@@ -212,7 +275,7 @@ describe('v1 contract flow', () => {
   it('start -> finish -> submit with ids fixed per run, then the board refreshes', async () => {
     const { lab, svc } = setup();
     lab.ranking = [{ rank_no: 1, display_name: 'たろう', first_score: 1234, best_score: 1234, play_count: 1, updated_at: null }];
-    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: '  たろう  ' });
+    const h = svc.beginRun({ runId: 'run-1' as RunId, playerName: '  たろう  ', valueStatus: 'approved' });
     expect(h.ranked).toBe(true);
     const st = await svc.submit(result({ playerName: 'たろう' }));
     expect(st.state).toBe('submitted');
@@ -235,7 +298,7 @@ describe('v1 contract flow', () => {
 
   it('never calls the old submit_score / record_* endpoints', async () => {
     const { lab, svc } = setup();
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     await svc.submit(result());
     await svc.fetchTop();
     const allowed = new Set(['start_game_play_v1', 'finish_game_play_v1', 'submit_score_idempotent_v1', 'get_best_score_ranking']);
@@ -245,7 +308,7 @@ describe('v1 contract flow', () => {
   it('duplicate retry after a lost submit response registers once with the same ids', async () => {
     const { lab, svc } = setup();
     lab.loseResponse.set('submit_score_idempotent_v1', 1);
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     const first = await svc.submit(result());
     expect(first.state).toBe('retryable_failed');
     expect(lab.scoreRuns).toHaveLength(1); // server already took it
@@ -262,7 +325,7 @@ describe('v1 contract flow', () => {
   it('a lost start response is retried with the same start_id and yields the same play_id', async () => {
     const { lab, svc } = setup();
     lab.loseResponse.set('start_game_play_v1', 1);
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     await svc.flush();
     const st = await svc.submit(result());
     expect(st.state).toBe('submitted');
@@ -278,7 +341,7 @@ describe('v1 contract flow', () => {
     const lab = new FakeLab();
     lab.failStatus.set('submit_score_idempotent_v1', { status: 503, body: { message: 'unavailable' }, times: 1 });
     const a = setup({ storage, lab });
-    a.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    a.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     expect((await a.svc.submit(result())).state).toBe('retryable_failed');
     const firstSubmission = lab.calls.filter((c) => c.op === 'submit_score_idempotent_v1')[0]!.body.p_submission_id;
     const b = setup({ storage, lab }); // new page load, same storage
@@ -294,7 +357,7 @@ describe('v1 contract flow', () => {
     const storage = memoryStorage();
     const lab = new FakeLab();
     const a = setup({ storage, lab });
-    a.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    a.svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     expect((await a.svc.submit(result())).state).toBe('submitted');
     const callsBefore = lab.calls.length;
     const b = setup({ storage, lab });
@@ -306,7 +369,7 @@ describe('v1 contract flow', () => {
 
   it('concurrent submit calls for the same run send one set of requests', async () => {
     const { lab, svc } = setup();
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     const [a, b] = await Promise.all([svc.submit(result()), svc.submit(result())]);
     expect(a.state).toBe('submitted');
     expect(b.state).toBe('submitted');
@@ -317,7 +380,7 @@ describe('v1 contract flow', () => {
   it('a different score for an already frozen run is refused (the frozen result wins)', async () => {
     const { lab, svc } = setup();
     lab.failStatus.set('submit_score_idempotent_v1', { status: 503, body: {}, times: 1 });
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     await svc.submit(result({ score: 100 }));
     const st = await svc.submit(result({ score: 99999 }));
     expect(st.state).toBe('permanent_failed');
@@ -331,7 +394,7 @@ describe('v1 contract flow', () => {
     expect(classifyHttpFailure(400, 'P0001', 'invalid_game')).toBe('permanent_failed');
     const { lab, svc } = setup();
     lab.rejectSubmit = 'game_not_found';
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     const st = await svc.submit(result());
     expect(st.state).toBe('permanent_failed');
     const n = lab.count('submit_score_idempotent_v1');
@@ -344,7 +407,7 @@ describe('v1 contract flow', () => {
   it('a failed send keeps the local result and queue entry', async () => {
     const { lab, svc } = setup();
     lab.failStatus.set('finish_game_play_v1', { status: 500, body: {}, times: 1 });
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     const st = await svc.submit(result());
     expect(st.state).toBe('retryable_failed');
     expect(svc.getSnapshot().pendingCount).toBe(1);
@@ -362,7 +425,7 @@ describe('storage', () => {
   it('flags storage_unavailable but still works from memory', async () => {
     const { lab, svc } = setup({ storage: brokenStorage() });
     expect(svc.getSnapshot().storageAvailable).toBe(false);
-    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう' });
+    svc.beginRun({ runId: 'run-1' as RunId, playerName: 'たろう', valueStatus: 'approved' });
     const st = await svc.submit(result());
     expect(st.state).toBe('submitted');
     expect(st.storageAvailable).toBe(false);
@@ -439,12 +502,7 @@ describe('top 30', () => {
     expect(lab.calls).toHaveLength(0);
   });
 
-  it('own rank is only shown when exactly one row matches name and best (never guessed)', () => {
-    const rows = [row(1, 'a', 500), row(2, 'たろう', 300), row(2, 'たろう', 300), row(4, 'z', 100)];
-    expect(findOwnRank(rows, 'a', 500)).toBe(1);
-    expect(findOwnRank(rows, 'たろう', 300)).toBeNull(); // same-name participants are not merged or guessed
-    expect(findOwnRank(rows, 'nobody', 5)).toBeNull();
-  });
+
 });
 
 describe('name rules', () => {

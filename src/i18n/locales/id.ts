@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const ID: Record<UiKey, string> = {
+  "app.restore.abandoned": "Permainan sebelumnya terhenti saat menembak dan tidak akan dicatat.",
+  "app.restore.ended": "Permainan sebelumnya telah berakhir.",
+  "app.restore.quarantined": "Permainan tersimpan tidak dapat dibaca. Mulai permainan baru.",
+  "app.resume.title": "Ada permainan yang belum selesai",
+  "app.resume.continue": "Lanjutkan",
+  "app.resume.restart": "Mulai ulang (beranda)",
+  "app.status.preparing": "Menyiapkan…",
+  "app.error.stale": "Permainan ini dilanjutkan di tab lain. Anda tidak dapat bermain di tab ini.",
+  "app.error.renderer": "Tampilan 3D tidak dapat dimulai. Browser Anda mungkin tidak mendukungnya.",
+  "app.error.start": "Permainan tidak dapat dimulai. Muat ulang halaman.",
   'app.title': 'Tembak Hadiah Festival',
   'home.tagline': 'Bidik hadiah di kios festival dengan senapan gabus.',
   'home.start': 'Mulai',

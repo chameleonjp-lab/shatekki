@@ -1,6 +1,16 @@
 import type { UiKey } from './ja';
 
 export const VI: Record<UiKey, string> = {
+  "app.restore.abandoned": "Lượt chơi trước bị gián đoạn khi đang bắn nên sẽ không được ghi lại.",
+  "app.restore.ended": "Lượt chơi trước đã kết thúc.",
+  "app.restore.quarantined": "Không đọc được lượt chơi đã lưu. Hãy bắt đầu lượt mới.",
+  "app.resume.title": "Bạn có lượt chơi chưa hoàn thành",
+  "app.resume.continue": "Chơi tiếp",
+  "app.resume.restart": "Bắt đầu lại (trang chủ)",
+  "app.status.preparing": "Đang chuẩn bị…",
+  "app.error.stale": "Lượt chơi này đang tiếp tục ở thẻ khác. Bạn không thể chơi trong thẻ này.",
+  "app.error.renderer": "Không thể mở hình ảnh 3D. Trình duyệt của bạn có thể không hỗ trợ.",
+  "app.error.start": "Không thể bắt đầu trò chơi. Vui lòng tải lại trang.",
   'app.title': 'Trò bắn quà hội làng',
   'home.tagline': 'Ngắm súng nút bần bắn trúng quà ở quầy hội làng.',
   'home.start': 'Bắt đầu',
