@@ -1,29 +1,31 @@
 # タスク台帳（Opusが更新）
 
-状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus。
+状態は `READY → WORKING → REVIEW → PR_OPEN → MERGED`、止まっているものは `BLOCKED`。担当エージェントの「完了」は証拠付きのREVIEWまでで、マージ済みとは扱わない。最終更新：2026-11-05 Opus（Task 17）。
 
-基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`
+基準main：`3c619d219b31ebb051e1a88a155ca928c721d966`（作業開始時）→ 現在 `eb3fd2a`（#7マージ後）
+
+**PRの状態（2026-11-06 00:30 UTC）**：#7（P0）はmainへマージ済み。#8〜#10は積み重ねの元ブランチへマージされ、mainには未反映。#8〜#10の内容とTask 17は、すべて #11（`feat/p6-acceptance` → main、CI成功）に含まれる。#12は重複のため閉じた。以下の表の「PR_OPEN」は、#11のマージ待ちを指す。
 
 | Task | 内容 | 担当（実モデル） | 状態 | ブランチ／PR | 試験の証拠 | 阻害・次の作業 |
 |---|---|---|---|---|---|---|
-| 00 | 調査・制約確認 | Opus（claude-opus-5-5） | PR_OPEN | `feat/p0-foundation-contracts` | `docs/architecture/implementation-baseline.md` | マージ待ち |
-| 01 | 起動・試験基盤 | Opus | PR_OPEN | 同上 | typecheck／unit 30件／integration 5件／build／e2e 6件（Chromium） | CIの初回実行結果をPRで確認 |
-| 02 | 契約と所有境界 | Opus | PR_OPEN | 同上 | `tests/unit/contracts.test.ts` | — |
-| 03 | 候補検査・抽選・設定 | Game（Sonnet 5.5） | READY | — | — | 02の契約に依存（未マージでも積み重ねで着手） |
-| 04 | 一射の状態と弾数 | Game | READY | — | — | 同上 |
-| 05 | 物理・命中 | Game | READY | — | — | 04の後 |
-| 06 | 景品・周期運動・補充 | Game | READY | — | — | 03,05の後 |
-| 07 | 装填・手ブレ・最小操作画面 | Game＋UI＋Opus | READY | — | — | 04,06,11の後 |
-| 08 | 装置・変身・店主・落下猶予 | Game | 未着手 | — | — | 05,06の後 |
-| 09 | セット・採点・一射確定 | Game、Opus審査 | 未着手 | — | — | 03,08の後 |
-| 10 | 保存・停止・中断 | Game、Opus審査 | 未着手 | — | — | 09の後 |
-| 11 | 描画基盤・美術方針 | Visual（Sonnet 5.5） | READY | — | — | 02の後、Gameと並行 |
-| 12 | 命中・惜しい・結果演出 | Visual | 未着手 | — | — | 08,09,11の後 |
-| 13 | 100景品の実行データ・素材・音 | Game＋Visual＋UI | 未着手 | — | — | 03,09,11の後 |
-| 14 | 共通画面・名前・図鑑・結果 | UI/QA（Sonnet 5.5） | 未着手 | — | — | 07,09,10,11の後 |
-| 15 | 15言語・共有 | UI/QA | 未着手 | — | — | 13,14の後（翻訳の下書きは先行可） |
-| 16 | ランキング（模擬通信） | UI/QA＋Opus | 未着手 | — | — | 10,14,15の後。本番接続はDB登録の承認が必要 |
-| 17 | 公開前の統合確認 | Opus＋UI/QA | 未着手 | — | — | 03〜16の後。iPhone実機は公開承認待ち |
+| 00 | 調査・制約確認 | Opus（claude-opus-5-5） | MERGED（#7） | `feat/p0-foundation-contracts` | `docs/architecture/implementation-baseline.md` | マージ待ち |
+| 01 | 起動・試験基盤 | Opus | MERGED（#7） | 同上 | typecheck／unit 30件／integration 5件／build／e2e 6件（Chromium） | CIの初回実行結果をPRで確認 |
+| 02 | 契約と所有境界 | Opus | MERGED（#7） | 同上 | `tests/unit/contracts.test.ts` | — |
+| 03 | 候補検査・抽選・設定 | Game（claude-sonnet-5-5） | PR_OPEN | `feat/p1-game`→`feat/p1-integration` | unit/catalog 11・unit/draw 16 | 100景品・100セットの値はすべて試作 |
+| 04 | 一射の状態と弾数 | Game（claude-sonnet-5-5） | PR_OPEN | 同上 | unit/shot-flow 26 | — |
+| 05 | 物理・命中 | Game（claude-sonnet-5-5） | PR_OPEN | 同上 | unit/collision 14 | 仕掛けの効果はTask 08 |
+| 06 | 景品・周期運動・補充 | Game（claude-sonnet-5-5） | PR_OPEN | 同上 | unit/prizes 8・motion 8・replenish 7、integration/full-run 3 | 得点はTask 09で拡張 |
+| 07 | 装填・手ブレ・最小操作画面 | Game（計算）＋Opus（接続・最小UI） | PR_OPEN | `feat/p1-integration` | unit/aim 12・controller 5・controls-model 3、integration/aim-parity、e2e/shot-smoke 3×2画面 | UIの本実装はTask 14（UI/QA） |
+| 08 | 装置・変身・店主・落下猶予 | Game 2（claude-sonnet-5-5） | PR_OPEN | `feat/p2-game`→`feat/p2-integration` | unit/gimmicks・devices-sim・transform-grace、integration/devices-run | 効果量・対象選びは試作（O08） |
+| 09 | セット・採点・一射確定 | Game 2、Opus審査 | PR_OPEN | 同上 | unit/scoring | 技・セット点は試作（O02/O03） |
+| 10 | 保存・停止・中断 | Game 2、Opus審査・配線 | PR_OPEN | 同上 | integration/checkpoint、e2e/reload 4 | 実機のlocalStorage・プライベートモードは未確認 |
+| 11 | 描画基盤・美術方針 | Visual（claude-sonnet-5-5）＋Opus（照準の当たり判定合わせ） | PR_OPEN | `feat/p1-view`→`feat/p1-integration` | integration/view-contract 22 | 店主が初期視点の画面外。配置の見直しを検討 |
+| 12 | 命中・惜しい・結果演出 | Visual 2（claude-sonnet-5-5）＋Opus配線 | PR_OPEN | `feat/p3-visual`→`feat/p4-integration` | unit/effects・classify・result-vfx | 実際の画面での演出の見え方は実機未確認 |
+| 13 | 100景品の実行データ・素材・音 | Game（データ）＋Visual（形・音） | PR_OPEN | `feat/p1-game`・`feat/p1-view`・`feat/p3-visual` | unit/catalog・audio、integration/view-contract | 値はすべて試作。試聴なし |
+| 14 | 共通画面・名前・図鑑・結果 | UI/QA＋Opus配線 | PR_OPEN | `feat/p4-ui`→`feat/p4-integration` | integration/screens、e2e/screens 5×2画面 | — |
+| 15 | 15言語・共有 | UI/QA 2 | PR_OPEN | `feat/p4-i18n-content`→`feat/p4-integration` | unit/i18n・i18n-content | 母語話者の確認なし（O16） |
+| 16 | ランキング（模擬通信） | UI/QA＋Opus | PR_OPEN（本番はBLOCKED） | `feat/p4-ui`→`feat/p4-integration` | integration/ranking・security | 本番接続はDB登録の承認が必要 |
+| 17 | 公開前の統合確認 | Opus | PR_OPEN | `feat/p6-acceptance` | integration/balance-probe・performance・acceptance-composite、e2e/long-text・performance、docs/qa/* | iPhone実機は公開承認待ち。セット成立率の判断を申し送り（SHK-20261106-CLAUDE-002） |
 | 18 | 承認済みの公開と公開後確認 | Opus | BLOCKED | — | — | 利用者の公開承認・DB登録承認が必要 |
 
 ## 再開するときの手順
