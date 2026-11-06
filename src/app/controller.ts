@@ -142,6 +142,9 @@ export class GameController {
     const expansion: ExpansionViewState = {
       cells: e.cells.map((c) => ({ cellId: c.cellId, used: c.used, effectId: c.used ? c.effectId : null })),
       outlineSeries: e.outlineSeries,
+      assortmentSeries: e.assortmentSeries,
+      collectedTypeIds: s.collectedTypeIds,
+      completedSets: s.completedSets,
       hint: reservation.hint,
       aimPreview: s.phase === 'aiming' && reservation.hint === 'aimPreview' ? this.aimPreview(s, effectiveAim) : null,
       question: question && s.inFlight ? { shotId: s.inFlight.shotId, questionId: question.questionId, answer: question.answer } : null,
