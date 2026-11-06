@@ -171,7 +171,6 @@ export interface ShotWorldOptions {
 export const DEFAULT_EXPANDED_SHOT_LIMITS: NonNullable<ShotWorldOptions['limits']> = { reflections: { min: 4, max: 10 }, maxPowerMultiplier: MAX_POWER_MULTIPLIER };
 
 type KindChangeInfo = Omit<PrizeTransformedEvent, 'type' | 'eventId' | 'shotId'>;
-type ProjectileFrameWithRadius = ProjectileFrame & { readonly radius?: number };
 
 export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatalog, tuning: TuningConfig, options: ShotWorldOptions = {}): Promise<ShotWorld> {
   await initRapier();
@@ -251,10 +250,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     };
   };
 
-  const projectileFrames = (): ProjectileFrameWithRadius[] =>
+  const projectileFrames = (): ProjectileFrame[] =>
     (active?.projectiles ?? [])
       .filter((p) => !p.ended)
-      .map((p): ProjectileFrameWithRadius => ({
+      .map((p): ProjectileFrame => ({
         projectileId: p.id,
         position: p.position,
         velocity: p.velocity,
