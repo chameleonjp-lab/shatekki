@@ -13,6 +13,7 @@ import { DE_CONTENT } from './expanded/de';
 import { EN_CONTENT } from './expanded/en';
 import { ES_CONTENT } from './expanded/es';
 import { FR_CONTENT } from './expanded/fr';
+import { KO_CONTENT } from './expanded/ko';
 import { PT_BR_CONTENT } from './expanded/pt-BR';
 import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
 import { JA_SUPPLEMENT } from './expanded/ja';
@@ -39,7 +40,7 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   'zh-Hans': { status: 'complete', content: ZH_HANS_CONTENT },
   fr: { status: 'complete', content: FR_CONTENT },
   de: { status: 'complete', content: DE_CONTENT },
-  ko: PENDING,
+  ko: { status: 'complete', content: KO_CONTENT },
   ru: PENDING,
   it: PENDING,
   'zh-Hant': PENDING,
