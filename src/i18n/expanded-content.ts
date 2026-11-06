@@ -17,6 +17,7 @@ import { KO_CONTENT } from './expanded/ko';
 import { PT_BR_CONTENT } from './expanded/pt-BR';
 import { RU_CONTENT } from './expanded/ru';
 import { ZH_HANS_CONTENT } from './expanded/zh-Hans';
+import { IT_CONTENT } from './expanded/it';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
   EXPANDED_COUNTS,
@@ -43,7 +44,7 @@ export const EXPANDED_REGISTRY: ExpandedRegistry = {
   de: { status: 'complete', content: DE_CONTENT },
   ko: { status: 'complete', content: KO_CONTENT },
   ru: { status: 'complete', content: RU_CONTENT },
-  it: PENDING,
+  it: { status: 'complete', content: IT_CONTENT },
   'zh-Hant': PENDING,
   id: PENDING,
   tr: PENDING,
