@@ -41,14 +41,14 @@ const sourceCases = [
     e2e: [], browser: false,
   }],
   ['src/i18n/locales/ja.ts', {
-    unit: ['tests/unit/controls-model.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts'],
+    unit: ['tests/unit/controls-model.test.ts', 'tests/unit/expanded-i18n.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'], browser: true,
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'], browser: true,
   }],
   ['src/ui/controls/controls.css', {
-    unit: ['tests/unit/controls-model.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts'],
+    unit: ['tests/unit/controls-model.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts', 'tests/unit/stand-step.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts', 'tests/e2e/shot-smoke.spec.ts', 'tests/e2e/smoke.spec.ts'], browser: true,
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts', 'tests/e2e/shot-smoke.spec.ts', 'tests/e2e/smoke.spec.ts'], browser: true,
   }],
   ['src/audio/engine.ts', {
     unit: ['tests/unit/audio.test.ts'], integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
@@ -65,9 +65,9 @@ for (const [path, selection] of sourceCases) {
 test('mixed safe changes union their selections without duplicates and retain docs', () => {
   assert.deepEqual(withoutReasons(planChanges(['docs/notes.md', 'src/audio/engine.ts', 'src/i18n/index.ts', 'src/audio/index.ts'])), {
     scope: 'targeted',
-    unit: ['tests/unit/audio.test.ts', 'tests/unit/controls-model.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts'],
+    unit: ['tests/unit/audio.test.ts', 'tests/unit/controls-model.test.ts', 'tests/unit/expanded-i18n.test.ts', 'tests/unit/i18n-content.test.ts', 'tests/unit/i18n.test.ts', 'tests/unit/share.test.ts', 'tests/unit/shopkeeper-panel.test.ts'],
     integration: ['tests/integration/screens.test.ts', 'tests/integration/security.test.ts'],
-    e2e: ['tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'],
+    e2e: ['tests/e2e/expanded-gameplay.spec.ts', 'tests/e2e/expanded-smoke.spec.ts', 'tests/e2e/long-text.spec.ts', 'tests/e2e/screens.spec.ts'],
     node: true, build: true, browser: true,
   });
 });
@@ -243,4 +243,12 @@ test('CLI keeps both sides of a rename and allows removed documentation', (t) =>
   repo.git('rm', 'README.md');
   const docsHead = repo.commit();
   assert.deepEqual(withoutReasons(runPlan(repo, ['--base', head, '--head', docsHead])), none);
+});
+
+test('every test file a narrow rule names exists, so a rule never selects a missing test', async () => {
+  const { existsSync } = await import('node:fs');
+  for (const path of ['src/i18n/locales/ja.ts', 'src/ui/controls/controls.css', 'src/audio/engine.ts', 'src/ranking/client.ts']) {
+    const plan = planChanges([path]);
+    for (const key of ['unit', 'integration', 'e2e']) for (const file of plan[key]) assert.ok(existsSync(file), `${path} selects missing ${file}`);
+  }
 });
