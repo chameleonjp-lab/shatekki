@@ -11,6 +11,7 @@ import questionsJa from '../../data/expansion-v2/questions.json';
 import seriesJa from '../../data/expansion-v2/series.json';
 import { EN_CONTENT } from './expanded/en';
 import { ES_CONTENT } from './expanded/es';
+import { PT_BR_CONTENT } from './expanded/pt-BR';
 import { JA_SUPPLEMENT } from './expanded/ja';
 import {
   EXPANDED_COUNTS,
@@ -31,7 +32,7 @@ const PENDING: ExpandedLocaleEntry = { status: 'pending', content: {} };
 export const EXPANDED_REGISTRY: ExpandedRegistry = {
   en: { status: 'complete', content: EN_CONTENT },
   es: { status: 'complete', content: ES_CONTENT },
-  'pt-BR': PENDING,
+  'pt-BR': { status: 'complete', content: PT_BR_CONTENT },
   'zh-Hans': PENDING,
   fr: PENDING,
   de: PENDING,
