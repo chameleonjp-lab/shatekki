@@ -89,6 +89,15 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+      # Internal prototype build for the expanded browser tests. A different artifact name, so the
+      # Pages workflow (which only takes site-dist) can never publish it.
+      - run: npm run build:expanded
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-expanded-dist
+          path: dist-expanded/
+          if-no-files-found: error
+          retention-days: 7
 
   browser:
     needs: [plan, build]
@@ -114,6 +123,10 @@ jobs:
         with:
           name: site-dist
           path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-expanded-dist
+          path: dist-expanded/
       - run: npx playwright install --with-deps chromium
       - name: Run selected browser tests
         run: node scripts/ci/run-tests.mjs e2e --shard=${{ matrix.shard }}/2

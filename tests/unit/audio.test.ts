@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { asPrizeTypeId, mintId, SIM_EVENT_TYPES, type ImpactTarget, type SimEvent, type UiCue } from '../../src/contracts';
 import { createAudioEngine, type AudioContextLike } from '../../src/audio/engine';
-import { SOUNDS, SIM_EVENT_POLICY, UI_CUE_SOUND, soundsForSimEvent, soundsForUiCue, type SoundId } from '../../src/audio/sounds';
+import { SOUNDS, SIM_EVENT_POLICY, UI_CUE_SOUND, EXPANSION_CUE_NAMES, effectCueFor, effectFeel, soundsForSimEvent, soundsForUiCue, type SoundId } from '../../src/audio/sounds';
 
 // ------------------------------------------------------------- fake WebAudio
 class FakeParam {
@@ -292,6 +292,8 @@ describe('mapping covers every event and cue', () => {
     for (const r of soundsForSimEvent({ type: 'prizeContact', eventId: mintId.event(s1, 2), shotId: s1, a: mintId.instance(1), b: null, point: { x: 0, y: 0, z: 0 }, impulse: 1 })) reachable.add(r.id);
     for (const r of soundsForSimEvent({ type: 'prizeReachedCollection', eventId: mintId.event(s1, 3), shotId: s1, instanceId: mintId.instance(1), typeId: asPrizeTypeId('P001') })) reachable.add(r.id);
     for (const r of soundsForSimEvent({ type: 'prizeTransformed', eventId: mintId.event(s1, 4), shotId: s1, instanceId: mintId.instance(1), fromTypeId: asPrizeTypeId('P001'), toTypeId: asPrizeTypeId('P002'), hpBefore: 1, maxHpBefore: 1, hpAfter: 1, maxHpAfter: 1 })) reachable.add(r.id);
+    for (const a of [true, false]) for (const r of soundsForSimEvent(impact({ kind: 'cell', cellId: 'cell-r1-c01' as never, activated: a }))) reachable.add(r.id);
+    for (const c of EXPANSION_CUE_NAMES) for (const r of soundsForUiCue({ type: 'ui', cue: c })) reachable.add(r.id);
     for (const id of Object.keys(SOUNDS) as SoundId[]) {
       expect(reachable.has(id), `unreachable sound ${id}`).toBe(true);
       expect(SOUNDS[id].voices.length, id).toBeGreaterThan(0);
@@ -306,5 +308,80 @@ describe('mapping covers every event and cue', () => {
   it('a chain of 2+ adds the chain sound to the collect cue', () => {
     expect(soundsForUiCue({ type: 'ui', cue: 'collect' }).map((r) => r.id)).toEqual(['collect']);
     expect(soundsForUiCue({ type: 'ui', cue: 'collect', count: 3 } as never).map((r) => r.id)).toEqual(['collect', 'chain']);
+  });
+});
+
+describe('expanded gameplay sounds', () => {
+  const cell = (activated: boolean): ImpactTarget => ({ kind: 'cell', cellId: 'cell-r1-c01' as never, activated });
+
+  it('an activating cell contact has its own cue; a used cell is only the small ordinary sound', () => {
+    expect(soundsForSimEvent(impact(cell(true))).map((r) => r.id)).toEqual(['cell.activate']);
+    expect(soundsForSimEvent(impact(cell(false))).map((r) => r.id)).toEqual(['hit.deviceDull']);
+  });
+
+  it('every expansion cue has its own distinct, defined sound', () => {
+    const ids = EXPANSION_CUE_NAMES.map((c) => soundsForUiCue({ type: 'ui', cue: c }).map((r) => r.id));
+    expect(ids.every((x) => x.length === 1)).toBe(true);
+    expect(new Set(ids.flat()).size).toBe(EXPANSION_CUE_NAMES.length);
+    for (const [id] of ids) expect(SOUNDS[id!].voices.length).toBeGreaterThan(0);
+  });
+
+  it('maps effects to a feel by ammo change first, then by number range', () => {
+    expect(effectFeel('FX001', 1)).toBe('good');
+    expect(effectFeel('FX021', -1)).toBe('risky');
+    expect(effectFeel('FX004')).toBe('good');
+    expect(effectFeel('FX016')).toBe('neutral');
+    expect(effectFeel('FX024')).toBe('risky');
+    expect(effectFeel('FX038')).toBe('neutral');
+    expect(effectFeel('FX041')).toBe('assortment');
+    expect(effectFeel('FX060', 0)).toBe('assortment');
+    expect(effectFeel('FX061')).toBe('outline');
+    expect(effectFeel('FX093')).toBe('neutral');
+    expect(effectFeel('FX101')).toBeNull();
+    expect(effectFeel('nonsense')).toBeNull();
+  });
+
+  it('coalesces a shot into one cue: assortment > outline > risky > good > neutral, ignoring notApplicable', () => {
+    const e = (effectId: string | null, ammoDelta = 0, outcome: 'applied' | 'notApplicable' = 'applied') => ({ effectId, outcome, ammoDelta });
+    expect(effectCueFor(undefined)).toBeNull();
+    expect(effectCueFor([])).toBeNull();
+    expect(effectCueFor([e('FX001', 1, 'notApplicable'), e(null, 0, 'notApplicable')])).toBeNull();
+    expect(effectCueFor([e('FX001', 1)])).toBe('effectGood');
+    expect(effectCueFor([e('FX001', 1), e('FX021', -1)])).toBe('effectRisky');
+    expect(effectCueFor([e('FX001', 1), e('FX093')])).toBe('effectGood');
+    expect(effectCueFor([e('FX093')])).toBe('effectNeutral');
+    expect(effectCueFor([e('FX021', -1), e('FX065')])).toBe('outlineShown');
+    expect(effectCueFor([e('FX065'), e('FX045'), e('FX001', 1)])).toBe('assortmentChanged');
+  });
+
+  it('respects sound off, volume 0, and silence() for the new cues', async () => {
+    const { engine, ctx } = await ready();
+    for (const c of EXPANSION_CUE_NAMES) {
+      engine.handle({ type: 'ui', cue: c } as never, { enabled: false, volume: 0.7 });
+      engine.handle({ type: 'ui', cue: c } as never, { enabled: true, volume: 0 });
+    }
+    engine.handle(impact(cell(true)), { enabled: false, volume: 0.7 });
+    expect(ctx.sources.length).toBe(0);
+    engine.handle({ type: 'ui', cue: 'questionShown' } as never, ON);
+    expect(ctx.sources.some((s) => s.started)).toBe(true);
+    engine.silence();
+    expect(ctx.sources.every((s) => s.stopped)).toBe(true);
+  });
+
+  it('a burst of cell contacts does not machine-gun', async () => {
+    const { engine, ctx } = await ready();
+    for (let i = 0; i < 30; i++) engine.handle(impact(cell(true)), ON);
+    // minimum gap per sound: at the same instant only the first one starts
+    expect(ctx.sources.length).toBeLessThanOrEqual(3);
+  });
+
+  it('drops cues while the context is not running instead of queueing them', async () => {
+    const ctx = new FakeCtx();
+    const { engine } = await ready(ctx);
+    ctx.state = 'suspended';
+    ctx.resumeFails = true;
+    const before = ctx.sources.length;
+    engine.handle({ type: 'ui', cue: 'effectGood' } as never, ON);
+    expect(ctx.sources.length).toBe(before);
   });
 });

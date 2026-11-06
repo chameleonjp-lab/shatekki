@@ -22,10 +22,14 @@ import {
 } from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
 import { CORE_RULES } from './app/rules';
-import { OFFICIAL_BUNDLE } from './app/bundle';
+import { OFFICIAL_BUNDLE, type ExpandedUiKit } from './app/bundle';
 import { createExpandedRun } from './core/expanded-run';
 import type { ThreeRenderer } from './view';
 import { mountControls, type PanelHandle } from './ui/controls/panel';
+import { standRangeOf } from './ui/controls/stand';
+import type { QuestionPanelHandle } from './ui/shopkeeper-question';
+import type { BoothMapHandle } from './ui/booth-map';
+import { prizeName } from './i18n/content';
 import { controlsModel } from './ui/controls/model';
 import { setControlsLocale, t } from './ui/controls/strings';
 import {
@@ -49,7 +53,7 @@ import type { ScreenHandle } from './ui/dom';
 import { createRankingService } from './ranking/client';
 import { publicLinks, RANKING_CONFIG } from './ranking/config';
 import { normalizePlayerName } from './ranking/name';
-import { createAudioEngine } from './audio';
+import { createAudioEngine, effectCueFor } from './audio';
 import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
 export interface AppHandle {
@@ -138,13 +142,14 @@ function loadHeavyModules(): Promise<HeavyModules> {
   return heavyModules;
 }
 
-export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle = OFFICIAL_BUNDLE): AppHandle {
+export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle = OFFICIAL_BUNDLE, expandedUi: ExpandedUiKit | null = null): AppHandle {
   const doc = win.document;
   // One bundle for start, restore, physics, view and persistence (plan EG01/EG08).
   const catalog: RuntimeCatalog = bundle.catalog;
   const tuning: TuningConfig = bundle.tuning;
   const layout = bundle.layout;
   const expansion = bundle.expansion;
+  if (expansion && !expandedUi) throw new Error('the expanded bundle needs its UI pieces (loadBuildSetup)');
   const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
@@ -251,6 +256,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let renderer: ThreeRenderer | null = null;
   let world: ShotWorld | null = null;
   let panel: PanelHandle | null = null;
+  // Expanded rules only (EG07/EG08): the shopkeeper question and the 3×12 overview.
+  let questionPanel: QuestionPanelHandle | null = null;
+  let boothMap: BoothMapHandle | null = null;
+  let effectResults: ReturnType<ExpandedUiKit['mountEffectResults']> | null = null;
+  let mapUpdatedAt = -Infinity;
+  let shownQuestion = '';
   let screenHandle: ScreenHandle<never> | null = null;
   let bookHandle: ScreenHandle<never> | null = null;
   let rankingUnsub: (() => void) | null = null;
@@ -314,6 +325,41 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const onChange = (snap: ControllerSnapshot) => {
     panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
+    if (expansion) updateExpandedUi(snap);
+  };
+
+  // Text for the expanded view and panel: UI keys through i18n, exp.* content keys through the content resolvers.
+  const uiText = (k: string, p?: Readonly<Record<string, string | number>>) => (k in UI_KEYS ? i18n.t(k as UiKey, p) : k);
+  const expText = expandedUi ? expandedUi.createExpansionTranslator(() => i18n.locale, uiText) : uiText;
+
+  const updateExpandedUi = (snap: ControllerSnapshot) => {
+    const ex = snap.view.expansion;
+    const q = ex?.question ?? null;
+    if (questionPanel) {
+      const content = q && q.answer === null && expansion && expandedUi ? expandedUi.questionContentFor(expansion, { shotId: q.shotId, questionId: q.questionId }, (k) => expText(k)) : null;
+      if (content) {
+        const key = `${content.shotId}/${content.questionId}`;
+        if (key !== shownQuestion) cue('questionShown');
+        shownQuestion = key;
+        questionPanel.show(content);
+      } else {
+        shownQuestion = '';
+        questionPanel.hide();
+      }
+      questionPanel.setPaused(snap.view.paused);
+    }
+    // The overview is display only; a few updates per second are enough on a phone.
+    const now = win.performance.now();
+    if (boothMap && (now - mapUpdatedAt > 150 || snap.state.phase !== 'resolving')) {
+      mapUpdatedAt = now;
+      boothMap.update({
+        standX: snap.view.standX,
+        aspect: (canvas.clientWidth || win.innerWidth) / Math.max(1, canvas.clientHeight || win.innerHeight),
+        prizes: snap.frame.prizes,
+        ...(ex ? { cells: ex.cells } : {}),
+        interactive: snap.state.phase === 'position' && !snap.view.paused,
+      });
+    }
   };
 
   const loop = (ts: number) => {
@@ -355,7 +401,39 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
       onRetry: () => void startRun({ name: runName }),
+      ...(expansion ? { stand: standRangeOf(layout) } : {}),
     });
+    questionPanel?.destroy();
+    questionPanel = null;
+    boothMap?.destroy();
+    boothMap = null;
+    effectResults?.destroy();
+    effectResults = null;
+    if (expansion && expandedUi) {
+      boothMap = expandedUi.mountBoothMap(ui, {
+        layout,
+        t: expText,
+        onJump: (x) => {
+          if (markStale() || !controller) return;
+          if (controller.dispatch({ type: 'SET_POSITION', x })) cue('select');
+        },
+      });
+      // Mounted after the controls so it sits above them; its backdrop takes the touches while shown.
+      questionPanel = expandedUi.createShopkeeperQuestionPanel(ui, {
+        t: expText,
+        onAnswer: (cmd) => {
+          if (markStale() || !controller) return false;
+          const ok = controller.dispatch(cmd);
+          if (ok) cue('answerAccepted');
+          return ok;
+        },
+      });
+      effectResults = expandedUi.mountEffectResults(ui, {
+        t: expText,
+        line: (key) => expandedUi.expandedLine(i18n.locale, key),
+      });
+      mapUpdatedAt = -Infinity;
+    }
     if (controller) onChange(controller.snapshot());
   };
 
@@ -367,6 +445,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     try {
       renderer = view.createThreeRenderer(canvas, {
         layout,
+        ...(expansion ? { expanded: { catalog, expansion, translate: expText, prizeName: (typeId) => prizeName(i18n.locale, typeId) } } : {}),
         corkRadius: tuning.cork.radius,
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
         // Miss / near-miss are decided only after settlement (AC27).
@@ -423,6 +502,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
+          effectResults?.hide();
           runStore.saveAfterFire(s);
           markStale();
         },
@@ -430,6 +510,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (cmd.type === 'STOP_LOAD') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
+          effectResults?.show({ effects: summary.effects, deferredTransforms: summary.deferredTransforms });
+          // One coalesced cue for what the post-flight effects did (expanded rules only).
+          const effectCue = effectCueFor(summary.effects);
+          if (effectCue) cue(effectCue);
           if (summary.chainCount > 0) cue('collect', { count: summary.chainCount });
           if (summary.newlyCompletedSets.length > 0) {
             cue('setComplete');
@@ -497,6 +581,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           bookHandle?.dispose();
           bookHandle = null;
         },
+        // Pair-set names and hints (expanded build only; the public build has no PAIR sets).
+        ...(expansion ? { expandedText: (k: string) => expText(k) } : {}),
       },
       {
         sets: setBookEntriesFromCatalog(catalog),

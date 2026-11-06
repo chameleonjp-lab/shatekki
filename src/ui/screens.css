@@ -50,3 +50,5 @@
 
 /* The result celebration layer sits inside .scr-result behind the content. */
 .scr-result > .scr-col { position: relative; z-index: 1; }
+.book-filters { display: flex; gap: 6px; flex-wrap: wrap; } .book-filters[hidden] { display: none; }
+.chip-btn { padding: 6px 12px; font-size: .85rem; border-radius: 999px; background: #3a261b; border: 1px solid #7a5a45; color: inherit; } .chip-btn.on { background: #7a5a45; border-color: #ffcf40; }

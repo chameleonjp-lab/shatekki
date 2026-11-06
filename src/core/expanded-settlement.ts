@@ -137,6 +137,9 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     touchedFirstHitTargets: [...new Set(record.firstHitCandidates)],
     ammoAfter,
     runEnded,
+    effects: plan.processed,
+    appliedTransforms: record.appliedTransforms ?? [],
+    deferredTransforms: record.deferredTransforms ?? [],
   };
   return { state: next, summary };
 }

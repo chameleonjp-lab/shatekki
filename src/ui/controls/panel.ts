@@ -8,6 +8,7 @@
 import type { AimAngles } from '../../contracts';
 import type { ControlsModel } from './model';
 import { t } from './strings';
+import { HOLD_DELAY_MS, WIDE_STAND_SPEED, nextStandX, type StandRange } from './stand';
 import './controls.css';
 
 export interface PanelDeps {
@@ -18,6 +19,8 @@ export interface PanelDeps {
   currentStandX(): number;
   /** "もう一回" after the run ended. */
   onRetry(): void;
+  /** Wide stall (layout v2): column steps, hold-to-glide and a slider. Absent = rules-v1 controls, unchanged. */
+  stand?: StandRange;
 }
 
 export interface PanelHandle {
@@ -72,6 +75,20 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   right.setAttribute('aria-label', t('aria.rightPos'));
   right.dataset.testid = 'btn-right';
   posRow.append(left, confirm, right);
+  let slider: HTMLInputElement | null = null;
+  if (deps.stand) {
+    slider = doc.createElement('input');
+    slider.type = 'range';
+    slider.className = 'stand-slider';
+    slider.min = String(deps.stand.min);
+    slider.max = String(deps.stand.max);
+    slider.step = '0.01';
+    slider.value = String(deps.currentStandX());
+    slider.setAttribute('aria-label', t('aria.leftPos') + ' / ' + t('aria.rightPos'));
+    slider.dataset.testid = 'stand-slider';
+    posRow.classList.add('row-position-wide');
+    posRow.prepend(slider);
+  }
 
   // loading
   const loadRow = el(doc, 'div', 'row row-loading');
@@ -124,25 +141,43 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   let holdDir = 0;
   let raf = 0;
   let lastTs = 0;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  const speed = deps.stand ? WIDE_STAND_SPEED : STAND_SPEED;
   const tick = (ts: number) => {
     if (holdDir === 0) return;
     const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0;
     lastTs = ts;
-    if (dt > 0) deps.dispatch({ type: 'SET_POSITION', x: deps.currentStandX() + holdDir * STAND_SPEED * dt });
+    if (dt > 0) deps.dispatch({ type: 'SET_POSITION', x: deps.currentStandX() + holdDir * speed * dt });
     raf = requestAnimationFrame(tick);
   };
-  const startHold = (dir: number) => (e: PointerEvent) => {
+  const startHold = (dir: -1 | 1) => (e: PointerEvent) => {
     e.preventDefault();
     if (mode !== 'position') return;
     holdDir = dir;
     lastTs = 0;
+    if (deps.stand) {
+      // wide stall: a tap steps one column; holding longer glides continuously
+      deps.dispatch({ type: 'SET_POSITION', x: nextStandX(deps.currentStandX(), dir, deps.stand) });
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        if (holdDir === dir && mode === 'position') raf = requestAnimationFrame(tick);
+      }, HOLD_DELAY_MS);
+      return;
+    }
     deps.dispatch({ type: 'SET_POSITION', x: deps.currentStandX() + dir * 0.02 });
     raf = requestAnimationFrame(tick);
   };
   const endHold = () => {
     holdDir = 0;
+    if (holdTimer !== null) clearTimeout(holdTimer);
+    holdTimer = null;
     cancelAnimationFrame(raf);
   };
+  if (slider) {
+    on(slider, 'input', () => {
+      if (mode === 'position') deps.dispatch({ type: 'SET_POSITION', x: Number(slider!.value) });
+    });
+  }
   on(left, 'pointerdown', startHold(-1));
   on(right, 'pointerdown', startHold(1));
   for (const b of [left, right]) {
@@ -235,6 +270,7 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
       score.textContent = `${m.score} ${t('hud.score')}`;
       lastShot.textContent = m.lastShotPoints === null ? '' : `+${m.lastShotPoints}${t('hud.score')}`;
       show(posRow, m.mode === 'position');
+      if (slider && m.mode === 'position' && doc.activeElement !== slider) slider.value = String(deps.currentStandX());
       show(loadRow, m.mode === 'loading');
       show(aimRow, m.mode === 'aiming');
       show(skipBtn, m.mode === 'resolving');

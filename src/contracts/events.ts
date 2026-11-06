@@ -12,6 +12,7 @@ import type { Quat, Vec3 } from './geometry';
 import type { DeviceKind, ShopkeeperPart, SurfaceMaterial } from './layout';
 import type { PrizeMaterial } from './catalog';
 import type { FirstHitKey, PrizeOutcome } from './sim';
+import type { AppliedTransform, DeferredTransform, PlannedEffect } from './expansion';
 
 export const EVENTS_VERSION = 1;
 
@@ -166,6 +167,8 @@ export interface PrizeFrame {
   readonly maxHp: number;
   readonly mounted: boolean;
   readonly collected: boolean;
+  /** Expanded rules: the kind whose periodic motion the mount still runs after a transform (absent = typeId). */
+  readonly motionTypeId?: PrizeTypeId;
 }
 
 export interface ProjectileFrame {
@@ -253,6 +256,14 @@ export interface ShotSummary {
   readonly touchedFirstHitTargets: readonly FirstHitKey[];
   readonly ammoAfter: number;
   readonly runEnded: boolean;
+  /**
+   * Expanded rules: what the post-flight plan did in this shot, in order
+   * (cells, devices, the answer). For the result lines only; never re-applied.
+   */
+  readonly effects?: readonly PlannedEffect[];
+  readonly appliedTransforms?: readonly AppliedTransform[];
+  /** Transforms postponed because the new shape would overlap (shown as "will change later"). */
+  readonly deferredTransforms?: readonly DeferredTransform[];
 }
 
 /**

@@ -13,12 +13,13 @@ const rules = [
   },
   {
     pattern: /^src\/i18n\/(?:[\w-]+\/)*[\w-]+\.ts$/,
-    label: 'translations', unit: ['controls-model', 'i18n', 'i18n-content', 'share'], integration: ['screens', 'security'], e2e: ['screens', 'long-text'],
+    label: 'translations', unit: ['controls-model', 'expanded-i18n', 'i18n', 'i18n-content', 'share', 'shopkeeper-panel'], integration: ['screens', 'security'],
+    e2e: ['screens', 'long-text', 'expanded-gameplay', 'expanded-smoke'],
   },
   {
     pattern: /^src\/ui\/(?:[\w-]+\/)*[\w-]+\.(?:ts|css)$/,
-    label: 'user interface', unit: ['controls-model', 'share', 'i18n'], integration: ['screens', 'security'],
-    e2e: ['screens', 'long-text', 'shot-smoke', 'smoke'],
+    label: 'user interface', unit: ['controls-model', 'share', 'i18n', 'shopkeeper-panel', 'stand-step'], integration: ['screens', 'security'],
+    e2e: ['screens', 'long-text', 'shot-smoke', 'smoke', 'expanded-gameplay', 'expanded-smoke'],
   },
   {
     pattern: /^src\/audio\/(?:[\w-]+\/)*[\w-]+\.ts$/,

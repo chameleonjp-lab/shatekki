@@ -248,6 +248,10 @@ describe('kind changes applied by the world at the barrier', () => {
     const afterFrames = run.frames.slice(run.frames.findIndex((f) => f.simTimeSec >= run.barriers[0]!.simTimeSec) + 1);
     const nextX = afterFrames[0]!.prizes[0]!.position.x;
     expect(Math.abs(nextX - barrierX)).toBeLessThan(0.02);
+    // The frames tell the view which motion the mount runs (FX097), and rules-v1 style frames carry none.
+    expect(afterFrames[0]!.prizes[0]!.typeId).toBe('P995');
+    expect(afterFrames[0]!.prizes[0]!.motionTypeId).toBe('P023');
+    expect(run.frames[0]!.prizes[0]!.motionTypeId).toBeUndefined();
     world.dispose();
   });
 

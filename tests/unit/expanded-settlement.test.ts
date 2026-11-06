@@ -36,6 +36,10 @@ describe('resolveExpandedShot', () => {
     expect(isAmmoBalanced(st, 10)).toBe(true);
     expect(st.expansion.active).toBeNull();
     expect(r.summary.runEnded).toBe(false);
+    // The summary repeats what the plan did (for the result lines), and nothing more.
+    expect(r.summary.effects).toEqual(s.inFlight!.plan!.processed);
+    expect(r.summary.appliedTransforms).toEqual([]);
+    expect(r.summary.deferredTransforms).toEqual([]);
   });
 
   it('pair sets score once from their own config (50) through the shared scoring', () => {

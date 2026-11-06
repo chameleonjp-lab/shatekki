@@ -68,6 +68,8 @@ export interface ControllerSnapshot {
   readonly state: RunState;
   readonly view: ViewState;
   readonly lastSummary: ShotSummary | null;
+  /** The last physics frame (read-only; for overviews such as the booth map). */
+  readonly frame: SimulationFrame;
 }
 
 export interface ControllerDeps {
@@ -120,7 +122,7 @@ export class GameController {
   }
 
   snapshot(): ControllerSnapshot {
-    return { state: this.state, view: this.viewState(), lastSummary: this.lastSummary };
+    return { state: this.state, view: this.viewState(), lastSummary: this.lastSummary, frame: this.lastFrame };
   }
 
   viewState(): ViewState {

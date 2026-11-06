@@ -18,11 +18,25 @@ export const OFFICIAL_BUNDLE: GameplayBundle = Object.freeze({
   expansion: null,
 });
 
+/** The expanded-only UI pieces (question panel, overview, content texts). */
+export type ExpandedUiKit = typeof import('./expanded-ui');
+
+export interface BuildSetup {
+  readonly bundle: GameplayBundle;
+  /** Present only for the expanded bundle. */
+  readonly expandedUi: ExpandedUiKit | null;
+}
+
+/** The bundle (and, for the internal prototype, its UI pieces) chosen when this build was made. */
+export async function loadBuildSetup(): Promise<BuildSetup> {
+  if (import.meta.env.VITE_SHATEKKI_BUNDLE === 'expanded-proposed') {
+    const [{ getGameplayBundle }, expandedUi] = await Promise.all([import('../catalog/gameplay-config'), import('./expanded-ui')]);
+    return { bundle: getGameplayBundle('expanded-proposed'), expandedUi };
+  }
+  return { bundle: OFFICIAL_BUNDLE, expandedUi: null };
+}
+
 /** The bundle chosen when this build was made. */
 export async function loadBuildBundle(): Promise<GameplayBundle> {
-  if (import.meta.env.VITE_SHATEKKI_BUNDLE === 'expanded-proposed') {
-    const { getGameplayBundle } = await import('../catalog/gameplay-config');
-    return getGameplayBundle('expanded-proposed');
-  }
-  return OFFICIAL_BUNDLE;
+  return (await loadBuildSetup()).bundle;
 }

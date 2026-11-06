@@ -66,7 +66,10 @@ export interface AudioSettings {
 export type UiCue =
   | {
       readonly type: 'ui';
-      readonly cue: 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus';
+      readonly cue:
+        | 'select' | 'confirm' | 'cancel' | 'start' | 'loadStart' | 'loadStop' | 'fire' | 'resultShow' | 'newBest' | 'setDiscovered' | 'setComplete' | 'runEnd' | 'miss' | 'nearMiss' | 'collect' | 'penalty' | 'ammoBonus'
+        // Expanded rules (D35-D37): question, answer and one coalesced effect cue per shot.
+        | 'questionShown' | 'answerAccepted' | 'effectGood' | 'effectRisky' | 'effectNeutral' | 'assortmentChanged' | 'outlineShown';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */
