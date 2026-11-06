@@ -75,7 +75,7 @@ export const ZH_HANT: Record<UiKey, string> = {
   'result.newBest': '刷新最高分！',
   'result.prevBest': '先前最高分：{score}分',
   'result.rank': '登錄後的名次：第{rank}名',
-  'result.rank.unknown': '請在下方前30名中查看名次。',
+  "result.rank.unknown": "無法確認你本人的名次。下方顯示前30名。",
   'result.prizes': '獲得的獎品',
   'result.prizes.none': '沒有獲得獎品。',
   'result.sets': '達成的套組',

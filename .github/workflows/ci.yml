@@ -1,18 +1,79 @@
-# Test-only CI. It does not deploy, publish Pages, or touch any database.
+# Change-aware tests only. Publication is a separate, explicitly activated workflow.
 name: ci
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run every game test
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  test:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+      node: ${{ steps.select.outputs.node }}
+      build: ${{ steps.select.outputs.build }}
+      browser: ${{ steps.select.outputs.browser }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check selection rules
+        run: node --test tests/ci/*.test.mjs
+      - name: Select required checks
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
+        run: |
+          if [ "$FULL" = "true" ]; then
+            node scripts/ci/plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --full
+          else
+            node scripts/ci/plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+          fi
+
+  node:
+    needs: plan
+    if: needs.plan.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI_PLAN: ${{ needs.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/ci/run-tests.mjs unit
+      - run: node scripts/ci/run-tests.mjs integration
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-test-results
+          path: test-results/
+          retention-days: 7
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,16 +82,63 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run test:unit
-      - run: npm run test:integration
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  browser:
+    needs: [plan, build]
+    if: needs.plan.outputs.browser == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      CI: 'true'
+      CI_PREBUILT: 'true'
+      CI_PLAN: ${{ needs.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: dist/
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-        env:
-          CI: 'true'
+      - name: Run selected browser tests
+        run: node scripts/ci/run-tests.mjs e2e --shard=${{ matrix.shard }}/2
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: browser-test-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+
+  # Keep the original required check name; unexpected skips cannot pass the gate.
+  test:
+    if: always()
+    needs: [plan, node, build, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      PLAN_RESULT: ${{ needs.plan.result }}
+      NODE_REQUIRED: ${{ needs.plan.outputs.node }}
+      BUILD_REQUIRED: ${{ needs.plan.outputs.build }}
+      BROWSER_REQUIRED: ${{ needs.plan.outputs.browser }}
+      NODE_RESULT: ${{ needs.node.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      BROWSER_RESULT: ${{ needs.browser.result }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all required jobs
+        run: node scripts/ci/gate.mjs

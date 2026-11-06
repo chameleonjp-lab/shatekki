@@ -75,7 +75,7 @@ export const TH: Record<UiKey, string> = {
   'result.newBest': 'ทำลายสถิติใหม่!',
   'result.prevBest': 'สถิติเดิม: {score} คะแนน',
   'result.rank': 'อันดับหลังลงทะเบียน: ที่ {rank}',
-  'result.rank.unknown': 'ดูอันดับของคุณได้ใน 30 อันดับแรกด้านล่าง',
+  "result.rank.unknown": "ยังยืนยันอันดับของคุณไม่ได้ รายชื่อผู้เล่น 30 อันดับแรกแสดงอยู่ด้านล่าง",
   'result.prizes': 'ของรางวัลที่ได้',
   'result.prizes.none': 'ยังไม่ได้ของรางวัล',
   'result.sets': 'ชุดที่สำเร็จ',

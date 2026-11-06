@@ -75,7 +75,7 @@ export const RU: Record<UiKey, string> = {
   'result.newBest': 'Новый рекорд!',
   'result.prevBest': 'Прежний рекорд: {score} очк.',
   'result.rank': 'Место после регистрации: {rank}',
-  'result.rank.unknown': 'Своё место смотрите в топ-30 ниже.',
+  "result.rank.unknown": "Ваше личное место не удалось подтвердить. Ниже показаны 30 лучших игроков.",
   'result.prizes': 'Выигранные призы',
   'result.prizes.none': 'Призов нет.',
   'result.sets': 'Собранные наборы',

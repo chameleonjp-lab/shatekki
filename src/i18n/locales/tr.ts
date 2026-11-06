@@ -75,7 +75,7 @@ export const TR: Record<UiKey, string> = {
   'result.newBest': 'Yeni rekor!',
   'result.prevBest': 'Önceki en iyi: {score} puan',
   'result.rank': 'Kayıttan sonraki sıran: {rank}.',
-  'result.rank.unknown': 'Sıranı aşağıdaki ilk 30’da kontrol et.',
+  "result.rank.unknown": "Kişisel sıranız doğrulanamıyor. İlk 30 oyuncu aşağıda listelenmiştir.",
   'result.prizes': 'Kazanılan ödüller',
   'result.prizes.none': 'Kazanılan ödül yok.',
   'result.sets': 'Tamamlanan setler',

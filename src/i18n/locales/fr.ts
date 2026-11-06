@@ -75,7 +75,7 @@ export const FR: Record<UiKey, string> = {
   'result.newBest': 'Nouveau record !',
   'result.prevBest': 'Record précédent : {score} pts',
   'result.rank': 'Rang après enregistrement : n° {rank}',
-  'result.rank.unknown': 'Consultez votre rang dans le top 30 ci-dessous.',
+  "result.rank.unknown": "Votre rang personnel ne peut pas être confirmé. Les 30 premiers sont affichés ci-dessous.",
   'result.prizes': 'Lots gagnés',
   'result.prizes.none': 'Aucun lot gagné.',
   'result.sets': 'Ensembles complétés',

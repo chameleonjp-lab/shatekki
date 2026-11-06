@@ -75,7 +75,7 @@ export const EN: Record<UiKey, string> = {
   'result.newBest': 'New best!',
   'result.prevBest': 'Previous best: {score} pts',
   'result.rank': 'Rank after registering: #{rank}',
-  'result.rank.unknown': 'Check your rank in the top 30 below.',
+  "result.rank.unknown": "Your personal rank cannot be confirmed. The top 30 players are listed below.",
   'result.prizes': 'Prizes won',
   'result.prizes.none': 'No prizes won.',
   'result.sets': 'Sets completed',
