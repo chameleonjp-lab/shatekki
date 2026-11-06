@@ -226,7 +226,7 @@ function validateReservation(r: unknown, exp: ExpansionCatalog, tuning: TuningCo
   if (!within(m.loadPeriodMult, lim.loadPeriodMult)) return 'reservation load period outside the limits';
   if (!within(m.radiusMult, lim.radiusMult)) return 'reservation radius outside the limits';
   if (!within(m.splitSpreadMult, lim.splitSpreadMult)) return 'reservation split spread outside the limits';
-  if (!Number.isInteger(m.extraReflections) || !within(m.extraReflections, lim.reflections)) return 'reservation extraReflections outside the limits';
+  if (!Number.isInteger(m.extraReflections) || Math.abs(m.extraReflections as number) > lim.reflections.max - lim.reflections.min) return 'reservation extraReflections outside the limits';
   if (m.bulletType !== null && !(typeof m.bulletType === 'string' && m.bulletType in tuning.bulletTypes)) return 'reservation bulletType unknown';
   const l = m.launch;
   if (!isObj(l) || (l.count !== 1 && l.count !== 2 && l.count !== 3) || !isNum(l.spreadRad) || l.spreadRad < 0) return 'invalid reservation launch';
