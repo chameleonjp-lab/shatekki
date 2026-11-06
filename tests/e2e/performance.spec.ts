@@ -7,6 +7,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 // (smooth 60 fps, acceptable ≥ 30 fps) is checked on a real device (Task 17/18).
 
 test('frame intervals and scene size during a shot', async ({ page }, info) => {
+  // Software WebGL on shared CI runners can be slow; this test records numbers and must not time out.
+  test.setTimeout(120_000);
   await page.goto('/?e2e=1');
   await page.getByTestId('home-start').click();
   const mode = page.getByTestId('controls');
@@ -21,14 +23,14 @@ test('frame intervals and scene size during a shot', async ({ page }, info) => {
     const loop = (t: number) => {
       w.__frames.push(t - last);
       last = t;
-      if (w.__frames.length < 240) requestAnimationFrame(loop);
+      if (w.__frames.length < 120) requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   });
   const fire = page.getByTestId('btn-fire');
   await fire.dispatchEvent('pointerdown');
   await fire.dispatchEvent('pointerup');
-  await page.waitForFunction(() => (window as unknown as { __frames: number[] }).__frames.length >= 240, null, { timeout: 60_000 });
+  await page.waitForFunction(() => (window as unknown as { __frames: number[] }).__frames.length >= 120, null, { timeout: 90_000 });
   const frames = await page.evaluate(() => (window as unknown as { __frames: number[] }).__frames.slice(5));
   const stats = await page.evaluate(() => (window as unknown as { __shatekki: { stats(): unknown } }).__shatekki.stats());
   const sorted = [...frames].sort((a, b) => a - b);

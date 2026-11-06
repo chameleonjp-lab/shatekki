@@ -50,3 +50,15 @@ for (const locale of ['de', 'ru', 'th', 'vi', 'ja'] as const) {
     await inViewport(page, 'aim-pad');
   });
 }
+
+for (const locale of ['vi', 'ru'] as const) {
+  test(`${locale}: the HUD pause button stays on screen at 320px wide`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await setLocale(page, locale);
+    await page.getByTestId('home-start').click();
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
+    await inViewport(page, 'btn-pause');
+    await inViewport(page, 'hud-score');
+    await inViewport(page, 'btn-confirm-position');
+  });
+}

@@ -108,7 +108,8 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   for (const b of [left, confirm, right, loadBtn, fireBtn, skipBtn, resumeBtn, retryBtn]) b.type = 'button';
 
   panel.append(hint, lastShot, posRow, loadRow, aimRow, skipBtn, resumeBtn, retryBtn);
-  root.append(hud, proto, panel);
+  hud.append(proto); // inside the HUD so a wrapped HUD never overlaps it
+  root.append(hud, panel);
 
   // ------------------------------------------------------------ behaviour
   let mode: ControlsModel['mode'] = 'position';
@@ -248,7 +249,6 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
       endHold();
       for (const off of listeners) off();
       hud.remove();
-      proto.remove();
       panel.remove();
     },
   };

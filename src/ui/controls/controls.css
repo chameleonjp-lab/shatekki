@@ -2,11 +2,13 @@
   position: fixed;
   top: 0; left: 0; right: 0;
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap; /* long translations wrap instead of pushing the pause button off-screen */
+  column-gap: 10px;
+  row-gap: 4px;
   align-items: center;
   padding: calc(env(safe-area-inset-top) + 8px) 16px 8px;
   background: linear-gradient(rgba(20, 10, 6, 0.85), rgba(20, 10, 6, 0));
-  font-size: 1rem;
+  font-size: clamp(0.78rem, 3.6vw, 1rem);
   font-weight: 700;
   z-index: 10;
   pointer-events: none;
@@ -24,14 +26,11 @@
   font-size: 0.85rem;
 }
 .proto-badge {
-  position: fixed;
-  top: calc(env(safe-area-inset-top) + 52px);
-  left: 16px;
-  right: 16px;
+  flex-basis: 100%;
   font-size: 0.7rem;
+  font-weight: 400;
   opacity: 0.75;
-  pointer-events: none;
-  z-index: 10;
+  white-space: normal !important;
 }
 .controls {
   position: fixed;
