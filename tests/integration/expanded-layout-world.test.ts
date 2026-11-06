@@ -14,6 +14,7 @@ import {
   type BackgroundCellId,
   type BoothLayout,
   type DeviceKind,
+  type FlightBarrier,
   type ImpactEvent,
   type PrizeInstanceState,
   type ShotContext,
@@ -23,6 +24,7 @@ import {
   type Vec3,
 } from '../../src/contracts';
 import { CAT, T, makeRequest } from '../unit/helpers';
+import { runExpanded } from './expanded-helpers';
 
 // EG03 evidence: background-cell contacts in the real world (layout v2).
 
@@ -77,6 +79,8 @@ const cellPoint = (id: BackgroundCellId, dx: number, dy = 0): Vec3 => {
 interface Outcome {
   readonly impacts: ImpactEvent[];
   readonly record: ShotRecord;
+  /** Null when the context was rules-v1 style (no expanded). */
+  readonly barrier: FlightBarrier | null;
 }
 
 function fireAt(world: ShotWorld, standX: number, target: Vec3, usable: readonly BackgroundCellId[] | null, tuning: TuningConfig = T36): Outcome {
@@ -88,14 +92,8 @@ function fireAt(world: ShotWorld, standX: number, target: Vec3, usable: readonly
     chooseTransform: () => null,
     ...(usable ? { expanded: { modifiers: BASE_SHOT_MODIFIERS, usableCells: usable } } : {}),
   };
-  world.fire(request, ctx);
-  const impacts: ImpactEvent[] = [];
-  for (let i = 0; i < 3000; i++) {
-    const step = world.step(1 / 60);
-    for (const e of step.frame.events) if (e.type === 'impact') impacts.push(e);
-    if (step.record) return { impacts, record: step.record };
-  }
-  throw new Error('shot did not finish');
+  const run = runExpanded(world, request, ctx);
+  return { impacts: run.impacts, record: run.record, barrier: run.barriers[0] ?? null };
 }
 
 const cellImpacts = (o: Outcome) => o.impacts.filter((e) => e.target.kind === 'cell');
@@ -115,6 +113,8 @@ describe('background cells on the real back wall', () => {
     const act = activatedCells(out);
     expect(act).toHaveLength(1);
     expect(act[0]!.target).toMatchObject({ kind: 'cell', cellId: id, activated: true });
+    expect(out.barrier!.requests).toHaveLength(1);
+    expect(out.barrier!.requests[0]).toMatchObject({ source: { kind: 'cell', cellId: id }, targetId: id, effectId: null, contactOrder: 0 });
     world.dispose();
   });
 
@@ -139,6 +139,7 @@ describe('background cells on the real back wall', () => {
     expect(touches.length).toBeGreaterThanOrEqual(1);
     expect(touches.every((e) => e.target.kind === 'cell' && !e.target.activated)).toBe(true);
     expect(activatedCells(out)).toHaveLength(0);
+    expect(out.barrier!.requests).toHaveLength(0);
     // the cork really bounced: its speed after the contact points away from the wall
     expect(touches[0]!.normal.z).toBeGreaterThan(0.9);
     world.dispose();
@@ -149,6 +150,7 @@ describe('background cells on the real back wall', () => {
     const out = fireAt(world, 0, cellPoint('cell-r2-c06' as BackgroundCellId, 0.12), null);
     expect(cellImpacts(out).length).toBeGreaterThanOrEqual(1);
     expect(activatedCells(out)).toHaveLength(0);
+    expect(out.barrier).toBeNull();
     world.dispose();
   });
 
@@ -195,6 +197,9 @@ describe('left-end devices still activate in layout v2', () => {
     const target = { x: dev.box.center.x, y: dev.box.center.y, z: dev.box.center.z + dev.box.halfExtents.z };
     const out = fireAt(world, -2.35, target, CELL_IDS_V2);
     expect(out.record.deviceActivations.map((a) => a.kind)).toContain(kind);
+    // split / power act in flight; penalty / bulletType become post-flight requests
+    const requested = out.barrier!.requests.filter((r) => r.source.kind === 'device').map((r) => (r.source.kind === 'device' ? r.source.deviceKind : null));
+    expect(requested).toEqual(kind === 'penalty' || kind === 'bulletType' ? [kind] : []);
     const aim = solveAim(-2.35, target);
     // reachable inside the camera limits from the leftmost stand position
     expect(Math.abs(aim.yaw)).toBeLessThanOrEqual(BOOTH_LAYOUT_V2.camera.yawLimit);

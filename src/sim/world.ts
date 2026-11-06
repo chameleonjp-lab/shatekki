@@ -13,13 +13,21 @@
  */
 import RAPIER from '@dimforge/rapier3d-compat';
 import type {
+  AimPreview,
+  AppliedTransform,
   BackgroundCellGeometry,
   BackgroundCellId,
+  BarrierId,
   BoothLayout,
+  DeferredTransform,
+
   DeviceActivation,
   DeviceKind,
+  EffectPlan,
   EffectRequest,
   EventId,
+  ExpansionLimits,
+  FlightBarrier,
   FirstHitKey,
   ImpactTarget,
   LoadResult,
@@ -43,6 +51,7 @@ import type {
   ShotRecord,
   ShotRequest,
   ShotStage,
+  ShotModifiers,
   ShotWorld,
   SimEvent,
   SimulationFrame,
@@ -52,8 +61,8 @@ import type {
   TuningConfig,
   Vec3,
 } from '../contracts';
-import { mintId } from '../contracts';
-import { nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
+import { ballisticForModifiers, mintId } from '../contracts';
+import { MAX_POWER_MULTIPLIER, nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
   CONTACT_DEDUPE_SEC,
@@ -70,7 +79,8 @@ import {
 } from './collisions';
 import { mountBasePose, mountedPose } from './motion';
 import { createPrizeBody } from './prize';
-import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, type Projectile } from './shot';
+import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, type Projectile, type ProjectileExpanded } from './shot';
+import { planTransforms } from './transform-plan';
 
 let rapierReady: Promise<void> | null = null;
 function initRapier(): Promise<void> {
@@ -97,6 +107,8 @@ const MAX_FIXED_STEPS_PER_CALL = 4000;
 interface LivePrize {
   src: PrizeInstanceState;
   cfg: PrizeRuntimeConfig;
+  /** Config whose periodic motion the mount keeps running (differs from cfg after an expanded kind change). */
+  motionCfg: PrizeRuntimeConfig;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
   hp: number;
@@ -138,6 +150,9 @@ interface ActiveShot {
   readonly requests: PendingRequest[];
   /** Contact sequence inside the current fixed step (reset every step). */
   contactSeq: number;
+  barrierId: BarrierId | null;
+  applied: AppliedTransform[];
+  deferred: DeferredTransform[];
 }
 
 interface PendingRequest {
@@ -149,8 +164,18 @@ interface PendingRequest {
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
 
-export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatalog, tuning: TuningConfig): Promise<ShotWorld> {
+/** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
+export interface ShotWorldOptions {
+  readonly limits?: Pick<ExpansionLimits, 'reflections' | 'maxPowerMultiplier'>;
+}
+export const DEFAULT_EXPANDED_SHOT_LIMITS: NonNullable<ShotWorldOptions['limits']> = { reflections: { min: 4, max: 10 }, maxPowerMultiplier: MAX_POWER_MULTIPLIER };
+
+type KindChangeInfo = Omit<PrizeTransformedEvent, 'type' | 'eventId' | 'shotId'>;
+type ProjectileFrameWithRadius = ProjectileFrame & { readonly radius?: number };
+
+export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatalog, tuning: TuningConfig, options: ShotWorldOptions = {}): Promise<ShotWorld> {
   await initRapier();
+  const xLimits = options.limits ?? DEFAULT_EXPANDED_SHOT_LIMITS;
   const fixedDt = tuning.limits.fixedStepSec;
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = fixedDt;
@@ -159,6 +184,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const live = new Map<PrizeInstanceId, LivePrize>();
   const slotById = new Map<string, SlotGeometry>(layout.slots.map((s) => [s.slotId, s]));
   const corkShape = new RAPIER.Ball(tuning.cork.radius);
+  const ballCache = new Map<number, RAPIER.Ball>();
+  const ballFor = (radius: number): RAPIER.Ball => {
+    let b = ballCache.get(radius);
+    if (!b) ballCache.set(radius, (b = new RAPIER.Ball(radius)));
+    return b;
+  };
   const IDENT = { x: 0, y: 0, z: 0, w: 1 };
 
   // ---- static colliders (from the layout only)
@@ -220,15 +251,16 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     };
   };
 
-  const projectileFrames = (): ProjectileFrame[] =>
+  const projectileFrames = (): ProjectileFrameWithRadius[] =>
     (active?.projectiles ?? [])
       .filter((p) => !p.ended)
-      .map((p) => ({
+      .map((p): ProjectileFrameWithRadius => ({
         projectileId: p.id,
         position: p.position,
         velocity: p.velocity,
         bulletType: p.bulletType,
         powerMultiplier: p.powerMultiplier,
+        ...(p.x ? { radius: p.x.radius } : {}),
       }));
 
   const buildFrame = (events: readonly SimEvent[]): SimulationFrame => ({
@@ -265,14 +297,16 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       const cfg = catalog.prizes.get(src.typeId);
       if (!cfg) throw new RangeError(`unknown prize type ${src.typeId}`);
       const slot = slotById.get(src.homeSlot);
-      const mounted = src.mounted && cfg.motion.type !== 'none' && slot !== undefined;
-      const base = mounted ? mountBasePose(slot!, cfg) : null;
-      const pose = mounted ? mountedPose(base!, cfg, motionSec) : src.pose;
+      const motionCfg = (src.motionTypeId !== undefined ? catalog.prizes.get(src.motionTypeId) : undefined) ?? cfg;
+      const mounted = src.mounted && motionCfg.motion.type !== 'none' && slot !== undefined;
+      const base = mounted ? mountBasePose(slot!, motionCfg) : null;
+      const pose = mounted ? mountedPose(base!, motionCfg, motionSec) : src.pose;
       const { body, collider } = createPrizeBody(world, cfg, pose, mounted);
       targets.set(collider.handle, { t: 'prize', id: src.instanceId });
       const lp: LivePrize = {
         src,
         cfg,
+        motionCfg,
         body,
         collider,
         hp: src.hp,
@@ -307,7 +341,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const updateMounted = (): void => {
     for (const p of live.values()) {
       if (!p.mounted || !p.base) continue;
-      const pose = mountedPose(p.base, p.cfg, motionClock);
+      const pose = mountedPose(p.base, p.motionCfg, motionClock);
       p.body.setNextKinematicTranslation(pose.position);
       p.body.setNextKinematicRotation(pose.rotation);
     }
@@ -399,7 +433,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const dir = normalize(p.velocity);
     let n = normalize(hitNormal);
     if (len(n) === 0 || dot(n, p.velocity) > 0) n = len(n) === 0 ? scale(dir, -1) : scale(n, -1);
-    const point = add(p.position, scale(n, -tuning.cork.radius));
+    const point = add(p.position, scale(n, -(p.x?.radius ?? tuning.cork.radius)));
     const target: Target = hitTarget.t === 'cell' ? { t: 'cell', cellId: cellAtPoint(point, hitTarget.cellId) } : hitTarget;
     const key = targetKey(target);
     const last = p.lastContact.get(key);
@@ -435,7 +469,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     }
 
     const bullet = tuning.bulletTypes[p.bulletType];
-    const e = tuning.cork.restitution * bullet.restitution * bounceFactor(targetMaterial(target));
+    const e = tuning.cork.restitution * bullet.restitution * bounceFactor(targetMaterial(target)) * (p.x ? p.x.restitutionMult : 1);
     p.velocity = reflectVelocity(p.velocity, n, e, TANGENTIAL_KEEP);
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
@@ -478,7 +512,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const alive = a.projectiles.filter((q) => !q.ended && q !== p).length;
     if (p.generation >= tuning.limits.maxSplitGeneration || alive + 2 > tuning.limits.maxSimultaneousCorks) return false;
     endProjectile(a, p, 'split'); // replaced, not a limit; the spawn events carry parentId
-    const [va, vb] = splitVelocities(p.velocity, normal, tuning.devices.splitSpreadRad);
+    const [va, vb] = splitVelocities(p.velocity, normal, p.x ? tuning.devices.splitSpreadRad * p.x.splitSpreadMult : tuning.devices.splitSpreadRad);
     for (const velocity of [va, vb]) {
       const child: Projectile = {
         id: mintId.projectile(a.shotId, a.nextProjectileIndex++),
@@ -491,6 +525,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         spawnedAtSec: p.spawnedAtSec,
         ended: false,
         lastContact: new Map(p.lastContact),
+        ...(p.x ? { x: p.x } : {}),
       };
       a.projectiles.push(child);
       emit((eventId, shotId) => ({
@@ -519,10 +554,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
 
   const stepProjectile = (a: ActiveShot, p: Projectile, dt: number): void => {
     if (a.elapsed - p.spawnedAtSec >= tuning.limits.maxFlightSec) return endProjectile(a, p, 'timeLimit');
-    p.velocity = { ...p.velocity, y: p.velocity.y - GRAVITY * tuning.cork.gravityScale * dt };
+    p.velocity = { ...p.velocity, y: p.velocity.y - (p.x ? p.x.gravity : GRAVITY * tuning.cork.gravityScale) * dt };
     let remaining = dt;
     for (let i = 0; i < MAX_HITS_PER_STEP && remaining > 1e-9 && !p.ended; i++) {
-      const hit = world.castShape(p.position, IDENT, p.velocity, corkShape, 0, remaining, false);
+      const hit = world.castShape(p.position, IDENT, p.velocity, p.x ? ballFor(p.x.radius) : corkShape, 0, remaining, false);
       if (!hit) {
         p.position = add(p.position, scale(p.velocity, remaining));
         remaining = 0;
@@ -633,6 +668,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       endedByLimit: a.endedByLimit,
       remainingPrizes: remaining,
       simTimeSec: a.elapsed,
+      ...(a.expanded && a.barrierId ? { barrierId: a.barrierId, appliedTransforms: a.applied, deferredTransforms: a.deferred } : {}),
     };
     outcomes.clear();
     active = null;
@@ -698,9 +734,113 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     });
   };
 
+  // ---- expanded rules: flight-end barrier (EG05)
+  let frozen: FlightBarrier | null = null;
+  let barrierToReturn: FlightBarrier | null = null;
+
+  const shelfStateOf = (p: LivePrize): PrizeInstanceState => {
+    const t = p.body.translation();
+    const r = p.body.rotation();
+    return { ...p.src, hp: p.hp, pose: { position: vec(t), rotation: { x: r.x, y: r.y, z: r.z, w: r.w } }, mounted: p.mounted, collected: false };
+  };
+
+  /** The last cork disappeared: stop here, hand the contacts to the core, change nothing else. */
+  const enterBarrier = (a: ActiveShot): void => {
+    setStage(a, 'transform'); // waiting for the effects; the frozen world does not advance
+    const sorted = [...a.requests].sort((x, y) => x.simTimeSec - y.simTimeSec || x.contactOrder - y.contactOrder || (x.targetId < y.targetId ? -1 : x.targetId > y.targetId ? 1 : 0));
+    const requests: EffectRequest[] = sorted.map((r, i) => ({
+      requestId: `${a.shotId}-hit${i}` as EffectRequest['requestId'],
+      source: r.source,
+      simTimeSec: r.simTimeSec,
+      contactOrder: r.contactOrder,
+      targetId: r.targetId,
+      effectId: null,
+    }));
+    const parts: ShopkeeperPart[] = [];
+    for (const k of a.firstHit) if (k.startsWith('shopkeeper:')) {
+      const part = k.slice('shopkeeper:'.length) as ShopkeeperPart;
+      if (!parts.includes(part)) parts.push(part);
+    }
+    const prizes = [...live.values()].map(shelfStateOf);
+    const barrier: FlightBarrier = {
+      runId: a.runId,
+      shotId: a.shotId,
+      barrierId: mintId.barrier(a.shotId),
+      requests,
+      shopkeeperHit: parts.length > 0,
+      shopkeeperParts: parts,
+      collectedDuringFlight: a.collected.map((c) => ({ ...c })),
+      prizes,
+      motion: [...live.values()].map((p) => ({ instanceId: p.src.instanceId, linvel: vec(p.body.linvel()), angvel: vec(p.body.angvel()) })),
+      simTimeSec: a.elapsed,
+    };
+    a.barrierId = barrier.barrierId;
+    frozen = barrier;
+    barrierToReturn = barrier;
+  };
+
+  /** Change the kind of a live prize: pose (Y included), velocities, mount state and motion phase stay. */
+  const retype = (lp: LivePrize, newCfg: PrizeRuntimeConfig): KindChangeInfo => {
+    const fromTypeId = lp.src.typeId;
+    const hpBefore = lp.hp;
+    const maxHpBefore = lp.src.maxHp;
+    const hpAfter = transformedHp(hpBefore, maxHpBefore, newCfg.maxHp);
+    const t = lp.body.translation();
+    const r = lp.body.rotation();
+    const lin = lp.body.linvel();
+    const ang = lp.body.angvel();
+    targets.delete(lp.collider.handle);
+    world.removeRigidBody(lp.body);
+    const { body, collider } = createPrizeBody(world, newCfg, { position: vec(t), rotation: { x: r.x, y: r.y, z: r.z, w: r.w } }, lp.mounted);
+    if (!lp.mounted) {
+      body.setLinvel(lin, true);
+      body.setAngvel(ang, true);
+    }
+    targets.set(collider.handle, { t: 'prize', id: lp.src.instanceId });
+    lp.body = body;
+    lp.collider = collider;
+    lp.cfg = newCfg;
+    lp.src = { ...lp.src, typeId: newCfg.typeId, maxHp: newCfg.maxHp, motionTypeId: lp.src.motionTypeId ?? lp.src.drawnTypeId };
+    lp.hp = hpAfter;
+    lp.baseFriction = newCfg.friction;
+    lp.hpZeroApplied = false;
+    if (hpAfter <= 0) applyHpZero(lp);
+    return { instanceId: lp.src.instanceId, fromTypeId, toTypeId: newCfg.typeId, hpBefore, maxHpBefore, hpAfter, maxHpAfter: newCfg.maxHp };
+  };
+
+  const resumeAfterEffects = (plan: EffectPlan): boolean => {
+    const a = active;
+    const b = frozen;
+    if (!a || !b || plan.complete !== true || plan.barrierId !== b.barrierId || plan.shotId !== b.shotId || a.shotId !== b.shotId) return false;
+    frozen = null;
+    const result = planTransforms({
+      prizes: [...live.values()].map((p) => ({ instanceId: p.src.instanceId, homeSlot: p.src.homeSlot, typeId: p.src.typeId, pose: shelfStateOf(p).pose })),
+      intents: plan.transforms,
+      shapeOf: (typeId) => catalog.prizes.get(typeId)?.shape,
+      obstacles: layout.surfaces.map((s) => s.box),
+    });
+    for (const ch of result.applied) {
+      const lp = live.get(ch.instanceId);
+      const newCfg = catalog.prizes.get(ch.toTypeId);
+      if (!lp || !newCfg) continue;
+      const info = retype(lp, newCfg);
+      a.applied.push({ instanceId: ch.instanceId, requestId: ch.requestId, fromTypeId: ch.fromTypeId, toTypeId: ch.toTypeId });
+      emit((eventId, shotId) => {
+        const ev: PrizeTransformedEvent = { type: 'prizeTransformed', eventId, shotId, ...info };
+        a.transforms.push(ev);
+        return ev;
+      });
+    }
+    a.deferred.push(...result.deferred);
+    a.quietSec = 0;
+    setStage(a, 'settle');
+    return true;
+  };
+
   const advanceStage = (a: ActiveShot, dt: number): void => {
     if (a.stage === 'flight') {
       if (a.projectiles.every((p) => p.ended)) {
+        if (a.expanded) return enterBarrier(a);
         setStage(a, 'transform');
         applyTransform(a);
         a.quietSec = 0;
@@ -744,10 +884,125 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     }
   };
 
+  // ---- expanded rules: shot settings fixed at FIRE
+  const validateModifiers = (m: ShotModifiers): void => {
+    const positive = [m.speedMult, m.radiusMult, m.damageMult, m.pushMult, m.restitutionMult, m.splitSpreadMult];
+    if (!positive.every((v) => Number.isFinite(v) && v > 0) || !Number.isFinite(m.gravityMult) || m.gravityMult < 0 || !Number.isFinite(m.extraReflections)) {
+      throw new RangeError('invalid shot modifiers');
+    }
+    if (![1, 2, 3].includes(m.launch.count) || !Number.isFinite(m.launch.spreadRad)) throw new RangeError('invalid launch settings');
+  };
+
+  const rotateY = (v: Vec3, angle: number): Vec3 => {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    return { x: v.x * c + v.z * s, y: v.y, z: -v.x * s + v.z * c };
+  };
+
+  /** The corks created at the muzzle: one (rules-v1 or count 1) or 2/3 generation-1 corks sharing the damage. */
+  const launchCorks = (request: ShotRequest, d: Vec3, m: ShotModifiers | null): Projectile[] => {
+    if (!m) {
+      return [
+        {
+          id: mintId.projectile(request.shotId, 0),
+          generation: 0,
+          position: request.origin,
+          velocity: scale(d, initialSpeed(request.bulletType, tuning)),
+          bulletType: request.bulletType,
+          powerMultiplier: 1,
+          reflections: 0,
+          spawnedAtSec: 0,
+          ended: false,
+          lastContact: new Map(),
+        },
+      ];
+    }
+    const spec = ballisticForModifiers(tuning, request.bulletType, m);
+    const baseLimit = tuning.limits.maxReflectionsPerCork + tuning.bulletTypes[spec.bulletType].extraReflections + m.extraReflections;
+    const x: ProjectileExpanded = {
+      radius: spec.corkRadius ?? tuning.cork.radius,
+      gravity: spec.gravity,
+      launchSpeed: spec.speed,
+      damageMult: m.damageMult,
+      pushMult: m.pushMult,
+      restitutionMult: m.restitutionMult,
+      reflectionLimit: Math.max(xLimits.reflections.min, Math.min(xLimits.reflections.max, baseLimit)),
+      splitSpreadMult: m.splitSpreadMult,
+      share: 1 / m.launch.count,
+      maxPowerMultiplier: xLimits.maxPowerMultiplier,
+    };
+    const s = m.launch.spreadRad;
+    const dirs = m.launch.count === 1 ? [d] : m.launch.count === 2 ? [rotateY(d, s), rotateY(d, -s)] : [d, rotateY(d, s), rotateY(d, -s)];
+    return dirs.map((dir, i) => ({
+      id: mintId.projectile(request.shotId, i),
+      generation: m.launch.count === 1 ? 0 : 1,
+      position: request.origin,
+      velocity: scale(dir, spec.speed),
+      bulletType: spec.bulletType,
+      powerMultiplier: 1,
+      reflections: 0,
+      spawnedAtSec: 0,
+      ended: false,
+      lastContact: new Map(),
+      x,
+    }));
+  };
+
+  // ---- FX098: read-only first-contact estimate
+  const previewFirstContact = (request: ShotRequest, m: ShotModifiers): AimPreview => {
+    if (disposed) throw new Error('world disposed');
+    const dir = normalize(request.direction);
+    if (len(dir) === 0 || !Number.isFinite(dir.x + dir.y + dir.z)) throw new RangeError('invalid shot direction');
+    validateModifiers(m);
+    const spec = ballisticForModifiers(tuning, request.bulletType, m);
+    const radius = spec.corkRadius ?? tuning.cork.radius;
+    const shape = ballFor(radius);
+    let pos = request.origin;
+    let vel = scale(dir, spec.speed);
+    const points: Vec3[] = [pos];
+    const steps = Math.max(1, Math.ceil(tuning.limits.maxFlightSec / fixedDt));
+    for (let i = 0; i < steps; i++) {
+      vel = { ...vel, y: vel.y - spec.gravity * fixedDt };
+      const hit = world.castShape(pos, IDENT, vel, shape, 0, fixedDt, false);
+      if (hit) {
+        const toi = Math.min(fixedDt, Math.max(0, hit.time_of_impact));
+        pos = add(pos, scale(vel, toi));
+        points.push(pos);
+        const target = targets.get(hit.collider.handle);
+        if (!target) return { points, firstHitTargetId: null, approximate: true };
+        const n = normalize(vec(hit.normal1));
+        const contact = add(pos, scale(len(n) === 0 ? scale(dir, -1) : n, -radius));
+        return { points, firstHitTargetId: targetIdOf(target, contact), approximate: true };
+      }
+      pos = add(pos, scale(vel, fixedDt));
+      points.push(pos);
+      if (!inBounds(pos)) break;
+    }
+    return { points, firstHitTargetId: null, approximate: true };
+  };
+
+  const targetIdOf = (t: Target, contact: Vec3): string => {
+    switch (t.t) {
+      case 'surface':
+        return t.id;
+      case 'device':
+        return t.deviceId;
+      case 'shopkeeper':
+        return `shopkeeper:${t.part}`;
+      case 'hidden':
+        return `hidden:${t.targetId}`;
+      case 'cell':
+        return cellAtPoint(contact, t.cellId);
+      case 'prize':
+        return t.id;
+    }
+  };
+
   const fire = (request: ShotRequest, context: ShotContext): void => {
     if (active) throw new Error('a shot is already in progress');
     const d = normalize(request.direction);
     if (len(d) === 0 || !Number.isFinite(d.x + d.y + d.z)) throw new RangeError('invalid shot direction');
+    if (context.expanded) validateModifiers(context.expanded.modifiers);
     outcomes.clear();
     justCollected = [];
     for (const p of live.values()) {
@@ -782,52 +1037,56 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       activatedCells: new Set(),
       requests: [],
       contactSeq: 0,
+      barrierId: null,
+      applied: [],
+      deferred: [],
     };
     active = a;
-    const speed = initialSpeed(request.bulletType, tuning);
-    const proj: Projectile = {
-      id: mintId.projectile(request.shotId, 0),
-      generation: 0,
-      position: request.origin,
-      velocity: scale(d, speed),
-      bulletType: request.bulletType,
-      powerMultiplier: 1,
-      reflections: 0,
-      spawnedAtSec: 0,
-      ended: false,
-      lastContact: new Map(),
-    };
-    a.projectiles.push(proj);
+    const corks = launchCorks(request, d, context.expanded?.modifiers ?? null);
+    for (const proj of corks) a.projectiles.push(proj);
+    a.nextProjectileIndex = corks.length;
     emit((eventId, shotId) => ({ type: 'shotStage', eventId, shotId, stage: 'flight' }));
-    emit((eventId, shotId) => ({
-      type: 'projectileSpawned',
-      eventId,
-      shotId,
-      projectileId: proj.id,
-      parentId: null,
-      generation: 0,
-      position: proj.position,
-      velocity: proj.velocity,
-      bulletType: proj.bulletType,
-    }));
+    for (const proj of corks) {
+      emit((eventId, shotId) => ({
+        type: 'projectileSpawned',
+        eventId,
+        shotId,
+        projectileId: proj.id,
+        parentId: null,
+        generation: proj.generation,
+        position: proj.position,
+        velocity: proj.velocity,
+        bulletType: proj.bulletType,
+      }));
+    }
   };
 
   const step = (dtSec: number): SimulationStep => {
     if (disposed) throw new Error('world disposed');
+    if (frozen) {
+      // frozen at the flight-end barrier: nothing advances and the time spent here is not added later
+      return { frame: buildFrame([]), record: null, barrier: null };
+    }
     if (Number.isFinite(dtSec) && dtSec > 0) acc += dtSec;
     let n = 0;
     while (acc >= fixedDt - 1e-9 && n < MAX_FIXED_STEPS_PER_CALL) {
       acc -= fixedDt;
       n += 1;
       fixedStep();
+      if (barrierToReturn) {
+        acc = 0; // the rest of this call is not simulated, now or later
+        break;
+      }
     }
     if (n >= MAX_FIXED_STEPS_PER_CALL) acc = 0;
     const record = finished;
     finished = null;
+    const barrier = barrierToReturn;
+    barrierToReturn = null;
     const frame = buildFrame(pending);
     pending = [];
     justCollected = [];
-    return { frame, record, barrier: null };
+    return { frame, record, barrier };
   };
 
   return {
@@ -835,11 +1094,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     fire,
     step,
     frame: () => buildFrame([]),
-    // Expanded rules (EG05): the rules-v1 pipeline never stops at a barrier, so nothing can be resumed yet.
-    resumeAfterEffects: () => false,
-    previewFirstContact: () => {
-      throw new Error('previewFirstContact is implemented in EG05');
-    },
+    resumeAfterEffects,
+    previewFirstContact,
     get shotInProgress() {
       return active !== null;
     },
