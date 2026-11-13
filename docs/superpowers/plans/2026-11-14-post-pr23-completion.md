@@ -4,13 +4,13 @@
 
 **Goal:** 残作業10項目を、保存・品替え・演出の実装、再現可能な検証、正式化の判断まで追跡できる工程にする。
 
-**Architecture:** 旧9枠版と既存の内部試作r001〜r003を保ち、新しい内部版r004で保存と品替えを改修する。確定した記録だけを図鑑・結果・演出へ渡し、正式版への切替は検証と採用記録をそろえた別PRにする。
+**Architecture:** 旧9枠版と既存の内部試作r001〜r003を保ち、保存・品替え・時計の変更をr004・r005・r006へ順に固定する。確定した記録だけを図鑑・結果・演出へ渡し、正式版への切替は検証と採用記録をそろえた別PRにする。
 
 **Tech Stack:** TypeScript 5.9.3、Three.js 0.186.1、Rapier 0.21.0、Vite 8.3.4、Vitest 4.1.12、Playwright 1.63.0、Node 22以上。既存の固定版を使用し、新しい外部サービスは使わない。
 
 **Spec:** [追加要件D34〜D37](../../changes/2026-11-06-expanded-gameplay-requirements.md)、[PR #19後の計画](2026-11-07-post-pr19-gameplay.md)、[実装記録](../../qa/post-pr19-evidence.md)、2026年11月14日の「残作業10項目を計画→敵対的検証→反映→PR」の依頼。
 
-文書状態：初稿v1。基準main：6591d96f300ec4e16b45d58e56a793d407413a9a（PR #23マージ）。この文書のチェックは将来の実装用であり、今回の文書PRで完了にしない。
+文書状態：敵対的検証反映版v3。基準main：6591d96f300ec4e16b45d58e56a793d407413a9a（PR #23マージ）。この文書のチェックは将来の実装用であり、今回の文書PRで完了にしない。
 
 ## Global Constraints
 
@@ -56,16 +56,18 @@ A1〜A10の計算、E1ベストショット、E2注文、E3おみやげ棚、E4�
 
 ### 2.1 版と記録の境界
 
-既存の3内部版は比較用に残す。新しい内部用ビルドキーをexpanded-next、ルール番号をrules-v2-proposed-r004とする。これらはこの計画で提案する実装上の名前で、正式採用を意味しない。
+既存の3内部版は比較用に残す。S00〜S02の保存改修はexpanded-save-trial / rules-v2-proposed-r004、S03の底補正はexpanded-placement-trial / rules-v2-proposed-r005、S05の時計統一後はexpanded-next / rules-v2-proposed-r006とする。これらは実装上の名前で、正式採用を意味しない。各段階は新しい保存先を持ち、前段階の進行中の回を次版へ変換しない。
 
 | 版 | 動作・保存 | 公開物 |
 |---|---|---|
 | official-v1 | 旧9枠・旧保存先のまま | site-distのみ |
 | r001〜r003 | 既存計算・中心固定・既存保存先。継続中の回をr004へ変換しない | internal-expanded-dist / internal-rewards-dist等 |
-| r004 | 補給10件、後述の一括保存、底補正、日替わりの時刻統一 | internal-next-dist。Pagesの配信対象にしない |
+| r004 | S00〜S02：補給10件＋一括保存。中心固定・従来の時計 | internal-save-trial-dist、4176番 |
+| r005 | S03：r004＋底補正。従来の時計 | internal-placement-trial-dist、4177番 |
+| r006 | S05：r005＋ゲーム内時刻の統一 | internal-next-dist、4178番。通常のPages配信対象にしない |
 | 将来の正式版 | S08の採用値を新しい固定ファイルへ保存して作る | S09で別PR。試作の得点は引き継がない |
 
-r004の固定設定は新規data/expansion-v2/next-profile.jsonへ置き、r003の報酬値を複製した入力と差分（保存方式・底補正・時刻方式）を明記する。調整で判定や数値を変えるときはr005以降へ番号を進め、r004の進行中データの意味を変えない。旧版も動かせる共通関数は、版から渡す明示的な方針で分岐する。
+新規data/expansion-v2/next-profile.jsonには、r004・r005・r006ごとの固定設定を追加する。r003の報酬値からの差分と、persistencePolicy（legacy/atomic）、transformPolicy（preserve-center/preserve-supported-bottom）、clockPolicy（frame/fixed）をGameplayBundleへ渡す。S00はr004だけを登録し、S03でr005、S05でr006を追記する。過去のentryを上書きしない。各版のbuild/previewを残して旧進行を同じ版で再開できるようにし、違う版のキーを読込・移行しない。装置の判定位置や調整値をさらに変える場合はr007以降へ進める。
 
 ### 2.2 保存する単位と成功の意味
 
@@ -78,7 +80,7 @@ r004の固定設定は新規data/expansion-v2/next-profile.jsonへ置き、r003�
       | { mode: 'daily'; rulesVersion: string; startedDateJst: string };
     interface SaveToken { runId: string; revision: number; ownerEpoch: number; }
     interface PersistedRecord {
-      scope: RunScope; token: SaveToken; state: RunState; gameTick: number;
+      scope: RunScope; token: SaveToken; ownerId: string; state: RunState; gameTick: number;
       lastSummary: ShotSummary | null; result: FinalResult | null;
       selfBestBefore: number | null; newBest: boolean; resultViewOpen: boolean;
     }
@@ -88,15 +90,28 @@ r004の固定設定は新規data/expansion-v2/next-profile.jsonへ置き、r003�
     interface RunRepository {
       read(scope: RunScope): Promise<PersistedRecord | null>;
       start(scope: RunScope, initial: RunState, expected: SaveToken | null): Promise<SaveReply>;
-      claim(scope: RunScope, expected: SaveToken): Promise<SaveReply>;
+      claim(scope: RunScope, expected: SaveToken, resolution: 'resumeStable' | 'abandonInFlight'): Promise<SaveReply>;
       saveCommand(input: { expected: SaveToken; operationId: string; state: RunState; gameTick: number }): Promise<SaveReply>;
       commitShot(input: { expected: SaveToken; state: RunState; summary: ShotSummary; gameTick: number }): Promise<SaveReply>;
       closeResult(expected: SaveToken): Promise<SaveReply>;
     }
 
-新規DB名shatekki.checkpoints、初期schemaVersion=1。object storeはruns（scopeKey）、profiles（mode・rulesVersion・日替わり開始日）、receipts（runId・operationId）、meta（import記録とshared souvenir revision）、souvenirs（共通3枠）とする。日付はscope作成時に固定し、今の端末日付で読込先を上書きしない。進行中の回への案内用active scopeも同じDBで更新する。
+新規DB名shatekki.checkpoints、初期schemaVersion=1。object storeはruns（scopeKey、runIdの一意index）、profiles（通常はmode・rulesVersion、日替わりbestは開始日も含む）、receipts（runId・operationId）、meta（import記録とshared souvenir revision）、souvenirs（共通3枠）とする。日替わり図鑑はmode・rulesVersionで日をまたいで保持し、その日の自己ベストだけを日付で区切る。旧日替わりのbestは日付不明の旧記録として表示し、特定日のbestへ移さない。日付はscope作成時に固定し、今の端末日付で読込先を上書きしない。進行中の回への案内用active scopeも同じDBで更新する。
 
-発射を記録するoperationIdはrunId/shotNumber/fire、確定はrunId/shotNumber/settle。STOP_LOAD・CONFIRM_POSITION・ORDERは同じ入力を再試行するときに同じ番号を使う。トランザクション内で現行runId・revision・ownerEpoch・段階を照合してから更新し、oncompleteでだけ成功を返す。onsuccessだけを成功にしない。receiptsは既に成功した同じ操作の応答を返し、同じ番号で異なる内容が来たらinvalidとする。
+保存部品はcreateIndexedRunRepository(factory: IDBFactory, writerId: string)で作る。writerIdはページの実行ごとに新しく生成し、readで受け取ったownerIdを流用しない。start/claimだけが所有者をwriterIdへ設定する。進行を変える通常の書込みは保存済みownerIdがその部品のwriterIdに一致することも確認する。複製タブや再読込は別writerIdとなり、最新tokenを読んだだけでは進行を書き換えられない。終了済み結果を明示的に閉じる操作だけは後述の例外とする。scopeKeyはmode・rulesVersion・dailyなら開始日から同じ純粋関数で作り、保存入力のstate.rulesVersion/runIdとも照合する。
+
+発射のoperationIdはrunId/shotNumber/fire、確定はrunId/shotNumber/settle。STOP_LOAD・CONFIRM_POSITION・ORDERにも入力受付時に番号を与え、再試行で同じ番号と内容を使う。saveCommand/commitShotでは次の順序を一つのtransaction内で守る。
+
+1. 入力のscope・runId・operationId・内容を検証し、その操作番号のreceiptを読む。
+2. 成功済みなら内容の一致を調べ、一致時はreplayed=trueで返す。異なる内容はinvalid。返すrecordはその操作直後の古い写しではなく、現在の最新記録とする。既に別runになっている場合はconflictとし、旧結果は履歴の読取りだけに使う。
+3. 未実行の操作だけ、ownerId=writerId、runId、revision、ownerEpoch、許可される段階を照合する。合わなければconflict/invalid。
+4. 状態・profile・receipt等をまとめて更新し、transaction.oncompleteでだけ成功を返す。request.onsuccessだけでは成功にしない。
+
+replayed=trueを受けた経路は発射・加点・朱印・音・所有権の再取得を行わない。発射保存だけ成功して応答が失われた場合もworld.fireを再実行せず、未確定射として中断案内へ進む。所有権移転前のreceiptを読んでも新しい書込み権限は得られない。内容比較用の正規化はtransactionを開く前に行い、開いた後に通信・タイマー・暗号処理等の別の非同期処理を待たない。
+
+startは記録なし、または明示的に終了結果を閉じた現在tokenにだけ成功する。進行中の回を無断で置き換えない。claim('resumeStable')は射撃間の記録だけへ適用し、epochを増やす。飛行・質問・落下中は再開できない。再読込画面ではその旨を示し、明示的なclaim('abandonInFlight')でownerとepochを更新して中断を確定する。別タブのreadは中断もclaimもしない。古い所有者の遅れた保存はepochとownerIdで拒否する。
+
+closeResultはendedまたはabandonedの終端状態だけへ適用する明示的な閲覧終了操作とする。再読込後の非所有者も現在のrunId・revision・ownerEpochが一致すれば実行できる。transaction内で終端状態とtokenを照合し、resultViewOpenをfalse、revisionを+1にする。ownerId・ownerEpoch・結果・図鑑・得点等は変えない。進行中はinvalid、他タブが別runを始めた場合や先に更新した場合はconflictとして最新値を読み直す。同じrunが既に閉じていれば再書込みせず最新recordを返す。そのtokenによるstartだけが、新しいrunIdとwriterIdで次のゲームを作る。これにより「終了/中断済み→再読込→閉じる→新規開始」を可能にし、読取りだけで結果を閉じることはしない。
 
 commitShotは得点台帳・残弾・使用済み・注文・景品・補充・抽選状態・次射予約・要約・図鑑差分・自己ベスト・終了結果を同じtransactionに入れる。途中でthrow、abort、容量不足なら全て未確定。新しいprofile処理は既存discoverSets/recordRunEndを別に呼ばず、その純粋な計算をtransaction内へ移す。freshSetsとnewBestは保存済みの差分を返す。読み取りや結果の再表示で更新しない。
 
@@ -110,27 +125,39 @@ commitShotは得点台帳・残弾・使用済み・注文・景品・補充・�
 | 終了→結果→図鑑→戻る | 確定結果を読む。約0.9秒の切替前後のreloadでも同じ結果。閉じる操作はresultViewOpenだけを変える |
 | DBを開けない・更新がblocked | 理由を表示し再試行できる。無断で旧localStorageへ書き戻さない。versionchangeを受けた接続は閉じて入力停止 |
 
-「この画面だけで遊ぶ」は新しいrunIdで初めから開始する。途中結果を複写してやり直す入口にしない。その回はreloadで終了し、進行・図鑑・自己ベスト・おみやげ・ランキング・送信待ちへ書かない。設定は既存値を読む。保存復旧後もその回を永続記録へ昇格させない。
+「この画面だけで遊ぶ」は新しいrunIdで初めから開始する。R05の書込み0は、この回を開始してから終了するまでに回に起因する書込みを数える。途中結果を複写してやり直す入口にしない。その回はreloadで終了し、進行・図鑑・自己ベスト・おみやげ・ランキング・送信待ちへ書かない。設定は既存値を読む。保存復旧後もその回を永続記録へ昇格させない。
 
-旧保存先はread-onlyで扱う。新旧ルールの自己ベストは分け、旧スコアをr004の自己ベストにしない。通常の旧図鑑は同じS番号の参照として取り込み、日替わりには通常の図鑑を混ぜない。importの記録と取り込んだ差分は同じtransactionにする。壊れた旧値は原文を残し、取り込めなかったと表示する。旧書込みが後から増えた場合はS集合の追加だけを再照合し、旧キーへ書かない。
+旧保存先はread-onlyで扱う。新旧ルールの自己ベストは分け、旧スコアをr004の自己ベストにしない。通常の旧図鑑は同じS番号の参照として取り込み、日替わりには通常の図鑑を混ぜない。importの記録と取り込んだ差分は同じtransactionにする。壊れた旧値は原文を残し、取り込めなかったと表示する。旧書込みが後から増えた場合はS集合の追加だけを再照合し、旧キーへ書かない。通常のprofile.v2にあるPAIR発見も、既存の種類・組合せが同じ番号だけ参照として残す。旧日替わり図鑑は日替わり側だけへ取り込む。
 
-おみやげ棚は新DBでも通常と日替わりで共通の3枠とし、旧shatekki.souvenirs.v1を初回だけ読み取る。保存対象は確定済み結果のrunIdと獲得種類から検証する。slotRevisionを照合し、他タブが先に入替えた場合は最新の棚を見せて選び直す。旧版側の棚は上書きしない。
+おみやげ棚は新DBでも通常と日替わりで共通の3枠とし、旧shatekki.souvenirs.v1を初回だけ読み取る。保存対象は確定済み結果のrunIdと獲得種類から検証する。slotRevisionを照合し、他タブが先に入替えた場合は最新の棚を見せて選び直す。旧版側の棚は上書きしない。新しいSharedSouvenirRepository.place(input: { runId: string; typeId: PrizeTypeId; slot?: number; expectedRevision: number }): Promise<PlaceResult | { ok: false; reason: 'conflict'; current: SouvenirShelf }>を使い、現在の確定結果を同じtransactionで読み直す。
 
 ### 2.3 品替えの幾何情報
 
-新規src/sim/transform-placement.tsにcandidateTransformPose(subject, oldShape, newShape, support, policy): Poseを作る。policyはpreserve-center / preserve-supported-bottom。subjectは既存TransformSubject、supportは確認できた支持棚の面またはnull。
+新規src/sim/transform-placement.tsにcandidateTransformPose(subject: TransformSubject, oldShape: CollisionShape, newShape: CollisionShape, support: TransformSupport | null, policy: TransformPolicy): Poseを作る。TransformPolicyはpreserve-center / preserve-supported-bottom、TransformSupportは{ surfaceId: string; topY: number }。棚の水平範囲と下端の距離（許容0.01m）を確認した支持面だけを渡す。
 
-r004では、棚に接していることを確認できる景品だけ、現在の回転を含む外接箱の下端を保つよう新しい中心Yを計算する。mountedという印だけで支持を決めない。落下中・支持不明は旧姿勢を維持。静的な棚・隣の景品・上の棚と重なれば、候補順を変えずに延期する。許容重なりは既存0.01mを使い、無断で緩めない。
+r005以降では、棚に接していることを確認できる景品だけ、現在の回転を含む外接箱の下端を保つよう新しい中心Yを計算する。mountedという印だけで支持を決めない。落下中・支持不明は旧姿勢を維持。静的な棚・隣の景品・上の棚と重なれば、候補順を変えずに延期する。許容重なりは既存0.01mを使い、無断で緩めない。
 
-AppliedKindChangeへposeAfter: Poseを追加し、world.tsのretype、body/collider、保存ShelfState、描画へ同じ値を渡す。mounted景品の運動基準位置にも補正差分を持たせ、updateMountedやsyncShelfで元の高さへ戻さない。種類を変えてもinstanceId・homeSlot・速度・回転・耐久割合・既存の周期運動の種類と位相を保持し、新規補充でのみ新種類の運動を使う。
+AppliedKindChangeへposeAfter: Poseを追加し、world.tsのretype、body/collider、保存ShelfState、描画へ同じ値を渡す。種類を変えてもinstanceId・homeSlot・速度・回転・耐久割合を保持する。周期運動の種類・周期・振幅・位相は旧motionTypeIdから読み、接地の計算に使うshapeは現在のtypeIdから読む。この二つを一つのPrizeRuntimeConfigとして流用しない。
+
+src/sim/motion.tsにmountedPoseForShape(base: Pose, motion: PrizeRuntimeConfig['motion'], currentShape: CollisionShape, motionSec: number): Poseを追加する。横移動・上下動・回転の位相を保ち、swingの下端を上げる計算には新しい形の半幅・半高を使う。元のmountBasePoseも現在形状の支持高さから再計算する。変身瞬間に姿勢を保つための基準差分はPrizeInstanceStateの新規motionAnchor: { base: Pose; motionTypeId: PrizeTypeId }へ保存し、syncShelf・updateMounted・描画で同じ計算を使う。未保存なら旧版の従来経路を使う。
+
+支持面・上棚・隣への干渉は、運動の全振幅・角度範囲で取り得る外接領域を候補決定時に計算して検査する。隣も動く場合は双方の全領域を比較する。安全な領域が重なる候補は延期するため、実際には位相の違いで当たらない候補も延期され得る。この保守的な判定を初期仕様とし、成立件数への影響はS08で測る。異なる周期の最小公倍数まで延々と計算する方式は使わない。角度の端と外接寸法の極値を含める単体試験と、一周期・異周期の複数周・保存復帰の実行試験を分ける。支持面についてはcurrentShapeから各tickの下端を保つ。変更しても新運動の種類へ切り替えず、新規補充でだけ新種類の運動を使う。幅の広い形への変身、傾きの極値、保存復帰後の下端と姿勢をR06へ加える。
 
 ### 2.4 表示とゲーム内時刻
 
-保存成功を受け取った後のConfirmedPresentationを、新規src/view/reward-motions.tsと既存reward-panelへ渡す。内容はrunId、shotId、summary、freshSets、replayed、kind（shot/perfectLoad）、reducedMotion。書込用関数を渡さない。P5は装填確定の保存成功通知を使う。
+保存成功通知は新規src/contracts/persistence.tsで次の二つに分け、src/view/reward-motions.tsと既存reward-panelへ渡す。書込用関数を渡さない。
+
+    type ConfirmedPresentation =
+      | { kind: 'shot'; runId: string; shotId: string; summary: ShotSummary;
+          freshSets: readonly SetId[]; replayed: boolean; reducedMotion: boolean }
+      | { kind: 'perfectLoad'; runId: string; shotNumber: number; operationId: string;
+          load: LoadResult; replayed: boolean; reducedMotion: boolean };
+
+P5はSTOP_LOADの保存成功から、その装填のoperationIdとLoadResultを受ける。初射にはShotSummaryがないため前射の要約を流用しない。shotはrunId/shotId、perfectLoadはrunId/operationIdで重複を抑える。
 
 P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合わせは、入力を覆わずpointer-events:noneで描画する。大きな場面の優先は初発見→最終弾から続行→まとめ取り。音も同じ選択結果から1回だけ鳴らす。省略・動きを減らす設定・音量0でも札の個数・名前・残弾・理由は残す。演出終了を次の入力条件にしない。
 
-日替わりの比較は、同じ実時間のタップではなく、ゲーム内の同じ刻みの入力を使う。new FixedGameClock(stepSec)のadvance(rawDtSec, paused): readonly number[]で進めるtick列を返し、stepSecは既存tuning.limits.fixedStepSecを読む。新内部版では装填・手ブレ・周期運動・物理を同じtickで進める。保存待ち・非表示・横向き・質問待ちはtickを進めず、復帰時の実時間を加算しない。比較用入力はtickと同tick内の連番、GameCommandを持つ。これは試験のための入力列で、利用者向け全リプレイ機能は追加しない。
+日替わりの比較は、同じ実時間のタップではなく、ゲーム内の同じ刻みの入力を使う。new FixedGameClock(stepSec)のadvance(rawDtSec, paused): readonly number[]で進めるtick列を返し、stepSecは既存tuning.limits.fixedStepSecを読む。新内部版では装填・手ブレ・周期運動・物理を同じtickで進める。保存待ち・非表示・横向き・質問待ちはtickを進めず、復帰時の実時間を加算しない。r006のframeでは旧MAX_FRAME_DTによる切捨てと二重の時計加算を通らず、同じstepSecでcontrollerとworldを進める。描画中の余りは保持し、停止へ入るときは実時間の残りを破棄する。比較用入力はtickと同tick内の連番、GameCommandを持つ。これは試験のための入力列で、利用者向け全リプレイ機能は追加しない。
 
 ## 3. 工程と単独所有
 
@@ -142,24 +169,24 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 **Files:** 新規data/expansion-v2/next-profile.json。変更src/contracts/expansion.ts、src/catalog/gameplay-config.ts、src/app/bundle.ts、package.json、playwright.config.ts、.github/workflows/ci.yml、scripts/ci/plan.mjs。試験tests/unit/app-bundle.test.ts、tests/unit/gameplay-bundle.test.ts（新規）、tests/ci/plan.test.mjs、tests/ci/browser-env.test.mjs。
 
-**Interfaces:** getGameplayBundle('expanded-next')からGameplayBundleを生成する。新内部版にだけpersistence/transform/clockの方針を渡し、旧キーの戻り値は維持する。build:next / preview:nextはdist-nextと4176番を使用する。
+**Interfaces:** 最初はgetGameplayBundle('expanded-save-trial')でr004を生成し、方針はatomic/preserve-center/frameに固定する。build:save-trial / preview:save-trialはdist-save-trialと4176番、成果物はinternal-save-trial-distを使う。S03でr005、S05でr006のbuild/preview/成果物/サーバー定義を同じ方式で追加する。
 
 - [ ] r004の版・全10報酬・36枠・prototype、旧3版の同一値、URLから切替不可を検査し、追加前の失敗を記録する。
 - [ ] 上記キーと固定設定を追加し、既存のデータ数・配点・弾数を変えていない差分を残す。
-- [ ] CIにinternal-next-distのbuild/upload/downloadを一式追加。CI_PREBUILT=trueでも4176の起動に必要な成果物が届くようにする。
+- [ ] CIにinternal-save-trial-distのbuild/upload/downloadを一式追加。CI_PREBUILT=trueでも4176の起動に必要な成果物が届くようにする。
 - [ ] npm run test:unit -- tests/unit/app-bundle.test.ts tests/unit/gameplay-bundle.test.ts と node --test tests/ci/plan.test.mjs tests/ci/browser-env.test.mjs、npm run typecheckを実行し、0失敗・0skipを確認する。
-- [ ] build、build:expanded、build:rewards、build:nextを確認してPRへ記録する。公開用distに内部のデータ・入口が入らない試験を維持する。Commit: feat: add isolated next gameplay bundle。
+- [ ] build、build:expanded、build:rewards、build:save-trialを確認してPRへ記録する。公開用distに内部のデータ・入口が入らない試験を維持する。Commit: feat: add isolated next gameplay bundle。
 
 ### S01：一括保存と復帰の部品を作る
 
 **Files:** 新規src/contracts/persistence.ts、src/persistence/indexed-run-repository.ts、src/persistence/legacy-import.ts、tests/integration/atomic-persistence.test.ts、tests/e2e/atomic-persistence.spec.ts。変更src/persistence/keys.ts、src/persistence/souvenirs.ts、src/persistence/index.ts。
 
-**Interfaces:** §2.2のRunRepositoryとcreateIndexedRunRepository(factory: IDBFactory): Promise<RunRepository>。旧RunStoreの同期APIは旧版用に残す。保存できない版には同じ契約のメモリ実装を用意するが、profiles/souvenirsへの永続書込みは接続しない。
+**Interfaces:** §2.2のRunRepositoryとcreateIndexedRunRepository(factory: IDBFactory, writerId: string): Promise<RunRepository>。旧RunStoreの同期APIは旧版用に残す。保存できない版には同じ契約のメモリ実装を用意するが、profiles/souvenirsへの永続書込みは接続しない。
 
 - [ ] R01〜R03の失敗例を先に作る。実ブラウザの同一origin・同一BrowserContextの2ページで、同じrevisionを読み、発射・終了保存を競合させる。
-- [ ] transaction内の照合→全更新→oncompleteの応答を実装する。成功済みreceiptの再取得、異なる内容の重複拒否、blocked/versionchangeを含める。
+- [ ] transaction内のreceipt照合→未実行時の所有者とrevision照合→全更新→oncompleteの応答を実装する。成功済みreceiptの再取得、異なる内容の重複拒否、blocked/versionchangeを含める。
 - [ ] 初回import、旧キー不変、図鑑の差分、日替わり分離、3枠の入替競合を実装し、容量不足では全体が元の状態に残ることを確認する。
-- [ ] npm run test:integration -- tests/integration/atomic-persistence.test.ts、npx playwright test tests/e2e/atomic-persistence.spec.ts --project=iphone-portrait-chromiumを実行する。容量不足は例外を投げる模擬だけで合格にせず、実IDB transaction.abort後の再読込も確認する。Safariの実容量不足はS07へ残す。
+- [ ] npm run test:integration -- tests/integration/atomic-persistence.test.ts、npx playwright test tests/e2e/atomic-persistence.spec.ts --project=iphone-portrait-chromiumを実行する。容量不足は例外を投げる模擬だけで合格にせず、実IDB transaction.abort後の再読込も確認する。Safariの実容量不足はS07へ残す。Node側の試験は保存前の検証・差分計算・応答契約を対象とし、NodeにindexedDBがあるとは仮定しない。transaction本体の合否は実ブラウザで判断する。
 - [ ] 再試行・保存後reload・2タブの勝敗・旧キーの前後比較を記録しコミットする。Commit: feat: commit run and profile records atomically。
 
 ### S02：発射・確定・結果を保存成功後につなぐ
@@ -176,15 +203,15 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 ### S03：底を保つ品替えを実装する
 
-**Files:** 新規src/sim/transform-placement.ts。変更src/sim/transform-plan.ts、src/sim/world.ts、src/contracts/game.ts、src/contracts/expansion.ts、src/core/session.ts、src/view/prizes.ts。試験tests/unit/expanded-transforms.test.ts、tests/integration/expanded-layout-world.test.ts、新規tests/integration/transform-bottom.test.ts。
+**Files:** 新規src/sim/transform-placement.ts。変更src/sim/transform-plan.ts、src/sim/world.ts、src/sim/motion.ts、src/contracts/game.ts、src/contracts/expansion.ts、src/core/session.ts、src/view/prizes.ts。r005の登録はS00と同じdata/expansion-v2/next-profile.json・bundle・package・Playwright・CIとその選択試験へ追加する。試験tests/unit/expanded-transforms.test.ts、tests/integration/expanded-layout-world.test.ts、新規tests/integration/transform-bottom.test.ts。
 
-**Interfaces:** §2.3のcandidateTransformPoseとAppliedKindChange.poseAfter。createShotWorldのoptionsへtransformPolicyを追加し、旧版はpreserve-centerを既定にする。
+**Interfaces:** §2.3のcandidateTransformPose、mountedPoseForShape、AppliedKindChange.poseAfter。createShotWorldのoptionsへtransformPolicyを追加し、旧版とr004はpreserve-centerを既定にする。r005（expanded-placement-trial、atomic/preserve-supported-bottom/frame）を登録し、build:placement-trial / preview:placement-trial、dist-placement-trial、internal-placement-trial-dist、4177番を追加する。
 
 - [ ] R06の「低い景品→高い景品」「高い→低い」「上の棚が近い」「落下中」「傾いた景品」「mounted周期運動」を先に失敗させる。
 - [ ] 支持の判定と候補姿勢を算出し、その姿勢で隣・上棚との重なりを検査する。候補が全て入らなければ同じ候補順で延期する。
 - [ ] 物理の再生成・保存・描画・周期運動の基準へ同じ補正を渡す。耐久割合、速度、ID、元の棚番号と運動位相を保つ。
 - [ ] npm run test:unit -- tests/unit/expanded-transforms.test.ts、npm run test:integration -- tests/integration/transform-bottom.test.ts tests/integration/expanded-layout-world.test.tsを実行。旧版の中心固定試験は残し、新版の底一致と分けて検査する。
-- [ ] 同じ配置でr003/r004の延期件数と理由、復帰前後の底の位置を比較してコミットする。Commit: fix: preserve supported prize bottoms in next rules。
+- [ ] 同じ配置でr003/r004/r005の延期件数と理由、復帰前後の底の位置を比較してコミットする。Commit: fix: preserve supported prize bottoms in next rules。
 
 ### S04：残る演出と装置を仕上げる
 
@@ -200,9 +227,9 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 ### S05：日替わりの一射全体を再現可能にする
 
-**Files:** 新規src/core/game-clock.ts、tests/integration/daily-determinism.test.ts、tests/e2e/daily-next.spec.ts。変更src/core/daily.ts、src/core/expanded-run.ts、src/app/controller.ts、src/app.ts、src/persistence/keys.ts。既存tests/unit/souvenir-daily.test.tsも使用する。
+**Files:** 新規src/core/game-clock.ts、tests/integration/daily-determinism.test.ts、tests/e2e/daily-next.spec.ts。変更src/core/daily.ts、src/core/expanded-run.ts、src/app/controller.ts、src/app.ts、src/persistence/keys.ts。r006の登録はS00と同じdata/expansion-v2/next-profile.json・contracts・bundle・package・Playwright・CIとその選択試験へ追加する。既存tests/unit/souvenir-daily.test.tsも使用する。
 
-**Interfaces:** FixedGameClock.advanceと、試験用入力{ tick: number; sequence: number; command: GameCommand }。RunRepositoryへgameTickとstartedDateJstを保存する。入力は同tick内でsequence順に適用してからそのtickを1回進める。
+**Interfaces:** r006（expanded-next、atomic/preserve-supported-bottom/fixed）を登録し、build:next / preview:next、dist-next、internal-next-dist、4178番を追加する。FixedGameClock.advanceと、試験用入力{ tick: number; sequence: number; command: GameCommand }。RunRepositoryへgameTickとstartedDateJstを保存する。入力は同tick内でsequence順に適用してからそのtickを1回進める。
 
 - [ ] R09〜R10として同じ日・版・入力を別runId、ja/en/th、描画間隔1/60・1/30・0.1秒で流し、各射の棚・質問・効果・獲得品・得点・残弾・抽選状態を照合する。
 - [ ] 時計を統一し、pause・質問待ち・保存待ちで余った時間を持ち越さない。日付は開始時だけ端末時刻から日本時間へ変換する。
@@ -226,7 +253,13 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 **Files:** 更新docs/qa/iphone-checklist.md、docs/qa/expanded-performance.md。新規docs/qa/post-pr23-iphone.md、docs/qa/post-pr23-locales.md。変更playwright.config.ts、tests/e2e/long-text.spec.ts、tests/e2e/reward-motions.spec.ts。新しい固定文はsrc/i18n/の既存ファイルへ追加する。
 
-**Interfaces:** 記録は端末・OS・Safari版・対象SHA・ルール版・日時JST・URL・実測表示寸法・操作・期待・実際・画像/動画・未確認理由を持つ。公開権限のある限定確認先を用意し、確認先が用意できなければ公開準備まで進め、実機結果は未確認のまま残す。
+**Interfaces:** 記録は端末・OS・Safari版・対象SHA・ルール版・日時JST・URL・実測表示寸法・操作・期待・実際・画像/動画・未確認理由を持つ。S07の実機確認前に、以下の確認ページを準備する。今回の文書PRでは配信しない。
+
+確認先の案は既存GitHub Pagesの /shatekki/preview/rules-v2-proposed-r006/。URLを知る人は開ける公開ページであり、非公開とは説明しない。新規scripts/release/prepare-next-preview.mjsと.github/workflows/preview-next.ymlの別PRを用意する。最新mainの対象SHAから同じ実行内でofficial-v1を通常のbaseで、r006だけを確認用下位パスのbaseでビルドし、それぞれsite-dist・internal-next-preview-distとして保存する。通常のinternal-next-distをそのままコピーしない。対象SHAの必要な試験の成功を確認してから、site-distをルートへ保ち、internal-next-preview-distだけを下位パスへ組み込む。URL直入力・画像・音・再読込の自動確認を行う。配置用成果物はsite-review-distとして区別し、通常のpages.ymlが内部用成果物を配信しない条件は残す。
+
+統括が対象SHA・成果物・公開範囲・期間・費用条件・戻し方をそろえ、利用者の確認ページ公開判断後に配信段階を起動する。準備と配信は別jobにし、準備だけで公開しない。既存GitHub Actions/Pagesの利用枠内を前提とし、追加費用が発生する場合は先に判断を得る。公開処理は既存pages-mainと同じ排他グループを使い、直前にmainが同じか再確認する。通常のmain配信で確認用パスがなくなる場合は、その確認先が終了したと記録し、新しい版を勝手に再公開しない。確認終了時はその時点の最新正式版の成功site-distを再配信して確認用パスを外し、古いmainへ巻き戻したりゲームの保存データを消したりしない。
+
+同じorigin上の下位パスでもlocalStorage/IndexedDBは共有されるため、新しい版のキー分離と旧キー不変をこの確認先で確かめる。別originの代替先を使った確認は、旧保存引継ぎの合格に代えない。確認先が用意できなくてもS08の自動比較と採用候補資料は進める。R14〜R16が未確認のままS09の「公開準備完了」にしない。
 
 - [ ] R14：402×700の自動確認を追加し、既存402×874・375×600を残す。iPhoneで縦、短い表示、横向き停止→縦復帰、アプリ切替、質問中reload、保存待ち中の切替を確認する。
 - [ ] R15：左右端・上下段・店主・36マス・全5装置、長い2択、値札・縁色・記号、的の見た目と命中位置を指で確認する。
@@ -236,13 +269,13 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 ### S08：バランスを比較して採用候補を作る
 
-**Files:** 新規scripts/qa/next-balance.mjs、docs/qa/post-pr23-balance.md、docs/release/expanded-adoption.md。変更docs/qa/expanded-balance-probe.md、docs/design/tuning-log.md、必要時は新しい内部版の設定ファイル。
+**Files:** 新規tests/integration/next-balance-probe.test.ts、docs/qa/post-pr23-balance.md、docs/release/expanded-adoption.md。変更docs/qa/expanded-balance-probe.md、docs/design/tuning-log.md、必要時は新しい内部版の設定ファイル。
 
-**Interfaces:** 既存の24通りの初期値と同じ入力方針を使用する。版ごとにseed・shots・duration・collected・pairSets・tripleSets・rewardId別tried/achieved/offered/granted/capped・zones・transformDeferredReasonを出力する。実装のない検証用シミュレーターへ置き換えない。
+**Interfaces:** tests/integration/expanded-balance-probe.test.tsのSEEDS=(i+1)*7919（i=0〜23）と同じ打ち手方針を、共通の試験用関数へ抽出して使う。Nodeから直接TypeScriptを読む新しいmjs実行方式は増やさず、既存Vitestの実行環境で測る。版ごとにseed・shots・duration・collected・pairSets・tripleSets・rewardId別tried/achieved/offered/granted/capped・zones・transformDeferredReasonを出力する。実装のない検証用シミュレーターへ置き換えない。
 
-- [ ] R17：official-v1、r001、r002、r003の基準を記録し、r004と同じ24通りで比較する。旧計画の4版比較を残したうえで新版を追加する。
+- [ ] R17：official-v1、r001、r002、r003の基準を記録し、r004・r005・r006と同じ24通りで比較する。旧計画の4版比較を残したうえで新版を追加する。
 - [ ] 人の試遊は「景品を狙う」「補給を狙う」を各版で分け、開始前に試遊者数・回数・対象版を記録する。自動プレイの数字から人の成立率を断定しない。
-- [ ] R18：2景品50点を含むセット点、200問・400択、20シリーズ・100効果、36枠と装置配置、保存と15言語について、C01〜C05ごとに現値・候補値・比較結果・推奨理由を記載する。特定の成功率を根拠なく正式目標にしない。
+- [ ] R18：2景品50点を含むセット点、200問・400択、20シリーズ・100効果、36枠と装置配置、保存と15言語について、C01〜C05ごとに現値・候補値・比較結果・推奨理由を記載する。特定の成功率を根拠なく正式目標にしない。npm run test:integration -- tests/integration/expanded-balance-probe.test.ts tests/integration/next-balance-probe.test.tsを実行し、0失敗・弾数整合・有限時間で終了を確認してJSON出力を記録する。
 - [ ] 値を調整する場合は別の内部ルール番号で固定し、同じ入力で再比較する。弾上限・既存100景品/3景品100組・既存記録を変えない。
 - [ ] 採用候補と残る実機・翻訳確認をレビュー可能な状態へそろえる。利用者の具体的な採用記録が得られるまでapprovedにしない。Commit: docs: prepare measured expanded rule adoption。
 
@@ -274,11 +307,11 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 | ID | 合格にするための証拠 |
 |---|---|
 | R01 | 発射保存失敗では残弾不変・world.fire=0・発射音0。再試行成功でそれぞれ1回 |
-| R02 | 同じ操作の再試行、応答消失後のreload、確定中abortで得点・補給・図鑑・自己ベストが重複しない |
-| R03 | 開始・発射・確定の競合で勝者1件。敗者のreadが勝者を中断させず、遅れた通知でも書込を拒否 |
-| R04 | 最終確定の前後・約0.9秒の切替前後・図鑑復帰で結果と全効果が一致。再表示で書込み・音0 |
+| R02 | 同じ操作の再試行、応答消失後のreload、確定中abortで重複0。receiptは古いrevisionでも読めるが権限を戻さず、最新表示を巻き戻さず、発射を再実行しない |
+| R03 | 開始・発射・確定の競合で勝者1件。非所有者は最新tokenを読んでも書けない。敗者のreadは勝者を中断させず、遅れた通知・旧ownerの書込も拒否 |
+| R04 | 最終確定の前後・約0.9秒の切替前後・図鑑復帰で結果と全効果が一致。再表示で書込み・音0。終了/中断済み結果を別writerで再読込→明示的に閉じる→新規開始でき、閉じる競合と進行中へのcloseは拒否 |
 | R05 | 記録なしプレイの進行・図鑑・自己ベスト・棚・ランキング・送信待ちへの永続書込み0 |
-| R06 | 支持ありの底一致、支持不明/落下中の姿勢維持、重なり時の延期、周期運動・復帰後も位置一致 |
+| R06 | 支持ありの底一致、支持不明/落下中の姿勢維持、重なり時の延期。幅変更後のswing全周期と保存復帰で下端・姿勢が一致 |
 | R07 | P1/P3/P5が発生し、P4が適用・延期・予約を区別。実増加だけを表示 |
 | R08 | 大演出1場面、無音・音量0・省略・動きを減らす場合も値と操作可能時刻が一致。要素の後始末 |
 | R09 | 同じ日・版・tick入力で、別runId・3言語・3描画間隔の各射の意味上の結果が一致 |
@@ -298,7 +331,7 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 ## 5. PRの分け方と試験を繰り返さない方針
 
-実装PRは、A：S00〜S02の保存、B：S03の品替え、C：S04の演出、D：S05〜S06の通し確認、E：S07〜S08の記録・調整、F：承認後のS09を目安に分ける。依存するPRの起点を固定し、先行PRがマージされたら差分を見直す。S10は対応するPRに同梱する。
+実装PRは、A：S00〜S02の保存（r004）、B：S03の品替え（r005）、C：S04の演出、D：S05〜S06の時計・通し確認（r006）、E：S07〜S08の確認先準備・記録・調整、F：承認後のS09を目安に分ける。Cで判定形状や配置を変更する場合は独自の次の内部番号を取り、以降の番号を衝突しないよう繰り下げる。依存するPRの起点を固定し、先行PRがマージされたら差分を見直す。S10は対応するPRに同梱する。
 
 文書だけの今回のPRは、リンク・追跡表・状態表記・差分範囲と既存CIの文書判定を確認する。ゲームの全試験を再実行しない。実装時は関係する単体・統合・画面試験を選ぶ。ただし共有型・保存・確定順の変更は全経路へ影響するので、既存plannerがfullを選ぶことを無理に狭めない。画面・音・翻訳だけの変更でも、新規reward-motions等の必要試験が既存の狭い選択表から漏れないよう同じPRで更新する。
 
@@ -307,3 +340,5 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 実機・母語話者・公開判断など実行担当だけでは得られない証拠は、未確認として担当・必要な記録・次の行動を残す。自動確認と同一視しない。独立に進められる実装・資料・検証は続ける。
 
 [敵対的検証と反映記録](../../reviews/2026-11-14-post-pr23-completion-review.md)
+
+実装上の参照：[Indexed Database API 3.0（W3C作業草案、2026年10月30日）](https://www.w3.org/TR/2026/WD-IndexedDB-3-20261030/)。transactionの完了・中断・更新競合の説明を確認した。草案の存在をiPhoneでの対応確認の代わりにはしない。
