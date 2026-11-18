@@ -31,6 +31,7 @@ for (const locale of LOCALES) {
   test(`${locale}: read the longest question and tap through it on r006`, async ({ page }) => {
     test.setTimeout(90_000);
     const fixture = longestPanel(locale);
+    await page.clock.install({ time: new Date('2026-11-18T12:00:00Z') });
     await page.addInitScript(({ seed }) => {
       // Pin the game's one-word seed. UUID generation and all other draws remain native.
       const original = crypto.getRandomValues.bind(crypto);
@@ -67,6 +68,7 @@ for (const locale of LOCALES) {
     await page.getByTestId('home-start').click();
     await expect(page.getByTestId('save-dialog')).toContainText(translate(locale, 'save.failure'));
     await page.getByRole('button', { name: translate(locale, 'save.retry'), exact: true }).click();
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
     await expect(page.locator('.bm-tile')).toHaveCount(36);
     await shootShopkeeper(page);
     const panel = page.getByTestId('shopkeeper-question');
@@ -78,14 +80,20 @@ for (const locale of LOCALES) {
       await button.click({ trial: true });
       await expect(button).toBeInViewport({ ratio: 0.99 });
     }
+    // Stop at the question barrier before creating the auto-dismiss timer.
+    await page.clock.pauseAt(new Date('2026-11-18T13:00:00Z'));
     await page.getByTestId('shopq-choice-B').click();
     await expect(panel).toBeHidden();
     const results = page.getByTestId('effect-results');
-    await expect(results).toBeVisible({ timeout: 30_000 });
+    await expect.poll(async () => {
+      await page.clock.runFor(100);
+      return results.isVisible();
+    }, { timeout: 30_000, intervals: [0] }).toBe(true);
     await expect(results).toContainText(translate(locale, 'fxres.src.answer'));
     await expect(results).not.toContainText(/\bFX\d{3}\b|\{\w+\}/);
     await results.click();
     await page.getByTestId('btn-confirm-position').click();
+    await page.clock.runFor(100);
     await expect(page.getByTestId('btn-load')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
