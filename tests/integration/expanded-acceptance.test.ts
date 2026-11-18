@@ -3,20 +3,17 @@ import { GameController } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { completedSetsFor } from '../../src/catalog/sets';
-import { createExpandedRun } from '../../src/core/expanded-run';
-import { spawnPrize } from '../../src/core/replenish';
+import { buildState, EDGE_KINDS, type Setup, type Aim } from '../helpers/composite-shot';
 import { validateRunState } from '../../src/core/session';
 import { createShotWorld } from '../../src/sim/world';
 import { STORAGE_KEYS, createRunStore, expandedRunKey } from '../../src/persistence';
 import {
   BASE_SHOT_MODIFIERS,
   aimDirection,
-  asPrizeTypeId,
   ballisticFor,
   corkFreeFlightPath,
   isAmmoBalanced,
   isExpandedRunState,
-  mintId,
   muzzlePosition,
   type EffectId,
   type ExpandedRunState,
@@ -89,14 +86,6 @@ const keeperBody = L.shopkeeper.find((p) => p.part === 'body')!.box;
 const keeperFront: Vec3 = { x: keeperBody.center.x, y: 1.0, z: keeperBody.center.z + keeperBody.halfExtents.z };
 const STAND = L.camera.standMaxX;
 
-interface Aim {
-  readonly standX: number;
-  readonly yaw: number;
-  readonly pitch: number;
-  readonly count: 1 | 2 | 3;
-  readonly spreadRad: number;
-}
-
 /** 3 corks from the right end: left one on cell r2-c11, middle one on cell r2-c12, right one on the shopkeeper body. */
 const COMPOSITE_AIM: Aim = (() => {
   const yL = yawTo(STAND, wallPoint('cell-r2-c11'));
@@ -122,49 +111,6 @@ const cellAim = (cellId: string, count: 1 | 2 | 3): Aim => {
 const HARMLESS: Aim = { standX: -STAND, yaw: 0, pitch: 0.3, count: 1, spreadRad: 0 };
 
 // ---------------------------------------------------------------- scenario
-
-interface Setup {
-  readonly seed: number;
-  readonly aim: Aim;
-  readonly ammo?: number;
-  readonly bonus?: number;
-  /** effect on each cell id; the others keep their drawn effect */
-  readonly cells?: Readonly<Record<string, EffectId>>;
-  readonly question?: QuestionId;
-  /** kinds standing at the front edge of tier 0 (they fall when an assortment change reshapes them) */
-  readonly edgeKinds?: readonly string[];
-}
-
-const EDGE_KINDS = ['P001', 'P002', 'P003', 'P004', 'P005', 'P007', 'P008', 'P009', 'P010', 'P011', 'P012', 'P097'];
-
-function buildState(s: Setup): ExpandedRunState {
-  const base = createExpandedRun({ runId: mintId.run(`run-acc-${s.seed}`), seed: s.seed, tuning: bundle.tuning, playerName: null }, { ...bundle, expansion: EXP });
-  const ammo = s.ammo ?? 1;
-  const bonus = s.bonus ?? 0;
-  const edgeZ = L.tiers[0]!.centerZ + L.tiers[0]!.depth / 2 - 0.005;
-  const kinds = s.edgeKinds ?? [];
-  const prizes = kinds.map((k, i) => {
-    const slot = L.slots.find((x) => x.slotId === `slot-r3-c${String(i + 1).padStart(2, '0')}`)!;
-    const p = spawnPrize(bundle.catalog, asPrizeTypeId(k), slot, i + 1, 0);
-    return { ...p, hp: Math.min(p.hp, 2), pose: { ...p.pose, position: { ...p.pose.position, z: edgeZ } } };
-  });
-  const order = s.question ? [s.question, ...base.expansion.questionOrder.filter((q) => q !== s.question)] : base.expansion.questionOrder;
-  const state: ExpandedRunState = {
-    ...base,
-    bonusAmmoTotal: bonus,
-    shotsFired: INITIAL + bonus - ammo,
-    ammo,
-    shelf: { prizes, deferredSlots: [], nextInstanceNumber: prizes.length + 1 },
-    expansion: {
-      ...base.expansion,
-      questionOrder: order,
-      cells: base.expansion.cells.map((c) => (s.cells?.[c.cellId] ? { ...c, effectId: s.cells[c.cellId]! } : c)),
-      next: { modifiers: { ...BASE_SHOT_MODIFIERS, launch: { count: s.aim.count, spreadRad: s.aim.spreadRad } }, hint: null },
-    },
-  };
-  expect(isAmmoBalanced(state, INITIAL)).toBe(true);
-  return state;
-}
 
 class Scenario {
   readonly settled: ShotSummary[] = [];
@@ -192,7 +138,7 @@ class Scenario {
   }
 
   static async create(s: Setup): Promise<Scenario> {
-    return new Scenario(await createShotWorld(L, bundle.catalog, bundle.tuning), buildState(s));
+    return new Scenario(await createShotWorld(L, bundle.catalog, bundle.tuning), buildState(bundle, s));
   }
 
   get state(): ExpandedRunState {
