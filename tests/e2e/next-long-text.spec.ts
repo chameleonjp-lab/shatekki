@@ -4,6 +4,7 @@ import { seedRng } from '../../src/catalog/rng';
 import { shuffleOnce } from '../../src/core/expanded-run';
 import { LOCALES, translate, type Locale } from '../../src/i18n';
 import { choiceText, groupLabel, questionText } from '../../src/i18n/expanded-content';
+import { restoreBeforeShot } from '../helpers/outcome-checkpoint';
 import { shootShopkeeper } from '../helpers/shoot-shopkeeper';
 
 const questions = JSON.parse(readFileSync('data/expansion-v2/questions.json', 'utf8')) as {
@@ -99,29 +100,14 @@ for (const locale of LOCALES) {
   });
 }
 
-// Play to a genuine result once per viewport. Clone that origin's storage into
-// fresh browser contexts so replay in one language cannot erase the next case.
+// Resume a genuine pre-FIRE checkpoint and play its final shot in the game.
+// Clone the settled origin so replay in one language cannot erase the next case.
 test('result, reason, share and replay in all 15 locales on the same settled game', async ({ page, browser, context }) => {
-  test.setTimeout(300_000);
-  await page.goto('/?e2e=1');
-  await page.getByTestId('home-start').click();
-  const controls = page.getByTestId('controls');
-  for (let n = 0; n < 20; n++) {
-    if (await page.getByTestId('result-score').isVisible()) break;
-    await expect(controls).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
-    await page.getByTestId('btn-confirm-position').click();
-    await expect(controls).toHaveAttribute('data-mode', 'loading');
-    await page.getByTestId('btn-load').dispatchEvent('pointerdown');
-    await expect(controls).toHaveAttribute('data-mode', 'aiming');
-    const fire = page.getByTestId('btn-fire');
-    await fire.dispatchEvent('pointerdown');
-    await fire.dispatchEvent('pointerup');
-    await expect.poll(async () => {
-      if (await page.getByTestId('shopkeeper-question').isVisible()) await page.getByTestId('shopq-choice-A').click();
-      return await page.getByTestId('result-score').isVisible() || await controls.getAttribute('data-mode', { timeout: 100 }).catch(() => '') === 'position';
-    }, { timeout: 30_000 }).toBe(true);
-  }
-  await expect(page.getByTestId('result-score')).toBeVisible();
+  test.setTimeout(180_000);
+  await restoreBeforeShot(page, 'ended');
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
+  await page.getByTestId('btn-fire').tap();
+  await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 40_000 });
   const snapshot = await context.storageState({ indexedDB: true });
   for (const locale of LOCALES) {
     const next = await browser.newContext({ viewport: page.viewportSize(), isMobile: true, hasTouch: true, storageState: snapshot });
@@ -144,6 +130,7 @@ test('result, reason, share and replay in all 15 locales on the same settled gam
       await expect(copy).toBeVisible();
       expect(await copy.inputValue()).toContain('https://chameleonjp-lab.github.io/shatekki/');
       expect(await copy.inputValue()).not.toMatch(/\{\w+\}/);
+      expect(await copy.inputValue()).toContain(await result.getByTestId('result-score').innerText());
       await result.getByTestId('result-retry').click();
       await expect(result.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 20_000 });
     } finally {
