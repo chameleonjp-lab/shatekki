@@ -8,7 +8,7 @@ describe('24-seed comparison of each actual build policy', () => {
   for (const key of GAMEPLAY_BUNDLE_KEYS) {
     it(`plays ${key} to finite settlement with the same scripted inputs`, async () => {
       const bundle = getGameplayBundle(key);
-      const runs = [];
+      const runs: Awaited<ReturnType<typeof playRun>>[] = [];
       for (const seed of SEEDS) {
         const run = await playRun(bundle, seed);
         expect(run.ammoBalanced, String(seed)).toBe(true);
