@@ -9,17 +9,17 @@ import { fileURLToPath } from 'node:url';
 const rules = [
   {
     pattern: /^src\/ranking\/[\w-]+\.ts$/,
-    label: 'ranking', unit: ['share'], integration: ['ranking', 'security', 'screens'], e2e: [],
+    label: 'ranking', unit: ['share'], integration: ['ranking', 'security', 'screens'], e2e: ['next-input-share'],
   },
   {
     pattern: /^src\/i18n\/(?:[\w-]+\/)*[\w-]+\.ts$/,
     label: 'translations', unit: ['controls-model', 'expanded-i18n', 'i18n', 'i18n-content', 'reward-motions', 'reward-panel', 'share', 'shopkeeper-panel'], integration: ['screens', 'security'],
-    e2e: ['expanded-gameplay', 'expanded-smoke', 'long-text', 'next-long-text', 'reward-motions', 'rewards', 'screens'],
+    e2e: ['expanded-gameplay', 'expanded-smoke', 'long-text', 'next-input-share', 'next-long-text', 'reward-motions', 'rewards', 'screens'],
   },
   {
     pattern: /^src\/ui\/(?:[\w-]+\/)*[\w-]+\.(?:ts|css)$/,
     label: 'user interface', unit: ['controls-model', 'i18n', 'reward-motions', 'reward-panel', 'share', 'shopkeeper-panel', 'stand-step'], integration: ['screens', 'security'],
-    e2e: ['expanded-gameplay', 'expanded-smoke', 'long-text', 'next-long-text', 'reward-motions', 'rewards', 'screens', 'shot-smoke', 'smoke'],
+    e2e: ['expanded-gameplay', 'expanded-smoke', 'long-text', 'next-input-share', 'next-long-text', 'reward-motions', 'rewards', 'screens', 'shot-smoke', 'smoke'],
   },
   {
     pattern: /^src\/audio\/(?:[\w-]+\/)*[\w-]+\.ts$/,
