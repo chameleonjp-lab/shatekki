@@ -1,5 +1,7 @@
 # 屋台の射的ゲーム 要件仕様書
 
+**2026年11月18日の参照先**　9枠正式版から引き継ぐ遊び、36枠の内部試作、追加で作る見た目・操作・音、実機での合格条件は[統合要件仕様書](changes/2026-11-18-integrated-requirements.md)を参照する。作業の順序は[実装計画書](superpowers/plans/2026-11-18-integrated-implementation.md)に示す。以下は11月6日時点の決定記録である。
+
 - 文書版：1.2 / 作成日・最終更新日：2026年11月6日
 - 対象リポジトリ：`chameleonjp-lab/shatekki`
 - 公開タイトル：シャテッキ／Shatekki（[初回正式公開の記録](release/official-v1.md)）。

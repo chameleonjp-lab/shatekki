@@ -1,6 +1,6 @@
-# Claude Codeへ渡す開始指示（検証反映版）
+# 旧体制の記録　Claude Code向け開始指示
 
-計画修正PRをマージした後、Opus 5.5を希望するClaude Codeセッションへ渡す。文書保存だけではチーム・課金・実装・公開を開始しない。
+2026年11月18日以降はChatGPTが見た目・音を含む全工程を担当する。現在の開始手順は[実装計画書](superpowers/plans/2026-11-18-integrated-implementation.md)にまとめた。以下は過去の計画で用意した依頼文である。
 
 ```text
 対象：chameleonjp-lab/shatekki
