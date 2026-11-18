@@ -57,4 +57,6 @@ ChatGPTがゲームと見た目を一緒に実装し、共有コードの統合�
 
 [実装の基準](docs/architecture/implementation-baseline.md)・[一射の処理設計](docs/architecture/shot-pipeline.md)・[公開前の確認と承認事項](docs/release/approval-request.md)も保存しています。
 
+## 36枠内部版の起動
 
+保存試験版 r004 は `npm run build:save-trial && npm run preview:save-trial` で起動します（4176番）。ホームに対象のルール番号を表示します。

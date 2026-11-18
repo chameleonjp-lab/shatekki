@@ -103,3 +103,6 @@ DB登録案はプロジェクト `mlpnjgezrnhdxsxolyzj` の `public.games` に�
 
 [既存の公開・登録の確認書](approval-request.md)と[元の申し送り](../handoff/to-chatgpt/2026-11-06-0010-claude-prototype-values-and-set-odds.md)の判断事項を引き継ぐ。今回の「後続対応を整理して実施」は、可逆な修正・検査・PR提出の指示として実行し、ゲームルールの新規採用、外部公開、DB変更、追加費用の承認には広げていない。
 
+## 内部版の起動確認
+
+S00（07c7a13）で正式版と r001〜r004 のカタログを照合。402×874・375×600 の Chromium で正式版9枠と r004 の36枠を確認した。

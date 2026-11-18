@@ -41,6 +41,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:save-trial' : 'npm run build:save-trial && npm run preview:save-trial',
+      url: 'http://127.0.0.1:4176',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
   ],
   projects: [
     {

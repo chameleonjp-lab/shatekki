@@ -1,0 +1,9 @@
+{
+  "expanded-save-trial": {
+    "rulesVersion": "rules-v2-proposed-r004",
+    "persistence": "atomic",
+    "transformPolicy": "preserve-center",
+    "clock": "frame",
+    "presentation": "confirmed-static"
+  }
+}
