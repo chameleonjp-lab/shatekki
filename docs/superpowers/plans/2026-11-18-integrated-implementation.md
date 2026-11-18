@@ -40,9 +40,11 @@
 | r005 ／ `expanded-placement-trial` | 一括保存・支持した底を保持・従来の時計 | `dist-placement-trial` ／ 4177 ／ `internal-placement-trial-dist` |
 | r006 ／ `expanded-next` | 一括保存・支持した底を保持・固定刻みの時計 | `dist-next` ／ 4178 ／ `internal-next-dist` |
 
-- [ ] 現行 `official-v1`・r001・r002・r003の件数・ルール版・公開時の入口を保存する。r004が選べず失敗する試験を書き、`src/contracts/expansion.ts` と `getGameplayBundle`、起動入口、実行コマンドを順に追加する。r005はS03、r006はS05で登録する。
-- [ ] 各版を加えるPRで `playwright.config.ts` と `.github/workflows/ci.yml` の組立・保管・取得をそろえる。指定した内部ポートで版を識別でき、通常起動は9枠、URLや旧保存値で内部版に変わらないことを確認する。
-- [ ] `npm run test:unit -- tests/unit/app-bundle.test.ts tests/unit/gameplay-bundle.test.ts`（後者は新規）、`npm run typecheck`、`node --test tests/ci/plan.test.mjs tests/ci/browser-env.test.mjs`。公開用 `npm run build` と該当する `build:save-trial` 等を実行し、版・成果物・試験件数を残す。
+- [x] 現行 `official-v1`・r001・r002・r003の件数・ルール版・公開時の入口を保存する。r004が選べず失敗する試験を書き、`src/contracts/expansion.ts` と `getGameplayBundle`、起動入口、実行コマンドを順に追加する。r005はS03、r006はS05で登録する。
+- [x] 各版を加えるPRで `playwright.config.ts` と `.github/workflows/ci.yml` の組立・保管・取得をそろえる。指定した内部ポートで版を識別でき、通常起動は9枠、URLや旧保存値で内部版に変わらないことを確認する。
+- [x] `npm run test:unit -- tests/unit/app-bundle.test.ts tests/unit/gameplay-bundle.test.ts`（後者は新規）、`npm run typecheck`、`node --test tests/ci/plan.test.mjs tests/ci/browser-env.test.mjs`。公開用 `npm run build` と該当する `build:save-trial` 等を実行し、版・成果物・試験件数を残す。
+
+検証記録　07c7a13。旧版とのカタログ比較と2寸法の通常起動は PR #26 の CI で成功。
 
 ## S01　端末内の保存を一括で確定する（R01〜R05）
 
@@ -64,9 +66,11 @@
 
 ## S03　棚を支点に品替えする（R06・R11）
 
-- [ ] 新規 `src/sim/transform-placement.ts` の `candidateTransformPose` と `src/sim/transform-plan.ts` に、回転を含む外接箱の底と支持面の検査を追加する。棚との水平範囲と下端の許容差0.01mを使う。支持不明・落下中は元の姿勢、候補が上棚・隣の全運動範囲と重なる場合は延期する。
-- [ ] `src/sim/world.ts`・`src/sim/motion.ts`・`src/contracts/game.ts`・`src/view/prizes.ts` で、同じ決定後の姿勢を物理・表示・保存に渡す。旧運動の種類・位相と新品種の形を区別し、揺れ一周期の最大幅、復帰時の基準姿勢、塞がった枠をすべての景品で判定する。新規補充だけ新しい動きにする。現行の `src/core/expanded-settlement.ts` の `refillCatalog` はシリーズ外の種類を除き、`src/core/replenish.ts` の `isSlotBlocked` は種類が見つからない景品を飛ばす。r005以降の補充には全カタログを渡し、抽選だけを既存の `candidateTypeIds` で絞る。別シリーズの景品が残れば補充を延期し、空いてから1回補充する。
-- [ ] r005をS00の手順で登録する。`npm run test:unit -- tests/unit/expanded-transforms.test.ts`、`npm run test:integration -- tests/integration/transform-bottom.test.ts tests/integration/expanded-layout-world.test.ts`（`transform-bottom.test.ts` は新規）。高さ・幅違い、傾き、異周期、再開、候補が全て入らない例で一致・延期を確認し、旧版の中心固定も回帰確認する。
+- [x] 新規 `src/sim/transform-placement.ts` の `candidateTransformPose` と `src/sim/transform-plan.ts` に、回転を含む外接箱の底と支持面の検査を追加する。棚との水平範囲と下端の許容差0.01mを使う。支持不明・落下中は元の姿勢、候補が上棚・隣の全運動範囲と重なる場合は延期する。
+- [x] `src/sim/world.ts`・`src/sim/motion.ts`・`src/contracts/game.ts`・`src/view/prizes.ts` で、同じ決定後の姿勢を物理・表示・保存に渡す。旧運動の種類・位相と新品種の形を区別し、揺れ一周期の最大幅、復帰時の基準姿勢、塞がった枠をすべての景品で判定する。新規補充だけ新しい動きにする。現行の `src/core/expanded-settlement.ts` の `refillCatalog` はシリーズ外の種類を除き、`src/core/replenish.ts` の `isSlotBlocked` は種類が見つからない景品を飛ばす。r005以降の補充には全カタログを渡し、抽選だけを既存の `candidateTypeIds` で絞る。別シリーズの景品が残れば補充を延期し、空いてから1回補充する。
+- [x] r005をS00の手順で登録する。`npm run test:unit -- tests/unit/expanded-transforms.test.ts`、`npm run test:integration -- tests/integration/transform-bottom.test.ts tests/integration/expanded-layout-world.test.ts`（`transform-bottom.test.ts` は新規）。高さ・幅違い、傾き、異周期、再開、候補が全て入らない例で一致・延期を確認し、旧版の中心固定も回帰確認する。
+
+検証記録　324e675 の外接箱・運動・復帰・シリーズ外による補充延期試験と、PR #28 の c506776 で通常起動・一射・再開が成功。
 
 ## S04　屋台・補給装置・画面・演出・音を制作する（R07・R08・R15）
 

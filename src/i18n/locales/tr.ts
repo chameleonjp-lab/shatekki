@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const TR: Record<UiKey, string> = {
+  "save.chooseRun": "Kayıtlı bir oyun seçin",
+  "save.normalRun": "Normal tezgâh",
+  "save.dailyRun": "{date} tezgâhı (Japonya saati)",
   "save.legacyDailyBest": "Önceki rekor (tarih bilinmiyor): {score} puan",
   "save.quota": "Yeterli depolama alanı yok.",
   "save.pending": "Kaydediliyor…",

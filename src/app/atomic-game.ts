@@ -38,7 +38,7 @@ export class AtomicGame {
     this.records.set(this.source(record.scope), record);
   }
 
-  async open(): Promise<PersistedRecord | null> {
+  async open(): Promise<PersistedRecord[]> {
     this.memory = false;
     this.unreadable = false;
     this.records.clear();
@@ -56,8 +56,8 @@ export class AtomicGame {
       return record;
     }));
     this.shelf = await this.repo.readShelf();
-    this.record = rows.find(record => record && (record.result === null || record.resultViewOpen)) ?? null;
-    return this.record;
+    this.record = null;
+    return rows.filter((record): record is PersistedRecord => record !== null && (!record.result || record.resultViewOpen));
   }
 
   useMemory(): void {

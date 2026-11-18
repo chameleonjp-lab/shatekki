@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const TH: Record<UiKey, string> = {
+  "save.chooseRun": "เลือกเกมที่บันทึกไว้",
+  "save.normalRun": "แผงปกติ",
+  "save.dailyRun": "แผงประจำวันที่ {date} (เวลาญี่ปุ่น)",
   "save.legacyDailyBest": "สถิติเดิม (ไม่ทราบวันที่): {score} คะแนน",
   "save.quota": "พื้นที่จัดเก็บไม่เพียงพอ",
   "save.pending": "กำลังบันทึก…",

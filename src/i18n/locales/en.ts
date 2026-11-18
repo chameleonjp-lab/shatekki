@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const EN: Record<UiKey, string> = {
+  "save.chooseRun": "Choose a saved game",
+  "save.normalRun": "Regular stall",
+  "save.dailyRun": "Stall for {date} (Japan time)",
   "save.legacyDailyBest": "Previous record (date unknown): {score} points",
   "save.quota": "There isn’t enough free storage.",
   "save.pending": "Saving…",

@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const VI: Record<UiKey, string> = {
+  "save.chooseRun": "Chọn ván đã lưu",
+  "save.normalRun": "Gian hàng thường",
+  "save.dailyRun": "Gian hàng ngày {date} (giờ Nhật Bản)",
   "save.legacyDailyBest": "Kỷ lục cũ (không rõ ngày): {score} điểm",
   "save.quota": "Không đủ dung lượng lưu trữ.",
   "save.pending": "Đang lưu…",

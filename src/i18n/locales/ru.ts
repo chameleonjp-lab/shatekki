@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const RU: Record<UiKey, string> = {
+  "save.chooseRun": "Выберите сохранённую игру",
+  "save.normalRun": "Обычный тир",
+  "save.dailyRun": "Тир за {date} (по японскому времени)",
   "save.legacyDailyBest": "Предыдущий рекорд (дата неизвестна): {score} очк.",
   "save.quota": "Недостаточно свободного места.",
   "save.pending": "Сохранение…",
