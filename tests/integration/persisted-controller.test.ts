@@ -70,3 +70,24 @@ it('retries the same complete settlement without running physics or resolving tw
   expect(c.current.ledger).toHaveLength(1);
   world.dispose();
 });
+
+it('holds an acknowledged fire while rotated and only launches after an explicit resume', async () => {
+  const {repo,controller:c,world,fire} = await setup();
+  let allow!: () => void;
+  const pending = new Promise<void>(resolve => {allow = resolve;});
+  const save = repo.saveCommand.bind(repo);
+  vi.spyOn(repo,'saveCommand').mockImplementationOnce(async input => {
+    await pending;
+    return save(input);
+  });
+  const action = c.dispatchPersisted({type:'FIRE'});
+  c.setEnvironmentPause(['landscape']);
+  allow();
+  expect(await action).toBe('applied');
+  c.setEnvironmentPause([]);
+  expect(c.current.pauseReasons).toEqual(['manual']);
+  expect(fire).not.toHaveBeenCalled();
+  await c.dispatchPersisted({type:'RESUME', reason:'manual'});
+  expect(fire).toHaveBeenCalledTimes(1);
+  world.dispose();
+});
