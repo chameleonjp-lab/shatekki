@@ -64,7 +64,7 @@ import type {
   TuningConfig,
   Vec3,
 } from '../contracts';
-import { ballisticForModifiers, mintId } from '../contracts';
+import { REWARD_TARGET_HALF_THICKNESS, ballisticForModifiers, mintId } from '../contracts';
 import { MAX_POWER_MULTIPLIER, nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
@@ -182,7 +182,6 @@ const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y,
 export const REWARD_TARGET_SURFACE_ID = 'reward-target';
 export const REWARD_CHIME_SURFACE_ID = 'reward-chime';
 export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
-const REWARD_TARGET_HALF_THICKNESS = 0.006;
 
 /** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
 export interface ShotWorldOptions {

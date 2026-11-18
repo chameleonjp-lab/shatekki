@@ -41,6 +41,9 @@ export interface RewardConfig {
   readonly lanterns: { readonly amount: number; readonly zones: readonly (readonly [number, number])[] };
 }
 
+/** Half the physical depth of the A5 disc (m), along z. */
+export const REWARD_TARGET_HALF_THICKNESS = 0.006;
+
 /** Where the A5 target sits, fixed when the stand is confirmed. Faces the player (+z). */
 export interface RewardTargetGeometry {
   readonly center: Vec3;

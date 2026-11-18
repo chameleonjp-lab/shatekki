@@ -986,7 +986,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           ...(rewardCfg
             ? {
                 describeReward: (o) => {
-                  const l = expandedUi.rewardLine(o, expText);
+                  const l = expandedUi.rewardLine(o, expText, illustratedRewards);
                   return { sourceLabel: expText('reward.card.title'), name: l.name, text: l.text, note: null, applied: l.granted > 0 };
                 },
                 bestShot: (r) => expandedUi.bestShotOf(r),
