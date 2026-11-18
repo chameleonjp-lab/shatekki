@@ -28,11 +28,11 @@ async function play(dateMs: number, locale: 'ja' | 'en' | 'th', displayDt: numbe
   const b = getGameplayBundle('expanded-next');
   const { date, seed } = dailyStart(dateMs, b.catalog.rulesVersion);
   const initial = createExpandedRun({ seed, runId: mintId.run(`daily-${locale}-${displayDt}`), tuning: b.tuning, playerName: null }, { ...b, expansion: b.expansion! });
-  const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfigOf(b.expansion)) });
+  const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfigOf(b.expansion)), transformPolicy: b.behavior?.transformPolicy });
   const shots: unknown[] = [];
   const questions: string[] = [];
   const renderedText: string[] = [];
-  const c = new GameController({ ...b, rules: CORE_RULES, clockPolicy: b.behavior?.clock, world, renderer: null,
+  const c = new GameController({ ...b, rules: CORE_RULES, clockPolicy: b.behavior?.clock, transformPolicy: b.behavior?.transformPolicy, world, renderer: null,
     onShotSettled(summary, state) {
       shots.push({ tick: c.gameTick, score: state.score, ammo: state.ammo, collected: summary.collected, sets: state.completedSets,
         rng: state.expansion?.rng, draw: state.draw, effects: summary.effects, ledger: summary.ledger, poses: state.shelf });

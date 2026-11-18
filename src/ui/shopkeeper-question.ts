@@ -39,6 +39,8 @@ export interface QuestionPanelContent {
 export interface QuestionPanelDeps {
   /** Return false when the command was rejected (the panel then re-enables). */
   onAnswer(command: AnswerShopkeeperCommand): boolean | void | Promise<boolean>;
+  /** Explicitly resume after returning from landscape or another app. */
+  onResume?(): void;
   /** UI strings (shopq.*). */
   t(key: string, params?: Readonly<Record<string, string | number>>): string;
 }
@@ -47,7 +49,7 @@ export interface QuestionPanelHandle {
   show(content: QuestionPanelContent): void;
   hide(): void;
   /** Dims the panel and shows the paused note. Never lifts the pause itself. */
-  setPaused(paused: boolean): void;
+  setPaused(paused: boolean, canResume?: boolean): void;
   /** True while the panel is visible. */
   isShown(): boolean;
   /** True once an answer was accepted for the shown question. */
@@ -128,6 +130,14 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     ranges[c] = range;
   }
   card.append(titleEl, body, choicesEl);
+  const resume = mk('button', 'btn btn-primary');
+  resume.type = 'button';
+  resume.dataset.testid = 'shopq-resume';
+  resume.hidden = true;
+  if (deps.onResume) {
+    card.appendChild(resume);
+    resume.onclick = deps.onResume;
+  }
   overlay.appendChild(card);
   root.appendChild(overlay);
 
@@ -254,7 +264,11 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
       overlay.hidden = true;
       refresh();
     },
-    setPaused(p) {
+    setPaused(p, canResume = false) {
+      if (deps.onResume) {
+        resume.hidden = !p || !canResume;
+        if (!resume.hidden) resume.textContent = deps.t('btn.resume');
+      }
       if (paused === p) return;
       paused = p;
       downOn = null;

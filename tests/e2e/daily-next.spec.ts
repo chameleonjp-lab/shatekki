@@ -50,7 +50,7 @@ test('the previous JST stall resumes after midnight, pauses a question on rotati
   await answer.dispatchEvent('pointerup', { pointerId: 1, isPrimary: true });
   await page.setViewportSize(portrait);
   await expect(question).toHaveAttribute('data-paused', '1');
-  await page.getByTestId('btn-resume').click();
+  await page.getByTestId('shopq-resume').click();
   await expect(answer).toHaveText(text!);
   await answer.click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });

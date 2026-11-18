@@ -207,6 +207,7 @@ export class GameController {
     if (after === before) return 'rejected';
     const operationId = cmd.type === 'FIRE' ? `${after.runId}/${after.shotsFired}/fire`
       : `${after.runId}/${session.record.token.revision + 1}/${cmd.type}`;
+    this.clock?.advance(0, true);
     return session.command(after, operationId, this.gameTick, (reply) => {
       if (reply.replayed) return this.replay(reply.record);
       this.state = {...reply.record.state, pauseReasons: this.state.pauseReasons};
@@ -245,6 +246,7 @@ export class GameController {
     const before = this.state;
     const after = this.deps.rules.reduceGame(before, command, this.ctx);
     if (after === before) return command.type === 'SKIP_PRESENTATION';
+    if (command.type === 'PAUSE') this.clock?.advance(0, true);
     this.state = after;
     return this.finishCommand(command, before, after);
   }

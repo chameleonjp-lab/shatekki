@@ -56,7 +56,7 @@ import { mountHome } from './ui/home';
 import { mountResult, type LastShotInput, type ResultTextOptions } from './ui/result';
 import { setDisplayName } from './ui/set-book';
 import { rewardDevicesFor } from './core/rewards';
-import { dailySeed, jstDateOf } from './core/daily';
+import { dailyStart, jstDateOf } from './core/daily';
 import { createSouvenirStore } from './persistence/souvenirs';
 import { mountSouvenirShelf, type SouvenirShelfHandle } from './ui/souvenir-shelf';
 import { mountSetBook, setBookEntriesFromCatalog } from './ui/set-book';
@@ -410,7 +410,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         shownQuestion = '';
         questionPanel.hide();
       }
-      questionPanel.setPaused(snap.view.paused);
+      questionPanel.setPaused(snap.view.paused, !reasons.length && !controller?.persistencePending);
     }
     // The overview is display only; a few updates per second are enough on a phone.
     const now = win.performance.now();
@@ -509,6 +509,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       questionPanel = expandedUi.createShopkeeperQuestionPanel(ui, {
         t: expText,
         onAnswer: uiCommand,
+        onResume: bundle.behavior?.clock === 'fixed' ? () => {
+          if (!reasons.length) void uiCommand({ type: 'RESUME', reason: 'manual' });
+        } : undefined,
       });
       effectResults = expandedUi.mountEffectResults(ui, {
         t: expText,
@@ -801,8 +804,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         let seed = newSeed(win);
         let scope: RunScope | undefined = atomic?.scope(mode);
         if (mode === 'daily') {
-          const date = jstDateOf(Date.now());
-          seed = dailySeed(date, catalog.rulesVersion);
+          const { date, seed: stallSeed } = dailyStart(Date.now(), catalog.rulesVersion);
+          seed = stallSeed;
           if (atomic) scope = atomic.scope(mode, date);
           else try {
             modeStorage.setItem(DAILY_DATE_KEY, date);
