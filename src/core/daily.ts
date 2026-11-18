@@ -29,3 +29,10 @@ export function dailySeed(date: string, rulesVersion: string): number {
 export function dailyKeys(rulesVersion: string): { readonly run: string; readonly meta: string; readonly profileVersion: string } {
   return { run: `shatekki.run.${rulesVersion}.daily`, meta: `shatekki.daily.${rulesVersion}`, profileVersion: `${rulesVersion}@daily` };
 }
+
+/** Capture the JST date once when starting a game. A resume uses the scope
+ * saved alongside the checkpoint, including after local midnight. */
+export function dailyStart(instantMs: number, rulesVersion: string) {
+  const date = jstDateOf(instantMs);
+  return { date, seed: dailySeed(date, rulesVersion) };
+}

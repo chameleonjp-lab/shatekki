@@ -53,6 +53,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:next' : 'npm run build:next && npm run preview:next',
+      url: 'http://127.0.0.1:4178',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
   ],
   projects: [
     {

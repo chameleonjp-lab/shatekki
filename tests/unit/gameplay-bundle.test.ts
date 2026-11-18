@@ -11,6 +11,7 @@ it.each([
   ['expanded-full', 'rules-v2-proposed-r003', 36, 10],
   ['expanded-save-trial', 'rules-v2-proposed-r004', 36, 10],
   ['expanded-placement-trial', 'rules-v2-proposed-r005', 36, 10],
+  ['expanded-next', 'rules-v2-proposed-r006', 36, 10],
 ] as const)('loads the fixed catalog for %s at the build entry', async (key, version, slots, rewards) => {
   vi.stubEnv('VITE_SHATEKKI_BUNDLE', key);
   expect(resolveBundleKey(key)).toBe(key);
