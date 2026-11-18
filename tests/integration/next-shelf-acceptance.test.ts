@@ -154,3 +154,51 @@ it('r006 load timing changes the actual damage and initial recoil at the same ai
   expect(perfect.damage).toBeGreaterThan(weak.damage);
   expect(perfect.recoil).toBeGreaterThan(weak.recoil);
 });
+
+it('r006 awards one prize when two reflected split corks strike the same instance on the same tick', async () => {
+  const upper = layout.tiers[2]!;
+  const base = prizeAt('slot-r1-c01', 'P062', 1);
+  const top = prizeAt('slot-r1-c02', 'P082', 2);
+  // Two prizes overlap at their touching faces near the upper board's back-left corner.
+  const foundation = { ...base, mounted: false, pose: { ...base.pose,
+    position: { x: -2.54, y: upper.topY + 0.045, z: -2.22 },
+  } };
+  const piano = { ...top, mounted: false, pose: { ...top.pose,
+    position: { x: -2.63, y: upper.topY + 0.09 + 0.09, z: -2.27 },
+  } };
+  const { game, world, summaries } = await setup([foundation, piano]);
+  try {
+    const stand = layout.camera.standMinX;
+    game.dispatch({ type: 'SET_POSITION', x: stand });
+    game.dispatch({ type: 'CONFIRM_POSITION' });
+    game.dispatch({ type: 'STOP_LOAD' });
+    const plate = layout.devices.find(device => device.kind === 'split')!;
+    const center = plate.box.center;
+    const target = { x: center.x + 0.07, y: center.y - 0.055, z: center.z + 0.02 };
+    game.dispatch({ type: 'AIM', ...aimAt(bundle, stand, target, 'standard') });
+    expect(game.dispatch({ type: 'FIRE' })).toBe(true);
+    const hitTicks: number[] = [];
+    for (let frame = 0; frame < 2000 && game.current.phase === 'resolving'; frame++) {
+      game.frame(step);
+      for (const event of game.snapshot().frame.events) {
+        if (event.type === 'impact' && event.target.kind === 'prize' && event.target.instanceId === piano.instanceId) {
+          hitTicks.push(game.gameTick);
+        }
+      }
+    }
+    expect(summaries).toHaveLength(1);
+    const summary = summaries[0]!;
+    expect(summary.devicesActivated).toEqual([plate.deviceId]);
+    const hits = summary.prizeOutcomes.find(p => p.instanceId === piano.instanceId)!.hits;
+    expect(hits).toHaveLength(2);
+    expect(new Set(hits.map(hit => hit.projectileId)).size).toBe(2);
+    expect(hits.every(hit => hit.generation === 1 && hit.reflectionIndex > 0)).toBe(true);
+    expect(hitTicks).toHaveLength(2);
+    expect(hitTicks[0]).toBe(hitTicks[1]);
+    expect(summary.collected.filter(p => p.instanceId === piano.instanceId)).toHaveLength(1);
+    const entries = summary.ledger.items.filter(item => item.kind === 'prize' && item.refId === piano.instanceId);
+    expect(entries).toEqual([{ kind: 'prize', refId: piano.instanceId, points: catalog.prizes.get(piano.typeId)!.baseScore }]);
+  } finally {
+    world.dispose();
+  }
+});
