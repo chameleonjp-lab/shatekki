@@ -24,7 +24,8 @@ function longestPanel(locale: Locale) {
   throw Error('No matching first question: ' + longest.id);
 }
 
-test.use({ baseURL: 'http://127.0.0.1:4178' });
+const candidateUrl = process.env.SHATEKKI_NEXT_TEST_ORIGIN ?? 'http://127.0.0.1:4178';
+test.use({ baseURL: candidateUrl });
 
 for (const locale of LOCALES) {
   test(`${locale}: read the longest question and tap through it on r006`, async ({ page }) => {
@@ -123,7 +124,7 @@ test('result, reason, share and replay in all 15 locales on the same settled gam
         Object.defineProperty(navigator, 'clipboard', { value: undefined });
       }, locale);
       const result = await next.newPage();
-      await result.goto('http://127.0.0.1:4178/');
+      await result.goto(candidateUrl + '/');
       await expect(result.locator('#app')).toHaveAttribute('data-rules-version', 'rules-v2-proposed-r006');
       await expect(result.locator('html')).toHaveAttribute('lang', locale);
       await expect(result.getByTestId('result-score')).toBeVisible();
