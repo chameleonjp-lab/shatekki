@@ -307,6 +307,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let effectResults: ReturnType<ExpandedUiKit['mountEffectResults']> | null = null;
   // Rewards (r002+): order card, progress strip and the per-shot reward card.
   let rewardPanel: ReturnType<ExpandedUiKit['mountRewardPanel']> | null = null;
+  const illustratedRewards = bundle.behavior?.presentation === 'confirmed-motions';
+  let rewardMotions: ReturnType<ExpandedUiKit['mountRewardMotions']> | null = null;
   let firedWithLastCork = false;
   let mapUpdatedAt = -Infinity;
   let shownQuestion = '';
@@ -320,6 +322,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let starting = false;
 
   const setScreen = (s: Screen) => {
+    if (s !== 'game') {
+      rewardMotions?.clear();
+      effectResults?.hide();
+      rewardPanel?.hideCard();
+    }
     screen = s;
     root.dataset.screen = s;
     ui.hidden = s !== 'game';
@@ -430,7 +437,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       case 'STOP_LOAD':
         // P5 (rewards versions): the latch sounds at the same moment as the perfect-load sound.
         if (rewardCfg && s?.load?.tier === 'perfect') {
-          cue('critLatch');
+          if (!illustratedRewards) cue('critLatch');
           if (atomic) return;
         }
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
@@ -476,6 +483,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     boothMap = null;
     effectResults?.destroy();
     effectResults = null;
+    rewardMotions?.destroy();
+    rewardMotions = null;
     rewardPanel?.destroy();
     rewardPanel = null;
     if (expansion && expandedUi) {
@@ -503,6 +512,20 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           prizeName: (typeId) => prizeName(i18n.locale, typeId),
           onOrder: (accept) => uiCommand({type:'ORDER', accept}),
         });
+        if (illustratedRewards) {
+          rewardMotions = expandedUi.mountRewardMotions(ui, {
+            cue,
+            card: (input, event) => {
+              effectResults?.show(event.summary);
+              rewardPanel?.showShot({
+                ...input,
+                staticCard: event.replayed || event.reducedMotion,
+                setName: id => setDisplayName(i18n.locale, String(id), expText) || String(id),
+                setMembers: id => catalog.sets.get(id)?.requiredTypeIds ?? [],
+              });
+            },
+          });
+        }
       }
       mapUpdatedAt = -Infinity;
     }
@@ -517,7 +540,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     try {
       renderer = view.createThreeRenderer(canvas, {
         layout,
-        ...(expansion ? { expanded: { catalog, expansion, translate: expText, prizeName: (typeId) => prizeName(i18n.locale, typeId) } } : {}),
+        ...(expansion ? { expanded: { catalog, expansion, illustratedRewards, translate: expText, prizeName: (typeId) => prizeName(i18n.locale, typeId) } } : {}),
         corkRadius: tuning.cork.radius,
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
         // Miss / near-miss are decided only after settlement (AC27).
@@ -610,6 +633,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         tuning,
         layout,
         expansion,
+        onConfirmed: event => rewardMotions?.presentRewardMotion({
+          ...event, reducedMotion: event.reducedMotion || (event.kind === 'shot' && controller?.skipRequested === true),
+        }),
         ...(session ? {session, onReplayed: showSavedRecord, reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false} : {}),
         transformPolicy: bundle.behavior?.transformPolicy,
         onChange,
@@ -618,6 +644,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
+          rewardMotions?.clear();
           effectResults?.hide();
           rewardPanel?.hideCard();
           firedWithLastCork = s.ammo === 0;
@@ -634,6 +661,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (cmd.type === 'STOP_LOAD' || cmd.type === 'ORDER') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
+          if (illustratedRewards) {
+            if (s.phase === 'ended') onRunEnded(s, summary);
+            return;
+          }
           effectResults?.show({ effects: summary.effects, deferredTransforms: summary.deferredTransforms });
           // One coalesced cue for what the post-flight effects did (expanded rules only).
           const effectCue = effectCueFor(summary.effects);
@@ -782,6 +813,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       controller.setEnvironmentPause(reasons);
       setScreen('game');
       mountPanel();
+      const record = session?.record;
+      if (opts.resume && record?.lastSummary && !record.state.inFlight) {
+        rewardMotions?.presentRewardMotion({
+          kind: 'shot', runId: record.state.runId, shotId: record.lastSummary.shotId,
+          summary: record.lastSummary, freshSets: record.lastFreshSets, ammoBeforeShot: record.ammoBeforeShot,
+          replayed: true, reducedMotion: true,
+        });
+      }
       root.dataset.started = 'true';
       notice.hidden = true;
       if (atomic?.memory || atomic?.unreadable) {
@@ -1108,6 +1147,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       root.removeEventListener('keydown', unlockAudio, { capture: true });
       clearScreen();
       bookHandle?.dispose();
+      rewardMotions?.destroy();
+      rewardPanel?.destroy();
+      effectResults?.destroy();
+      questionPanel?.destroy();
+      boothMap?.destroy();
       panel?.dispose();
       renderer?.dispose();
       world?.dispose();
