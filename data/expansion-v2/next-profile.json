@@ -12,5 +12,12 @@
     "transformPolicy": "preserve-supported-bottom",
     "clock": "frame",
     "presentation": "confirmed-static"
+  },
+  "expanded-next": {
+    "rulesVersion": "rules-v2-proposed-r006",
+    "persistence": "atomic",
+    "transformPolicy": "preserve-supported-bottom",
+    "clock": "fixed",
+    "presentation": "confirmed-motions"
   }
 }

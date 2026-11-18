@@ -39,7 +39,7 @@ function behaviorFor(key: keyof typeof nextProfiles): GameplayBehavior {
 export const EXPANSION_RAW_DATA = { pairSets, questions, groups, effects, series, profile } as const;
 
 /** Internal prototype keys, each an exact build-time value. */
-export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial'] as const;
+export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next'] as const;
 export type ExpandedBundleKey = (typeof EXPANDED_BUNDLE_KEYS)[number];
 
 /**
