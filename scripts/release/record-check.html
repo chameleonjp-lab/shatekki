@@ -17,10 +17,15 @@ const baselineKey = 'preview-check:' + version.commit;
 const runKey = 'shatekki.run.rules-v2-proposed-r003';
 const output = document.querySelector('output');
 // Compare the protected keys, including keys that were absent when we started.
-const keys = ['shatekki.run.v1', runKey, 'shatekki.profile.v1', 'shatekki.profile.v2',
+const protectedKeys = ['shatekki.run.v1', runKey, 'shatekki.profile.v1', 'shatekki.profile.v2',
   'shatekki.settings.v1', 'shatekki.player-name.v1', 'shatekki.ranking-pending.v1',
   'shatekki.quarantine.v1', 'shatekki.ranking-done.v1', 'shatekki.ranking-pending-quarantine.v1'];
 async function snapshot() {
+  const keys = new Set(protectedKeys);
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('shatekki.')) keys.add(key);
+  }
   const records = {};
   for (const key of keys) {
     const raw = localStorage.getItem(key);
@@ -49,6 +54,7 @@ document.querySelector('#compare').onclick = async () => {
     const baseline = JSON.parse(sessionStorage.getItem(baselineKey));
     if (!baseline) throw Error('このタブに比較前の控えがありません。');
     const now = await snapshot();
+    const keys = [...new Set([...Object.keys(baseline), ...Object.keys(now)])].sort();
     output.textContent = keys.map(k => (baseline[k] === now[k] ? '一致　' : '差異　') + k).join('\n');
   } catch (e) { output.textContent = String(e.message || e); }
 };
