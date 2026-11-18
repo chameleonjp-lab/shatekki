@@ -472,7 +472,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       dispatch: (cmd) => uiCommand(cmd as GameCommand),
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
-      onRetry: () => { if (!atomic) void startRun({ name: runName }); },
+      onRetry: () => {
+        if (atomic) void leaveResult(true);
+        else void startRun({ name: runName });
+      },
       ...(expansion ? { stand: standRangeOf(layout) } : {}),
     });
     questionPanel?.destroy();
@@ -601,6 +604,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     // Let the last settle presentation play briefly before the result screen.
     win.setTimeout(() => {
       if (disposed || screen !== 'game' || controller?.current.runId !== state.runId) return;
+      if (atomic && (!atomic.record?.resultViewOpen || !recovery.hidden)) return;
       showResult(result, selfBestBefore, newBest, lastShot);
     }, 900);
   };
