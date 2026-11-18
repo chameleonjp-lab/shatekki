@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
+import { computeWeights, createDrawState } from '../../src/catalog/draw';
 import { completedSetsFor } from '../../src/catalog/sets';
 import { mintId, type PrizeTypeId } from '../../src/contracts';
 import { createExpandedRun } from '../../src/core/expanded-run';
@@ -60,4 +61,34 @@ it('CH-AC11,13,18,20: both choices have distinct real effect pools and new runs 
     expect(state.expansion.cells).toHaveLength(36);
   }
   expect(starts[0]!.expansion.questionOrder).not.toEqual(starts[1]!.expansion.questionOrder);
+});
+
+it('AC12: r006 keeps repeats possible while correcting tier and kind bias on the 36-slot shelf', () => {
+  const { tuning } = candidate;
+  const neutral = { ...tuning, draw: { ...tuning.draw, recentPenalty: 1 } };
+  const countRecent = (seed: number, settings: typeof tuning) => {
+    const run = createExpandedRun({ runId: mintId.run('draw-' + seed), seed, playerName: null, tuning: settings },
+      { ...candidate, tuning: settings, expansion });
+    const ids = run.shelf.prizes.map(p => p.typeId);
+    expect(ids).toHaveLength(36);
+    return ids.filter((id, i) => ids.slice(Math.max(0, i - settings.draw.historyWindow), i).includes(id)).length;
+  };
+  let penalized = 0, unpenalized = 0;
+  for (let i = 1; i <= 24; i++) {
+    penalized += countRecent(i * 7919, tuning);
+    unpenalized += countRecent(i * 7919, neutral);
+  }
+  expect(penalized).toBeGreaterThan(0);
+  expect(penalized).toBeLessThan(unpenalized);
+
+  const pool = [...catalog.prizes.values()];
+  const easy = pool.find(p => p.difficulty === 'easy')!.typeId;
+  const shelf = Array<PrizeTypeId>(36).fill(easy);
+  const weights = computeWeights(catalog, createDrawState(7919), shelf, tuning);
+  const unseenEasy = weights.find(w => w.typeId !== easy && catalog.prizes.get(w.typeId)!.difficulty === 'easy')!;
+  const hard = weights.find(w => catalog.prizes.get(w.typeId)!.difficulty === 'hard')!;
+  expect(weights.every(w => w.weight > 0)).toBe(true);
+  expect(hard.weight).toBeGreaterThan(unseenEasy.weight);
+  expect(weights.find(w => w.typeId === easy)!.weight).toBeCloseTo(unseenEasy.weight * tuning.draw.recentPenalty);
+  console.info('r006/24 seeds', { penalized, unpenalized, hard: hard.weight, unseenEasy: unseenEasy.weight });
 });

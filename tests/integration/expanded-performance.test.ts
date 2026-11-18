@@ -16,7 +16,7 @@ import {
   type ShotRecord,
   type Vec3,
 } from '../../src/contracts';
-import { planFor } from './expanded-helpers';
+import { expandedCtx, planFor, runExpanded } from './expanded-helpers';
 
 /**
  * Expanded worst cases (EG10, Node evidence only — NOT an iPhone measurement):
@@ -148,4 +148,35 @@ it('measures the r006 flight ceiling with its single once-per-shot split plate',
   expect(shot.devices.filter(kind => kind === 'split')).toHaveLength(1);
   expect(shot.maxSimultaneousCorks).toBe(4);
   expect(shot.finished).toBe(true);
+});
+
+it('AC43: both split children can reflect from the r006 split plate without activating it a second time', async () => {
+  const candidate = getGameplayBundle('expanded-next');
+  const plate = candidate.layout.devices.find(d => d.kind === 'split')!;
+  const p = plate.box.center;
+  // Test-only return wall and side rails send both children back to the candidate plate.
+  const reflector = { id: 'return-wall', material: 'wood' as const, reflective: true as const,
+    box: { center: { ...p, z: p.z + 0.20 }, halfExtents: { x: 0.3, y: 0.3, z: 0.01 } } };
+  const sideRails = [-1, 1].map(side => ({ ...reflector, id: 'return-rail-' + side,
+    box: { center: { ...p, x: p.x + side * 0.08, z: p.z + 0.1 }, halfExtents: {x:0.01, y:0.3, z:0.11} } }));
+  const layout = { ...candidate.layout, surfaces: [...candidate.layout.surfaces, reflector, ...sideRails] };
+  const world = await createShotWorld(layout, candidate.catalog, candidate.tuning, {
+    transformPolicy: candidate.behavior!.transformPolicy,
+    rewardDevices: rewardDevicesFor(candidate.expansion!.profile.rewards!),
+  });
+  try {
+    const run = runExpanded(world, { shotId: mintId.shot(1), origin: { ...p, z: p.z + 0.10 },
+      direction: { x: 0, y: 0, z: -1 }, bulletType: 'bouncy', load }, expandedCtx());
+    const contacts = run.impacts.filter(e => e.target.kind === 'device' && e.target.deviceId === plate.deviceId);
+    const children = run.events.flatMap(e => e.type === 'projectileSpawned' && e.parentId !== null ? [e.projectileId] : []);
+    expect(children).toHaveLength(2);
+    expect(contacts.filter(e => e.target.kind === 'device' && e.target.activated)).toHaveLength(1);
+    for (const id of children) {
+      const hit = contacts.find(e => e.projectileId === id);
+      expect(hit?.target).toMatchObject({activated:false});
+      expect(run.impacts.some(e => e.projectileId === id && e.reflectionIndex > hit!.reflectionIndex)).toBe(true);
+    }
+    expect(run.record.deviceActivations.filter(d => d.kind === 'split')).toHaveLength(1);
+    console.info('AC43 plate contacts', contacts.map(e => [e.projectileId, e.reflectionIndex]));
+  } finally { world.dispose(); }
 });

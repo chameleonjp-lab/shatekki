@@ -1,8 +1,10 @@
+import { PerspectiveCamera } from 'three';
+import { applyCameraPose, applyFrame, cameraPose, createExpandedView, createSceneGraph, projectToScreen } from '../../src/view';
 import { expect, it } from 'vitest';
 import { GameController } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
-import { BASE_SHOT_MODIFIERS, isAmmoBalanced, isLedgerEntryConsistent, type EffectId, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
+import { BASE_SHOT_MODIFIERS, isAmmoBalanced, isLedgerEntryConsistent, type EffectId, type ImpactEvent, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
 import { rewardDevicesFor } from '../../src/core/rewards';
 import { createShotWorld } from '../../src/sim/world';
 import { aimAt } from '../helpers/aim-at';
@@ -19,7 +21,7 @@ const yaw = (left.yaw + right.yaw) / 2;
 const pitch = aimAt(bundle, stand, {...wall(12), x:wall(12).x + 0.1}, 'standard').pitch;
 const aim = {standX:stand, yaw, pitch, count:3 as const, spreadRad:(right.yaw - left.yaw) / 2};
 
-async function composite(skip: boolean, capped = false) {
+async function composite(skip: boolean, capped = false, viewX = stand) {
   // Pre-shot setup only. The two hits, question, series changes, falls and
   // score are computed by the candidate's rules and its actual Rapier world.
   const start = buildState(bundle, {
@@ -32,13 +34,30 @@ async function composite(skip: boolean, capped = false) {
   const world = await createShotWorld(layout, catalog, tuning, {
     rewardDevices:rewardDevicesFor(expansion!.profile.rewards ?? null), transformPolicy:behavior!.transformPolicy,
   });
+  const camera = new PerspectiveCamera();
+  const width = 402, height = 700;
+  applyCameraPose(camera, cameraPose(layout, viewX, width / height), width / height);
+  const graph = createSceneGraph({ layout, resolvePrize: id => catalog.prizes.get(id)! });
+  const display = createExpandedView({graph, layout, catalog, expansion:expansion!, illustratedRewards:true,
+    translate:key => key, prizeName:id => id});
+  const impacts: ImpactEvent[] = [];
   const confirmed: ShotSummary[] = [];
   const stages: ShotStage[] = [];
-  const c = new GameController({ ...bundle, renderer:null, rules:CORE_RULES, world,
+  const c = new GameController({ ...bundle, rules:CORE_RULES, world,
+    renderer: {
+      render(frame, view) {
+        applyFrame(graph, frame);
+        display.update(frame, view, camera, { width, height });
+      },
+      present: async () => {}, resize: () => {}, dispose: () => graph.dispose(),
+    },
     clockPolicy: behavior!.clock, transformPolicy: behavior!.transformPolicy,
     onShotSettled: summary => confirmed.push(summary),
     onSimEvents: events => {
-      for (const event of events) if (event.type === 'shotStage') stages.push(event.stage);
+      for (const event of events) {
+        if (event.type === 'shotStage') stages.push(event.stage);
+        if (event.type === 'impact') impacts.push(event);
+      }
     },
   }, start);
   try {
@@ -80,8 +99,11 @@ async function composite(skip: boolean, capped = false) {
     expect(c.current.expansion!.active).toBeNull();
     expect(isAmmoBalanced(c.current,10)).toBe(true);
     expect(stages.filter(stage => stage === 'grace').length).toBeLessThanOrEqual(1);
-    return {summary: confirmed[0]!, state: c.current, gameTick: c.gameTick};
-  } finally {world.dispose();}
+    const edgeHit = impacts.find(event => event.target.kind === 'cell' && event.target.cellId === 'cell-r2-c12')!;
+    const onscreen = projectToScreen(camera, edgeHit.point, width, height) !== null;
+    expect(onscreen).toBe(viewX === stand);
+    return {summary: confirmed[0]!, state: c.current, gameTick: c.gameTick, impacts};
+  } finally { display.dispose(); graph.dispose(); world.dispose(); }
 }
 
 it('r006 confirms two- and three-prize sets after the last cork, several cells, a question, retyping and falls', async () => {
@@ -114,6 +136,14 @@ it('r006 confirms two- and three-prize sets after the last cork, several cells, 
   expect(state.shotsFired).toBe(10);
   expect(summary.ammoAfter).toBeGreaterThan(0);
   expect(state.phase).toBe('position');
+});
+
+it('AC14/CH-AC04: changing only the view leaves off-screen impacts, collections, effects and settlement identical', async () => {
+  const visible = await composite(false);
+  const offscreen = await composite(false, false, layout.camera.standMinX);
+  expect(offscreen).toEqual(visible);
+  console.info('r006 camera replay', { impacts: visible.impacts.length, won: visible.summary.collected.length,
+    effects: visible.summary.effects!.length, score: visible.state.score });
 });
 
 it('r006 ends once after the same final shot when all ten bonus corks have already been granted', async () => {
