@@ -85,6 +85,8 @@ export default defineConfig({
     },
     {
       name: 'short-portrait-chromium',
+      // This suite measures the same confirmed card in all three sizes itself.
+      testIgnore: '**/confirmed-set-cards.spec.ts',
       use: {
         browserName: 'chromium',
         viewport: { width: 375, height: 600 },

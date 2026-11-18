@@ -10,14 +10,14 @@ type Outcome = 'ended' | 'rescued' | 'capped';
  * The candidate computes the upcoming flight, scoring, discoveries and display.
  * Callers use a fresh browser context and may keep its clock paused for tick-precise input.
  */
-export async function restoreBeforeShot(page: Page, outcome: Outcome) {
+export async function restoreBeforeShot(page: Page, outcome: Outcome, previousDiscoveries: readonly string[] = []) {
   const { beforeFire, gameTick } = JSON.parse(gunzipSync(readFileSync(
     new URL(`../fixtures/outcomes/${outcome}.json.gz`, import.meta.url),
   )).toString()) as { beforeFire: RunState; gameTick: number };
   await page.goto('/?e2e=1');
   await expect(page.locator('#app')).toHaveAttribute('data-rules-version', beforeFire.rulesVersion);
   await expect(page.getByTestId('home-start')).toBeVisible();
-  await page.evaluate(({ state, gameTick }) => new Promise<void>((resolve, reject) => {
+  await page.evaluate(({ state, gameTick, previousDiscoveries }) => new Promise<void>((resolve, reject) => {
     const open = indexedDB.open('shatekki.checkpoints');
     open.onerror = () => reject(open.error);
     open.onsuccess = () => {
@@ -35,13 +35,13 @@ export async function restoreBeforeShot(page: Page, outcome: Outcome) {
         };
         runs.add(record, JSON.stringify(['normal', state.rulesVersion, '']));
         tx.objectStore('profiles').put({
-          discoveredSets: state.completedSets, legacyBestScore: null,
+          discoveredSets: [...new Set([...previousDiscoveries, ...state.completedSets])], legacyBestScore: null,
         }, JSON.stringify(['book', 'normal', state.rulesVersion]));
       };
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onabort = () => { db.close(); reject(tx.error ?? Error('expected an empty test run store')); };
     };
-  }), { state: beforeFire, gameTick });
+  }), { state: beforeFire, gameTick, previousDiscoveries });
   await page.reload();
   await page.getByTestId('btn-resume-run').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'paused');

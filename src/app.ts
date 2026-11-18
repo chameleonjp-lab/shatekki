@@ -229,6 +229,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     removeItem: () => undefined,
   };
   const i18n: I18n = createI18n(languageStorage, win.navigator.languages ?? [win.navigator.language]);
+  doc.documentElement.lang = i18n.locale;
   setControlsLocale(i18n.locale);
   let noticeKey = keptEnded ? null : restoreNoticeKey(restore);
   const bootNotice = noticeKey ? i18n.t(noticeKey) : '';
