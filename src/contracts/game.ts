@@ -151,6 +151,8 @@ export interface PrizeInstanceState {
    * Absent = drawnTypeId (rules-v1 behaviour).
    */
   readonly motionTypeId?: PrizeTypeId;
+  /** Upright mount origin reconstructed for the shape accepted at the barrier. */
+  readonly motionAnchor?: { readonly base: Pose; readonly motionTypeId: PrizeTypeId };
 }
 
 export interface ShelfState {

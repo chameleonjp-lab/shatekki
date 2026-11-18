@@ -512,7 +512,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const ensureEngine = async (): Promise<ShotWorld> => {
     if (world) return world;
     const { sim, view } = await loadHeavyModules();
-    const w = await sim.createShotWorld(layout, catalog, tuning, rewardCfg ? { rewardDevices: rewardDevicesFor(rewardCfg) } : {});
+    const w = await sim.createShotWorld(layout, catalog, tuning, { transformPolicy: bundle.behavior?.transformPolicy, rewardDevices: rewardCfg ? rewardDevicesFor(rewardCfg) : undefined });
     world = w;
     try {
       renderer = view.createThreeRenderer(canvas, {
@@ -611,6 +611,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         layout,
         expansion,
         ...(session ? {session, onReplayed: showSavedRecord, reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false} : {}),
+        transformPolicy: bundle.behavior?.transformPolicy,
         onChange,
         onSimEvents: (events) => {
           for (const e of events) audio.handle(e, audioSettings);

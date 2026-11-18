@@ -9,7 +9,7 @@
  * walls) nor any other prize by more than TRANSFORM_OVERLAP_TOLERANCE_M. The
  * other prizes are taken at their already accepted new shape if processed, at
  * their current shape otherwise. Nothing is ever moved to make room, and the
- * pose (including Y) stays; no fitting candidate defers the intent whole.
+ * selected rules determine the pose and swept bounds. No fit defers the whole intent.
  */
 import type {
   Box3,
@@ -19,9 +19,12 @@ import type {
   Pose,
   PrizeInstanceId,
   PrizeTypeId,
+  StaticSurface,
+  TransformPolicy,
   TransformIntent,
 } from '../contracts';
 import { legacySlotPosition, slotRowColumn } from '../contracts';
+import { candidateTransformPose, findShelfSupport, mountedBounds, rebaseMount, type TransformMount } from './transform-placement';
 import { boxesOverlap, prizeAabb } from '../core/shapes';
 
 /**
@@ -36,9 +39,13 @@ export interface TransformSubject {
   readonly homeSlot: string;
   readonly typeId: PrizeTypeId;
   readonly pose: Pose;
+  readonly falling?: boolean;
+  readonly mount?: TransformMount;
 }
 
 export interface AppliedKindChange {
+  readonly poseAfter: Pose;
+  readonly mountBaseAfter?: Pose;
   readonly instanceId: PrizeInstanceId;
   readonly requestId: EffectRequestId;
   readonly fromTypeId: PrizeTypeId;
@@ -58,6 +65,8 @@ export interface TransformPlanInput {
   /** Static boards / walls (layout surfaces). */
   readonly obstacles: readonly Box3[];
   readonly tolerance?: number;
+  readonly policy?: TransformPolicy;
+  readonly shelves?: readonly StaticSurface[];
 }
 
 /** Row (top = 1), column, for ordering; unknown slots sort last. */
@@ -76,6 +85,8 @@ export function compareSubjects(a: Pick<TransformSubject, 'homeSlot' | 'instance
 
 export function planTransforms(input: TransformPlanInput): TransformPlanResult {
   const tol = input.tolerance ?? TRANSFORM_OVERLAP_TOLERANCE_M;
+  const policy = input.policy ?? 'preserve-center';
+  const supportedBottom = policy === 'preserve-supported-bottom';
   const subjects = new Map(input.prizes.map((p) => [p.instanceId, p] as const));
   // several intents for one instance: the final one only
   const finalIntent = new Map<PrizeInstanceId, TransformIntent>();
@@ -84,7 +95,7 @@ export function planTransforms(input: TransformPlanInput): TransformPlanResult {
   const boxes = new Map<PrizeInstanceId, Box3>();
   for (const p of input.prizes) {
     const shape = input.shapeOf(p.typeId);
-    if (shape) boxes.set(p.instanceId, prizeAabb(shape, p.pose));
+    if (shape) boxes.set(p.instanceId, supportedBottom && p.mount ? mountedBounds(p.mount.base, p.mount.motion, shape, p.mount.anchored) : prizeAabb(shape, p.pose));
   }
 
   const order = [...finalIntent.keys()].map((id) => subjects.get(id)!).sort(compareSubjects);
@@ -95,6 +106,10 @@ export function planTransforms(input: TransformPlanInput): TransformPlanResult {
     const intent = finalIntent.get(p.instanceId)!;
     let chosen: PrizeTypeId | null = null;
     let chosenBox: Box3 | null = null;
+    let chosenPose = p.pose;
+    let mountBaseAfter: Pose | undefined;
+    const oldShape = input.shapeOf(p.typeId);
+    const support = supportedBottom && oldShape ? findShelfSupport(prizeAabb(oldShape, p.pose), input.shelves ?? [], tol) : null;
     for (const candidate of intent.candidateTypeIds) {
       if (candidate === p.typeId) {
         chosen = candidate; // already that kind: nothing to change, nothing to defer
@@ -102,7 +117,11 @@ export function planTransforms(input: TransformPlanInput): TransformPlanResult {
       }
       const shape = input.shapeOf(candidate);
       if (!shape) continue;
-      const box = prizeAabb(shape, p.pose);
+      if (!oldShape) continue;
+      const pose = candidateTransformPose(p, oldShape, shape, support, policy);
+      const mount = supportedBottom ? p.mount : undefined;
+      const base = mount && rebaseMount(mount, shape, pose);
+      const box = base && mount ? mountedBounds(base, mount.motion, shape, true) : prizeAabb(shape, pose);
       if (input.obstacles.some((o) => boxesOverlap(box, o, tol))) continue;
       let clear = true;
       for (const [id, other] of boxes) {
@@ -114,12 +133,14 @@ export function planTransforms(input: TransformPlanInput): TransformPlanResult {
       if (!clear) continue;
       chosen = candidate;
       chosenBox = box;
+      chosenPose = pose;
+      mountBaseAfter = base;
       break;
     }
     if (chosen === null) {
       deferred.push({ instanceId: p.instanceId, requestId: intent.requestId, candidateTypeIds: intent.candidateTypeIds });
     } else if (chosen !== p.typeId) {
-      applied.push({ instanceId: p.instanceId, requestId: intent.requestId, fromTypeId: p.typeId, toTypeId: chosen });
+      applied.push({ instanceId: p.instanceId, requestId: intent.requestId, fromTypeId: p.typeId, toTypeId: chosen, poseAfter: chosenPose, mountBaseAfter });
       if (chosenBox) boxes.set(p.instanceId, chosenBox);
     }
   }
