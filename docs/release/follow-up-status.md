@@ -1,5 +1,9 @@
 # シャテッキの後続対応状況
 
+## 2026年11月19日の再点検
+
+PR #32取り込み後の内部候補で、最終射の絵、命中案内、補給装置、旧棚・図鑑、端末測定の問題を修正した。個別の結果と実機・試遊の残りは[再点検の一覧](../qa/2026-11-19-plan-audit.md)を参照。
+
 ## PR #25 後の実装
 
 基準 main は `f70b01b`。提出順は [#26](https://github.com/chameleonjp-lab/shatekki/pull/26)（版の固定）、[#27](https://github.com/chameleonjp-lab/shatekki/pull/27)（保存）、[#28](https://github.com/chameleonjp-lab/shatekki/pull/28)（品替え）、[#29](https://github.com/chameleonjp-lab/shatekki/pull/29)（美術・音）、[#30](https://github.com/chameleonjp-lab/shatekki/pull/30)（日替わり・統合）、[#31](https://github.com/chameleonjp-lab/shatekki/pull/31)（翻訳検証・確認ページ準備・比較）。
