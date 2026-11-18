@@ -102,6 +102,7 @@ test('result, reason, share and replay in all 15 locales on the same settled gam
     if (await page.getByTestId('result-score').isVisible()) break;
     await expect(controls).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
     await page.getByTestId('btn-confirm-position').click();
+    await expect(controls).toHaveAttribute('data-mode', 'loading');
     await page.getByTestId('btn-load').dispatchEvent('pointerdown');
     await expect(controls).toHaveAttribute('data-mode', 'aiming');
     const fire = page.getByTestId('btn-fire');

@@ -84,10 +84,11 @@ try {
     await start();
     await expect(page.locator('.bm-tile')).toHaveCount(36);
     await page.getByTestId('btn-confirm-position').click();
-    await page.getByTestId('btn-load').dispatchEvent('pointerdown');
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
+    await page.getByTestId('btn-load').click();
     await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
-    await page.getByTestId('btn-fire').dispatchEvent('pointerdown');
-    await page.getByTestId('btn-fire').dispatchEvent('pointerup');
+    await page.getByTestId('btn-fire').click();
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'resolving');
     await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 30_000 });
 
     await page.goto(origin + candidatePath + 'record-check.html');
