@@ -73,6 +73,17 @@ export default defineConfig({
       },
     },
     {
+      name: 'compact-portrait-chromium',
+      testMatch: ['**/next-long-text.spec.ts', '**/reward-motions.spec.ts'],
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 402, height: 700 },
+        deviceScaleFactor: 1,
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
       name: 'short-portrait-chromium',
       use: {
         browserName: 'chromium',
