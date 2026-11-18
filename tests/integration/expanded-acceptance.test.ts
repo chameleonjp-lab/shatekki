@@ -5,6 +5,7 @@ import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { completedSetsFor } from '../../src/catalog/sets';
 import { buildState, EDGE_KINDS, type Setup, type Aim } from '../helpers/composite-shot';
 import { validateRunState } from '../../src/core/session';
+import { rewardDevicesFor } from '../../src/core/rewards';
 import { createShotWorld } from '../../src/sim/world';
 import { STORAGE_KEYS, createRunStore, expandedRunKey } from '../../src/persistence';
 import {
@@ -17,6 +18,7 @@ import {
   muzzlePosition,
   type EffectId,
   type ExpandedRunState,
+  type GameplayBundle,
   type ImpactEvent,
   type QuestionChoice,
   type QuestionId,
@@ -120,16 +122,16 @@ class Scenario {
   private constructor(
     readonly world: Awaited<ReturnType<typeof createShotWorld>>,
     state: ExpandedRunState,
+    target: GameplayBundle,
   ) {
     this.c = new GameController(
       {
         rules: CORE_RULES,
         world,
         renderer: null,
-        catalog: bundle.catalog,
-        tuning: bundle.tuning,
-        layout: L,
-        expansion: EXP,
+        ...target,
+        clockPolicy: target.behavior?.clock,
+        transformPolicy: target.behavior?.transformPolicy,
         onShotSettled: (summary) => this.settled.push(summary),
         onSimEvents: (events) => this.impacts.push(...events.filter((e): e is ImpactEvent => e.type === 'impact')),
       },
@@ -137,8 +139,12 @@ class Scenario {
     );
   }
 
-  static async create(s: Setup): Promise<Scenario> {
-    return new Scenario(await createShotWorld(L, bundle.catalog, bundle.tuning), buildState(bundle, s));
+  static async create(s: Setup, target = bundle): Promise<Scenario> {
+    const world = await createShotWorld(target.layout, target.catalog, target.tuning, {
+      rewardDevices: rewardDevicesFor(target.expansion!.profile.rewards ?? null),
+      transformPolicy: target.behavior?.transformPolicy,
+    });
+    return new Scenario(world, buildState(target, s), target);
   }
 
   get state(): ExpandedRunState {
@@ -367,41 +373,41 @@ describe('CH-AC43: last bullet -> several cells -> shopkeeper question -> series
 
 // ------------------------------------------------------------- CH-AC26
 
-describe('CH-AC26: the last shot, the answer and the bullet cap', () => {
+const questionBuilds = ['expanded-proposed', 'expanded-next'] as const;
+
+describe.each(questionBuilds)('%s CH-AC26: the last shot, the answer and the bullet cap', (key) => {
+  const target = getGameplayBundle(key);
   it('a bullet given by the ANSWER of the last shot continues the game, and a cell reservation made earlier is kept', async () => {
-    let found = 0;
-    for (let seed = 1; seed <= 120 && found === 0; seed++) {
-      const sc = await Scenario.create({ seed, aim: COMPOSITE_AIM, question: Q_GAIN, cells: { 'cell-r2-c12': FX_HINT, 'cell-r2-c11': FX_SPEED } });
-      sc.fire(COMPOSITE_AIM);
-      sc.toQuestionOrEnd();
-      expect(sc.c.awaitingAnswer).toBe(true);
-      expect(sc.state.ammo).toBe(0);
-      expect(sc.answer('A')).toBe(true); // GAIN group
-      sc.settle();
-      const summary = sc.settled[0]!;
-      const answer = effectsOf(summary).find((e) => e.source.kind === 'answer')!;
-      if (answer.ammoDelta > 0) {
-        found = seed;
-        expectConfirmedOnce(sc, summary, 1);
-        const st = sc.state;
-        expect(summary.runEnded).toBe(false);
-        expect(st.phase).toBe('position');
-        expect(st.ammo).toBe(answer.ammoDelta);
-        expect(st.bonusAmmoTotal).toBe(answer.ammoDelta);
-        expect(st.bonusAmmoTotal).toBeLessThanOrEqual(MAX_BONUS);
-        // the reservation from the cell, made before the answer when ammo was 0, is still there
-        expect(st.expansion.next.modifiers).not.toEqual(BASE_SHOT_MODIFIERS);
-        // and the player can really shoot once more
-        sc.fire(HARMLESS);
-        expect(sc.state.expansion.active?.modifiers).toEqual(st.expansion.next.modifiers);
-      }
-      sc.dispose();
-    }
-    expect(found).toBeGreaterThan(0);
+    // Both seeds draw an ammo effect from Q002/A. Seed 15 isolates the answer
+    // from the last-cork target, which grants a separate bonus on r006 seed 13.
+    const seed = key === 'expanded-next' ? 15 : 13;
+    const sc = await Scenario.create({ seed, aim: COMPOSITE_AIM, question: Q_GAIN, cells: { 'cell-r2-c12': FX_HINT, 'cell-r2-c11': FX_SPEED } }, target);
+    sc.fire(COMPOSITE_AIM);
+    sc.toQuestionOrEnd();
+    expect(sc.c.awaitingAnswer).toBe(true);
+    expect(sc.state.ammo).toBe(0);
+    expect(sc.answer('A')).toBe(true);
+    sc.settle();
+    const summary = sc.settled[0]!;
+    const answer = effectsOf(summary).find((e) => e.source.kind === 'answer')!;
+    expect(answer.ammoDelta).toBe(key === 'expanded-next' ? 2 : 1);
+    expect(summary.rewards ?? []).toEqual([]);
+    expectConfirmedOnce(sc, summary, 1);
+    const st = sc.state;
+    expect(summary.runEnded).toBe(false);
+    expect(st.phase).toBe('position');
+    expect(st.ammo).toBe(answer.ammoDelta);
+    expect(st.bonusAmmoTotal).toBe(answer.ammoDelta);
+    expect(st.bonusAmmoTotal).toBeLessThanOrEqual(MAX_BONUS);
+    expect(st.expansion.next.modifiers.pushMult).toBe(1.5);
+    // The next accepted shot actually consumes the preserved cell reservation.
+    sc.fire(HARMLESS);
+    expect(sc.state.expansion.active?.modifiers).toEqual(st.expansion.next.modifiers);
+    sc.dispose();
   });
 
   it('with the bonus cap already reached the +1 cannot be given, so the last shot ends after the answer with a reason', async () => {
-    const sc = await Scenario.create({ seed: 3, aim: COMPOSITE_AIM, question: Q_STOCK, ammo: 1, bonus: MAX_BONUS, cells: { 'cell-r2-c12': FX_AMMO_PLUS_1, 'cell-r2-c11': FX_HINT } });
+    const sc = await Scenario.create({ seed: 3, aim: COMPOSITE_AIM, question: Q_STOCK, ammo: 1, bonus: MAX_BONUS, cells: { 'cell-r2-c12': FX_AMMO_PLUS_1, 'cell-r2-c11': FX_HINT } }, target);
     expect(sc.state.shotsFired).toBe(INITIAL + MAX_BONUS - 1); // the 20th shot
     sc.fire(COMPOSITE_AIM);
     sc.toQuestionOrEnd();
@@ -411,7 +417,7 @@ describe('CH-AC26: the last shot, the answer and the bullet cap', () => {
     const summary = sc.settled[0]!;
     const plus = effectsOf(summary).find((e) => e.source.kind === 'cell' && e.source.cellId === 'cell-r2-c12')!;
     expect(plus.outcome).not.toBe('applied');
-    expect(plus.reason).toBeTruthy();
+    expect(plus.reason).toBe('noAmmoRoom');
     expect(plus.ammoDelta).toBe(0);
     expect(summary.runEnded).toBe(true);
     expect(sc.state.phase).toBe('ended');
@@ -427,16 +433,17 @@ describe('CH-AC26: the last shot, the answer and the bullet cap', () => {
 
 // ------------------------------------------------------------- CH-AC12
 
-describe('CH-AC12: one question per shot, however many corks and reflections touch the shopkeeper', () => {
+describe.each(questionBuilds)('%s CH-AC12: one question per shot with several shopkeeper contacts', (key) => {
+  const target = getGameplayBundle(key);
   it('three corks on the shopkeeper ask one question; the next shot asks the next one', async () => {
-    const sc = await Scenario.create({ seed: 4, aim: keeperAim(3), ammo: 4, question: Q_STOCK, cells: {} });
+    const sc = await Scenario.create({ seed: 4, aim: keeperAim(3), ammo: 4, question: Q_STOCK, cells: {} }, target);
     const order = sc.state.expansion.questionOrder;
     sc.fire(keeperAim(3));
     sc.toQuestionOrEnd();
     expect(sc.c.awaitingAnswer).toBe(true);
     const keeperImpacts = sc.impacts.filter((i) => i.target.kind === 'shopkeeper');
-    expect(keeperImpacts.length).toBeGreaterThanOrEqual(2); // several contacts (split corks / reflections)
-    expect(new Set(keeperImpacts.map((i) => i.projectileId)).size).toBeGreaterThanOrEqual(2);
+    expect(new Set(keeperImpacts.map((i) => i.projectileId)).size).toBe(3);
+    expect(keeperImpacts.filter(i => i.target.kind === 'shopkeeper' && i.target.part === 'body' && i.reflectionIndex === 0)).toHaveLength(3);
     expect(sc.state.inFlight!.plan!.question!.questionId).toBe(order[0]);
     expect(sc.state.expansion.questionCursor).toBe(0); // viewing does not advance it
     expect(sc.answer('A')).toBe(true);
