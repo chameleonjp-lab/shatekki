@@ -98,8 +98,12 @@ export interface RewardCardInput extends ShotMomentInput {
   readonly setName: (id: SetId) => string;
 }
 
-export function rewardLine(o: RewardOutcome, t: RewardText): RewardLine {
-  const name = t(`reward.name.${o.id}`);
+export function rewardLine(o: RewardOutcome, t: RewardText, showTargetRing = false): RewardLine {
+  let name = t(`reward.name.${o.id}`);
+  if (showTargetRing && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
+    const hit = t(o.key === 'target:center' ? 'reward.target.hitCenter' : 'reward.target.hitOuter');
+    name = `${name} · ${hit}`;
+  }
   let text: string;
   if (o.granted <= 0) text = t('reward.capped');
   else if (o.granted < o.offered) text = t('reward.partial', { n: o.granted, req: o.offered });
@@ -115,14 +119,7 @@ export function rewardCardModel(i: RewardCardInput, t: RewardText): RewardCardMo
   else if (m.big === 'continue') headline = t('reward.continue', { n: i.ammoAfter });
   else if (m.big === 'multiTake') headline = t('reward.take.many', { n: i.collected });
   const sets = i.completedSets.map((id) => ({ setId: id, name: i.setName(id), fresh: fresh.has(id), members: i.setMembers?.(id) ?? [] }));
-  const lines = i.rewards.map((o) => {
-    const line = rewardLine(o, t);
-    if (i.setMembers && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
-      const hit = t(o.key === 'target:center' ? 'reward.target.hitCenter' : 'reward.target.hitOuter');
-      return { ...line, name: `${line.name} · ${hit}` };
-    }
-    return line;
-  });
+  const lines = i.rewards.map(o => rewardLine(o, t, Boolean(i.setMembers)));
   const calm = m.capped ? t('reward.continue.none') : null;
   return { title: t('reward.card.title'), headline, big: m.big, sets, lines, calm, any: headline !== '' || lines.length > 0 || sets.length > 0 || calm !== null };
 }

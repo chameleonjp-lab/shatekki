@@ -115,7 +115,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     },
     present(summary: ShotSummary, options: PresentOptions): Promise<void> {
       // Settle effects. Skipping is presentation-only: it never changes what happened.
-      if (deps.expanded?.illustratedRewards) expandedView?.showConfirmedTransforms(summary.appliedTransforms ?? []);
+      if (deps.expanded?.illustratedRewards) expandedView?.showConfirmedTransforms(summary.appliedTransforms ?? [], !options.skip);
       return fx.present(summary, options);
     },
     resize(w: number, h: number): void {

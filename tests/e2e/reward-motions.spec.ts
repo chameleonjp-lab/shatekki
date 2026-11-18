@@ -141,3 +141,113 @@ test('enlarged choices scroll by touch before the final answer is tapped', async
   await expect(page.getByTestId('shopkeeper-question')).toBeHidden();
   await cdp.detach();
 });
+
+async function startDeviceGame(page: Page, standX = -2.35) {
+  await page.addInitScript(() => {
+    const random = Crypto.prototype.getRandomValues;
+    Crypto.prototype.getRandomValues = function (this: Crypto, values) {
+      if (values instanceof Uint32Array && values.length === 1) {
+        values[0] = 7919;
+        return values;
+      }
+      return random.call(this, values);
+    } as typeof random;
+  });
+  await page.goto('/?e2e=1');
+  await expect(page.locator('[data-rules-version]')).toHaveAttribute('data-rules-version', 'rules-v2-proposed-r006');
+  await page.getByTestId('home-start').click();
+  await page.getByTestId('order-decline').click();
+  await page.getByTestId('stand-slider').fill(String(standX));
+}
+
+// The aim pad takes relative drags. The left stand has a clear line to both
+// devices. A shallower turn towards the chime sends the cork to the wall first.
+async function deviceShot(page: Page, yawDelta: number, pitchDelta: number) {
+  await page.getByTestId('btn-confirm-position').click();
+  await stopOnPerfect(page);
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
+  const pad = (await page.getByTestId('aim-pad').boundingBox())!;
+  const x = pad.x + pad.width / 2;
+  const y = pad.y + pad.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + yawDelta / 0.0022, y - pitchDelta / 0.0022);
+  await page.mouse.up();
+  await page.getByTestId('btn-fire').tap();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 45000 });
+}
+
+test('wind chime marks and sounds only after a reflected cork', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.addInitScript(() => {
+    const set = AudioParam.prototype.setValueAtTime;
+    const frequencies: number[] = [];
+    Object.assign(window, { chimeFrequencies: frequencies });
+    AudioParam.prototype.setValueAtTime = function(value, time) {
+      // The chime's upper partial distinguishes it from the other glass and metal sounds.
+      if (value === 2351) frequencies.push(value);
+      return set.call(this, value, time);
+    };
+  });
+  await startDeviceGame(page);
+  const mark = page.getByRole('img', { name: '跳ね返し風鈴', exact: true });
+  await expect(mark).toHaveText('♪');
+  await deviceShot(page, -0.255, 0.289);
+  await expect(mark).toHaveText('♪');
+  await expect(page.locator('[data-reward=A2]')).toHaveCount(0);
+  const rings = () => page.evaluate(() => (window as unknown as {chimeFrequencies: number[]}).chimeFrequencies.length);
+  expect(await rings()).toBe(0);
+  await deviceShot(page, -0.135 - (-0.255), 0.224 - 0.289);
+  await expect(page.getByRole('img', {name: '跳ね返し風鈴 · 使用済み'})).toHaveText('✓');
+  await expect(page.locator('[data-reward=A2]')).toContainText('2');
+  expect(await rings()).toBe(1);
+});
+
+test('piggy-bank marks two separate deposits and the real grant', async ({ page }) => {
+  test.setTimeout(120000);
+  await startDeviceGame(page);
+  const mark = page.getByRole('img', {name: /コルク貯金箱/});
+  await expect(mark).toHaveText('0/2');
+  await deviceShot(page, -0.271, -0.070);
+  await expect(mark).toHaveText('1/2');
+  await expect(page.locator('[data-reward=A4]')).toHaveCount(0);
+  await deviceShot(page, 0, 0);
+  await expect(mark).toHaveAccessibleName('コルク貯金箱 · 2/2 · 使用済み');
+  await expect(mark).toHaveText('2/2 ✓');
+  await expect(page.locator('[data-reward=A4]')).toContainText('4');
+});
+
+test('the bag leaves with the original prize and pays the advertised two corks', async ({ page }) => {
+  test.setTimeout(90000);
+  await startDeviceGame(page, 0.21);
+  const bag = page.getByRole('img', {name: 'おまけ袋 · おまけ+2'});
+  await expect(bag).toBeVisible();
+  await deviceShot(page, 0, -0.201);
+  await expect(bag).toHaveCount(0);
+  await expect(page.locator('[data-reward=A1]')).toHaveText('おまけ袋: 弾+2');
+});
+
+test('a prize falling into the seesaw tray marks the tray and grants two corks', async ({ page }) => {
+  test.setTimeout(90000);
+  await startDeviceGame(page, -1.47);
+  await expect(page.getByRole('img', {name: 'コルクのシーソー', exact: true})).toBeVisible();
+  await deviceShot(page, 0, -0.169);
+  await expect(page.getByRole('img', {name: 'コルクのシーソー · 使用済み'})).toHaveText('✓');
+  await expect(page.locator('[data-reward=A3]')).toHaveText('コルクのシーソー: 弾+2');
+  await expect(page.getByTestId('reward-strip')).toContainText('袋 1個');
+});
+
+for (const [yaw, ring, grant] of [[0.17, '中心命中', 3], [0.24, '外周命中', 1]] as const) {
+  test(`last-cork target shows the actual ring and refill (${ring})`, async ({ page }) => {
+    test.setTimeout(240000);
+    await startDeviceGame(page, 0);
+    const label = page.getByRole('img', {name: '最後の一発の二重丸 · 中心+3／外+1'});
+    await expect(label).toHaveCount(0);
+    for (let i = 0; i < 9; i++) await deviceShot(page, 0, i === 0 ? 0.3 : 0);
+    await expect(label).toBeVisible();
+    await deviceShot(page, yaw, -0.17 - 0.3);
+    await expect(page.locator('[data-reward=A5]')).toHaveText(`最後の一発の二重丸 · ${ring}: 弾+${grant}`);
+    await expect(page.getByTestId('reward-card')).toContainText(`あと${grant}発！`);
+    await expect(label).toHaveCount(0);
+  });
+}

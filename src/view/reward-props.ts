@@ -7,7 +7,7 @@
  * commands, draws random numbers or writes into the simulation.
  */
 import * as THREE from 'three';
-import type { PrizeFrame, RewardViewState } from '../contracts';
+import { REWARD_TARGET_HALF_THICKNESS, type Box3, type PrizeFrame, type RewardViewState } from '../contracts';
 
 export interface RewardProps {
   readonly group: THREE.Group;
@@ -22,6 +22,41 @@ const BAG_CLOTH = 0xd9a441;
 const BAG_TIE = 0x7a2e1f;
 /** The bag hangs at the front-right of its prize (m). */
 export const BAG_OFFSET = { x: 0.085, y: -0.02, z: 0.11 } as const;
+
+/** Only solid devices stop a flying cork. The seesaw collects falling prizes. */
+export function createRewardPickTargets(material: THREE.Material) {
+  const box = new THREE.BoxGeometry(2, 2, 2);
+  const disc = new THREE.CylinderGeometry(1, 1, 2, 48).rotateX(Math.PI / 2);
+  const chime = new THREE.Mesh(box, material);
+  const piggy = new THREE.Mesh(box, material);
+  const target = new THREE.Mesh(disc, material);
+  const meshes = [chime, piggy, target];
+  for (const mesh of meshes) mesh.visible = false;
+  const setBox = (mesh: THREE.Mesh, b: Box3 | null | undefined, radius: number) => {
+    mesh.visible = Boolean(b);
+    if (!b) return;
+    mesh.position.copy(b.center);
+    mesh.scale.copy(b.halfExtents).addScalar(radius);
+    mesh.updateMatrixWorld();
+  };
+  return {
+    meshes,
+    update(rewards: RewardViewState | undefined, radius: number) {
+      setBox(chime, rewards?.devices.chime, radius);
+      setBox(piggy, rewards?.devices.piggySlot, radius);
+      const g = rewards?.target?.geometry;
+      target.visible = Boolean(g);
+      if (!g) return;
+      target.position.copy(g.center);
+      target.scale.set(g.outerRadius + radius, g.outerRadius + radius, REWARD_TARGET_HALF_THICKNESS + radius);
+      target.updateMatrixWorld();
+    },
+    dispose() {
+      box.dispose();
+      disc.dispose();
+    },
+  };
+}
 
 export function createRewardProps(illustrated = false): RewardProps {
   const group = new THREE.Group();
@@ -121,7 +156,7 @@ export function createRewardProps(illustrated = false): RewardProps {
       target.visible = t !== null;
       if (t) {
         const g = t.geometry;
-        target.position.set(g.center.x, g.center.y, g.center.z + 0.008);
+        target.position.set(g.center.x, g.center.y, g.center.z + (illustrated ? REWARD_TARGET_HALF_THICKNESS - 0.001 : 0.008));
         outer.scale.setScalar(g.outerRadius);
         ring.scale.setScalar(g.outerRadius);
         center.scale.setScalar(g.centerRadius);
@@ -156,10 +191,12 @@ export function createRewardProps(illustrated = false): RewardProps {
         strip.scale.set(b.halfExtents.x * 0.8, b.halfExtents.y * 1.1, 1);
         strip.position.y = -b.halfExtents.y * 0.5;
         if (illustrated) {
+          strip.scale.y = b.halfExtents.y * 1.05;
+          strip.position.y = -b.halfExtents.y * 0.43;
           strip.scale.z = b.halfExtents.z * 2;
           if (tick) {
             tick.visible = Boolean(rewards?.chimeUsed);
-            tick.position.set(0, b.halfExtents.y * 0.35, b.halfExtents.z);
+            tick.position.set(0, b.halfExtents.y * 0.35, b.halfExtents.z - 0.0015);
           }
         }
         // the paper strip turns over once the chime has paid
@@ -187,6 +224,13 @@ export function createRewardProps(illustrated = false): RewardProps {
         plank.rotation.z = rewards?.seesawUsed ? -0.12 : 0.12;
         trayMesh.scale.set(b.halfExtents.x * 2, 1, b.halfExtents.z * 2);
         trayMesh.position.y = -b.halfExtents.y;
+        if (illustrated) {
+          const { x, y, z } = b.halfExtents;
+          plank.scale.set(x * 1.6, 0.65, z * 0.4);
+          plank.position.set(0, -y * 0.1, -z * 0.65);
+          plank.rotation.z = (rewards?.seesawUsed ? -1 : 1) * Math.atan2(y * 0.65, x * 0.8);
+          trayMesh.position.y += 0.015;
+        }
         spent(seesawMat, 0xb98a55, rewards?.seesawUsed ?? false);
       }
       return { bag: owner ? bagAt : null, target: t ? targetAt : null, targetMode: t?.mode ?? null };
