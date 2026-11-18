@@ -62,3 +62,39 @@ test('the previous JST stall resumes after midnight, pauses a question on rotati
   expect(after[0]!.state.ledger).toHaveLength(1);
   expect(after[0]!.gameTick).toBeGreaterThan(0);
 });
+
+test('normal and daily games can coexist; choosing yesterday’s stall does not claim the normal game', async ({page,context}) => {
+  test.setTimeout(240_000);
+  const normal = await context.newPage();
+  const beforeMidnight = new Date('2026-11-18T23:59:00+09:00');
+  for (const tab of [page, normal]) {
+    await tab.clock.setFixedTime(beforeMidnight);
+    await tab.goto('/?e2e=1');
+    await expect(tab.getByTestId('home-start')).toBeVisible();
+  }
+  await normal.getByTestId('home-start').click();
+  await expect(normal.getByTestId('controls')).toHaveAttribute('data-mode','position',{timeout:30000});
+  await page.getByTestId('home-daily-start').click();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode','position',{timeout:30000});
+  await page.clock.setFixedTime(new Date('2026-11-19T00:01:00+09:00'));
+  await page.reload();
+  await expect(page.getByTestId('choose-normal')).toBeVisible();
+  const choice = page.getByTestId('choose-daily');
+  await expect(choice).toContainText('2026-11-18');
+  await choice.click();
+  await expect(page.locator('#app')).toHaveAttribute('data-daily-date','2026-11-18');
+  await page.getByTestId('btn-resume-run').click();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode','paused',{timeout:30000});
+  await expect(page.locator('#app')).toHaveAttribute('data-daily-date','2026-11-18');
+  // The original normal owner can still advance. Selecting the daily record touched only that scope.
+  await normal.getByTestId('btn-confirm-position').click();
+  await expect(normal.getByTestId('controls')).toHaveAttribute('data-mode','loading');
+  // Retire yesterday's game explicitly. Replay now adopts today's Japan date, keeping the other run alive.
+  await page.reload();
+  await choice.click();
+  await page.getByTestId('btn-new-run').click();
+  await expect(page.getByTestId('result-score')).toBeVisible();
+  await page.getByTestId('result-retry').click();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode','position',{timeout:30000});
+  await expect(page.locator('#app')).toHaveAttribute('data-daily-date','2026-11-19');
+});

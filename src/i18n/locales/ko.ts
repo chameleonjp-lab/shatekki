@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const KO: Record<UiKey, string> = {
+  "save.chooseRun": "저장된 게임을 선택하세요",
+  "save.normalRun": "일반 노점",
+  "save.dailyRun": "{date} 노점 (일본 시간)",
   "save.legacyDailyBest": "이전 기록(날짜 미상): {score}점",
   "save.quota": "저장 공간이 부족합니다.",
   "save.pending": "저장 중…",

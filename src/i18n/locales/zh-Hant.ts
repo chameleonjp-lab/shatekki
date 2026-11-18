@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANT: Record<UiKey, string> = {
+  "save.chooseRun": "選擇要開啟的遊戲紀錄",
+  "save.normalRun": "一般攤位",
+  "save.dailyRun": "{date} 的攤位（日本時間）",
   "save.legacyDailyBest": "舊紀錄（日期不詳）：{score}分",
   "save.quota": "儲存空間不足。",
   "save.pending": "正在儲存…",

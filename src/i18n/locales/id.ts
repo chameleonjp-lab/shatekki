@@ -1,6 +1,9 @@
 import type { UiKey } from './ja';
 
 export const ID: Record<UiKey, string> = {
+  "save.chooseRun": "Pilih permainan tersimpan",
+  "save.normalRun": "Kios biasa",
+  "save.dailyRun": "Kios tanggal {date} (waktu Jepang)",
   "save.legacyDailyBest": "Rekor lama (tanggal tidak diketahui): {score} poin",
   "save.quota": "Ruang penyimpanan tidak cukup.",
   "save.pending": "Sedang menyimpan…",

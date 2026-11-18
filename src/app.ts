@@ -273,7 +273,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const status = doc.createElement('p');
   status.className = 'boot-status';
   status.dataset.testid = 'boot-status';
-  resumeBox.append(resumeTitle, resumeBtn, newBtn, status);
+  const scopeChoices = doc.createElement('div');
+  resumeBox.append(resumeTitle, scopeChoices, resumeBtn, newBtn, status);
   resumeBox.hidden = true;
 
   const notice = doc.createElement('p');
@@ -1055,6 +1056,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const showSavedRecord = (record: PersistedRecord) => {
     clearScreen();
     atomic!.keep(record);
+    scopeChoices.replaceChildren();
+    resumeBtn.hidden = false;
     session = null;
     clearEngine();
     setMode(record.scope.mode);
@@ -1078,10 +1081,25 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     session = null;
     clearEngine();
     try {
-      const record = await atomic!.open();
+      const records = await atomic!.open();
       if (disposed) return;
       dismissPrompt();
-      if (record) showSavedRecord(record);
+      if (records.length > 1) {
+        setScreen('resume');
+        resumeTitle.textContent = i18n.t('save.chooseRun');
+        resumeBtn.hidden = newBtn.hidden = true;
+        scopeChoices.replaceChildren(...records.map(record => {
+          const button = doc.createElement('button');
+          button.type = 'button';
+          button.className = 'btn boot-start';
+          button.dataset.testid = 'choose-' + record.scope.mode;
+          button.textContent = record.scope.mode === 'daily'
+            ? i18n.t('save.dailyRun', {date: record.scope.startedDateJst})
+            : i18n.t('save.normalRun');
+          button.onclick = () => showSavedRecord(record);
+          return button;
+        }));
+      } else if (records[0]) showSavedRecord(records[0]);
       else showHome();
     } catch (error) { saveError(error, () => void loadAtomic()); }
   };

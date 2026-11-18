@@ -4,6 +4,9 @@
  * as a test failure. Placeholders use {name}. Logic must never branch on text.
  */
 export const JA = {
+  "save.chooseRun": "開くプレイを選んでください",
+  "save.normalRun": "通常の屋台",
+  "save.dailyRun": "{date}の屋台（日本時間）",
   "save.legacyDailyBest": "日付不明の旧記録：{score}点",
   "save.quota": "空き容量が不足しています。",
   "save.pending": "保存しています…",
