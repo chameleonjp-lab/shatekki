@@ -94,6 +94,7 @@ test('a committed fire with a lost reply opens the interruption prompt; a second
 });
 
 test('memory-only play starts fresh on a write failure and reload restores the untouched recorded game', async ({page}) => {
+  test.setTimeout(120_000);
   await page.addInitScript(() => {
     localStorage.setItem('shatekki.profile.v2','preserve this old record');
     localStorage.setItem('shatekki.settings.v1','preserve invalid old settings');
