@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { readRecordedRun } from '../helpers/read-recorded-run';
 
 test.use({ baseURL: 'http://127.0.0.1:4178' });
 
@@ -168,8 +169,32 @@ async function startDeviceGame(page: Page, standX = -2.35) {
   await expect(stand).toHaveValue(String(standX));
 }
 
-// The aim pad takes relative drags. The left stand has a clear line to both
-// devices. A shallower turn towards the chime sends the cork to the wall first.
+async function swipeAim(page: Page, yawDelta: number, pitchDelta: number) {
+  if (yawDelta === 0 && pitchDelta === 0) return;
+  const pad = page.getByTestId('aim-pad');
+  await expect(pad).toBeInViewport({ ratio: 1 });
+  const box = (await pad.boundingBox())!;
+  // The pad accepts 0.0022 radians per CSS pixel. Lift and swipe again for a
+  // long adjustment so both ends of every touch stay inside the visible pad.
+  const dx = yawDelta / 0.0022;
+  const dy = -pitchDelta / 0.0022;
+  const strokes = Math.ceil(Math.max(Math.abs(dx) / (box.width - 16), Math.abs(dy) / (box.height - 16)));
+  const stepX = dx / strokes;
+  const stepY = dy / strokes;
+  const x = box.x + (box.width - stepX) / 2;
+  const y = box.y + (box.height - stepY) / 2;
+  const touch = await page.context().newCDPSession(page);
+  try {
+    for (let i = 0; i < strokes; i++) {
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + stepX, y: y + stepY }] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    }
+  } finally {
+    await touch.detach();
+  }
+}
+
 async function deviceShot(page: Page, yawDelta: number, pitchDelta: number) {
   await page.getByTestId('btn-confirm-position').click();
   const controls = page.getByTestId('controls');
@@ -183,13 +208,7 @@ async function deviceShot(page: Page, yawDelta: number, pitchDelta: number) {
   }, { timeout: 30000, intervals: [0] }).toBe(true);
   await page.getByTestId('btn-load').dispatchEvent('pointerdown', { isPrimary: true });
   await expect(controls).toHaveAttribute('data-mode', 'aiming');
-  const pad = (await page.getByTestId('aim-pad').boundingBox())!;
-  const x = pad.x + pad.width / 2;
-  const y = pad.y + pad.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + yawDelta / 0.0022, y - pitchDelta / 0.0022);
-  await page.mouse.up();
+  await swipeAim(page, yawDelta, pitchDelta);
   await page.getByTestId('btn-fire').tap();
   await expect(controls).toHaveAttribute('data-mode', 'resolving');
   await expect.poll(async () => {
@@ -225,6 +244,8 @@ test('wind chime marks and sounds only after a reflected cork', async ({ page })
   await expect(page.getByRole('img', {name: '跳ね返し風鈴 · 使用済み'})).toHaveText('✓');
   await expect(page.locator('[data-reward=A2]')).toContainText('2');
   expect(await rings()).toBe(1);
+  const { lastSummary } = await readRecordedRun(page);
+  expect(lastSummary?.rewards).toContainEqual(expect.objectContaining({ id: 'A2', granted: 2 }));
 });
 
 test('piggy-bank marks two separate deposits and the real grant', async ({ page }) => {
@@ -246,10 +267,14 @@ test('the bag leaves with the original prize and pays the advertised two corks',
   await startDeviceGame(page, 0.21);
   const bag = page.getByRole('img', {name: 'おまけ袋 · おまけ+2'});
   await expect(bag).toBeVisible();
+  const original = (await readRecordedRun(page)).state.expansion!.rewards!.bag!.instanceId;
   // P077 slides to the right during the first load and the cork flight.
   await deviceShot(page, 0.04, -0.201);
   await expect(bag).toHaveCount(0);
   await expect(page.locator('[data-reward=A1]')).toHaveText('おまけ袋: 弾+2');
+  const { lastSummary } = await readRecordedRun(page);
+  expect(lastSummary?.collected.map(prize => prize.instanceId)).toContain(original);
+  expect(lastSummary?.rewards).toContainEqual(expect.objectContaining({ id: 'A1', granted: 2 }));
 });
 
 test('a prize falling into the seesaw tray marks the tray and grants two corks', async ({ page }) => {
