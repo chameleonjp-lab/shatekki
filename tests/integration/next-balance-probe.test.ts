@@ -14,6 +14,7 @@ describe('24-seed comparison of each actual build policy', () => {
         expect(run.ammoBalanced, String(seed)).toBe(true);
         expect(run.shots).toBeLessThanOrEqual(20);
         expect(run.shotSeconds).toBeGreaterThan(0);
+        expect(run.gameSeconds).toBeGreaterThanOrEqual(run.shotSeconds);
         expect(run.maxCorks).toBeLessThanOrEqual(bundle.tuning.limits.maxSimultaneousCorks);
         runs.push(run);
       }

@@ -144,6 +144,7 @@ export async function playRun(b: GameplayBundle, seed: number) {
     occupiedSlotsDeferred: end.shelf.deferredSlots.length,
     noTransformCandidateAtShotEnd: deferredAtShot,
     zonesLit: end.expansion?.rewards?.lanternsLit ?? [],
+    gameSeconds: end.clocks.motionSec,
     shotSeconds: stats.records.reduce((total, shot) => total + shot.simTimeSec, 0),
     ammoBalanced: isAmmoBalanced(end, b.tuning.initialAmmo),
     effects,
