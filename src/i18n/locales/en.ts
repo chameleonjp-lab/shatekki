@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const EN: Record<UiKey, string> = {
+  "save.pending": "Saving…",
+  "save.failure": "Couldn’t save your game.",
+  "save.blocked": "Close the other tab, then try again.",
+  "save.conflict": "Your game was updated in another window.",
+  "save.retry": "Try again",
+  "save.memory": "Play without saving",
+  "save.inFlight": "The shot has already been fired. This game will end as interrupted.",
+  "save.abandon": "Confirm interruption",
+  "save.unreadable": "Some older records could not be read.",
+  "save.reload": "Load latest record",
+  "save.memoryNotice": "This game will not be saved on this device.",
   "app.restore.abandoned": "The previous game was interrupted during a shot and will not be recorded.",
   "app.restore.ended": "The previous game has ended.",
   "app.restore.quarantined": "The saved game could not be read. Start a new game.",

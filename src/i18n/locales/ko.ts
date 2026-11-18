@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const KO: Record<UiKey, string> = {
+  "save.pending": "저장 중…",
+  "save.failure": "게임을 저장하지 못했습니다.",
+  "save.blocked": "다른 탭을 닫고 다시 시도하세요.",
+  "save.conflict": "다른 창에서 기록이 갱신되었습니다.",
+  "save.retry": "다시 시도",
+  "save.memory": "저장 없이 플레이",
+  "save.inFlight": "이미 발사했으므로 이번 게임은 중단 처리됩니다.",
+  "save.abandon": "중단 확정",
+  "save.unreadable": "일부 이전 기록을 읽을 수 없습니다.",
+  "save.reload": "최신 기록 불러오기",
+  "save.memoryNotice": "이번 게임은 이 기기에 저장되지 않습니다.",
   "app.restore.abandoned": "이전 게임은 발사 도중 중단되어 기록되지 않습니다.",
   "app.restore.ended": "이전 게임이 끝났습니다.",
   "app.restore.quarantined": "저장된 게임을 읽을 수 없습니다. 새 게임을 시작해 주세요.",

@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const TR: Record<UiKey, string> = {
+  "save.pending": "Kaydediliyor…",
+  "save.failure": "Oyun kaydedilemedi.",
+  "save.blocked": "Diğer sekmeyi kapatıp yeniden dene.",
+  "save.conflict": "Oyun kaydı başka bir pencerede güncellendi.",
+  "save.retry": "Yeniden dene",
+  "save.memory": "Kaydetmeden oyna",
+  "save.inFlight": "Atış zaten yapıldı. Bu oyun yarıda kesilmiş sayılacak.",
+  "save.abandon": "Kesintiyi onayla",
+  "save.unreadable": "Bazı eski kayıtlar okunamadı.",
+  "save.reload": "Son kaydı yükle",
+  "save.memoryNotice": "Bu oyun cihaza kaydedilmeyecek.",
   "app.restore.abandoned": "Önceki oyun atış sırasında kesildiği için kaydedilmeyecek.",
   "app.restore.ended": "Önceki oyun sona erdi.",
   "app.restore.quarantined": "Kaydedilen oyun okunamadı. Yeni bir oyun başlatın.",

@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANT: Record<UiKey, string> = {
+  "save.pending": "正在儲存…",
+  "save.failure": "無法儲存這局遊戲。",
+  "save.blocked": "請關閉另一個分頁後再試一次。",
+  "save.conflict": "遊戲紀錄已在另一個視窗更新。",
+  "save.retry": "再試一次",
+  "save.memory": "不儲存，直接玩",
+  "save.inFlight": "子彈已射出，這局將以中斷狀態結束。",
+  "save.abandon": "確認中斷",
+  "save.unreadable": "無法讀取部分舊紀錄。",
+  "save.reload": "讀取最新紀錄",
+  "save.memoryNotice": "這局遊戲不會儲存在此裝置上。",
   "app.restore.abandoned": "上一局在射擊過程中中斷，因此不會記錄該局成績。",
   "app.restore.ended": "上一局已結束。",
   "app.restore.quarantined": "無法讀取儲存的遊戲。請開始新的一局。",

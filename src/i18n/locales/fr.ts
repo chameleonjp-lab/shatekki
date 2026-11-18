@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const FR: Record<UiKey, string> = {
+  "save.pending": "Enregistrement…",
+  "save.failure": "Impossible d’enregistrer la partie.",
+  "save.blocked": "Fermez l’autre onglet, puis réessayez.",
+  "save.conflict": "La partie a été mise à jour dans une autre fenêtre.",
+  "save.retry": "Réessayer",
+  "save.memory": "Jouer sans enregistrer",
+  "save.inFlight": "Le coup est déjà parti. La partie sera considérée comme interrompue.",
+  "save.abandon": "Confirmer l’interruption",
+  "save.unreadable": "Certains anciens enregistrements sont illisibles.",
+  "save.reload": "Charger la dernière sauvegarde",
+  "save.memoryNotice": "Cette partie ne sera pas enregistrée sur cet appareil.",
   "app.restore.abandoned": "La partie précédente a été interrompue pendant un tir et ne sera pas enregistrée.",
   "app.restore.ended": "La partie précédente est terminée.",
   "app.restore.quarantined": "La partie sauvegardée est illisible. Commencez une nouvelle partie.",

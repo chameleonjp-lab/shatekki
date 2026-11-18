@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const IT: Record<UiKey, string> = {
+  "save.pending": "Salvataggio…",
+  "save.failure": "Impossibile salvare la partita.",
+  "save.blocked": "Chiudi l’altra scheda e riprova.",
+  "save.conflict": "La partita è stata aggiornata in un’altra finestra.",
+  "save.retry": "Riprova",
+  "save.memory": "Gioca senza salvare",
+  "save.inFlight": "Hai già sparato. La partita si concluderà come interrotta.",
+  "save.abandon": "Conferma interruzione",
+  "save.unreadable": "Impossibile leggere alcuni vecchi dati.",
+  "save.reload": "Carica l’ultimo salvataggio",
+  "save.memoryNotice": "Questa partita non verrà salvata sul dispositivo.",
   "app.restore.abandoned": "La partita precedente è stata interrotta durante un tiro e non verrà registrata.",
   "app.restore.ended": "La partita precedente è terminata.",
   "app.restore.quarantined": "Impossibile leggere la partita salvata. Inizia una nuova partita.",

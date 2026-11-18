@@ -1,6 +1,17 @@
 import type { UiKey } from './ja';
 
 export const TH: Record<UiKey, string> = {
+  "save.pending": "กำลังบันทึก…",
+  "save.failure": "บันทึกเกมไม่ได้",
+  "save.blocked": "ปิดแท็บอื่นแล้วลองอีกครั้ง",
+  "save.conflict": "มีการอัปเดตบันทึกเกมในหน้าต่างอื่น",
+  "save.retry": "ลองอีกครั้ง",
+  "save.memory": "เล่นโดยไม่บันทึก",
+  "save.inFlight": "ยิงไปแล้ว เกมนี้จะจบลงโดยถือว่าถูกขัดจังหวะ",
+  "save.abandon": "ยืนยันการหยุดเกม",
+  "save.unreadable": "อ่านบันทึกเก่าบางรายการไม่ได้",
+  "save.reload": "โหลดบันทึกล่าสุด",
+  "save.memoryNotice": "เกมนี้จะไม่ถูกบันทึกลงในอุปกรณ์นี้",
   "app.restore.abandoned": "เกมก่อนหน้าถูกขัดจังหวะระหว่างยิง จึงจะไม่บันทึกผล",
   "app.restore.ended": "เกมก่อนหน้าจบแล้ว",
   "app.restore.quarantined": "ไม่สามารถอ่านเกมที่บันทึกไว้ได้ กรุณาเริ่มเกมใหม่",
