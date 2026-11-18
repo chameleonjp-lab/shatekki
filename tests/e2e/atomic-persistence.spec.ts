@@ -236,7 +236,7 @@ test('rollback and incremental legacy import preserve raw keys and daily discove
         schemaVersion: 2,
         bestScores: { old: 800 },
         legacyBestScore: 500,
-        discoveredSets: ['S001', 'PAIR002'],
+        discoveredSets: ['S001', 'PAIR002', null],
       }),
     );
     localStorage.setItem(
@@ -292,7 +292,7 @@ test('rollback and incremental legacy import preserve raw keys and daily discove
     failed: true,
     rolledBack: { discoveredSets: [], bestScore: null },
     emptyShelf: { slotRevision: 0, slots: [null, null, null] },
-    first: { unreadable: ['shatekki.profile.v1'] },
+    first: { unreadable: ['shatekki.profile.v1', 'shatekki.profile.v2'] },
     imported: { discoveredSets: ['S001', 'PAIR002'], bestScore: null, legacyBestScore: 800 },
     rawUnchanged: true,
     updatedUnchanged: true,

@@ -26,13 +26,24 @@ export function collectLegacyProfile(
       const raw = storage.getItem(key);
       if (raw === null) continue;
       const p = JSON.parse(raw);
-      if (p?.schemaVersion !== version || !Array.isArray(p.discoveredSets)) throw Error('format');
-      for (const id of p.discoveredSets) {
-        if (isSetId(id) && knownSets.has(id) && (version === 2 || id.startsWith('S'))) discovered.add(id);
+      if (p?.schemaVersion !== version) throw Error('unsupported profile');
+      let damaged = !Array.isArray(p.discoveredSets);
+      for (const id of Array.isArray(p.discoveredSets) ? p.discoveredSets : []) {
+        if (!isSetId(id)) damaged = true;
+        else if (knownSets.has(id) && (version === 2 || id.startsWith('S'))) discovered.add(id);
       }
-      const oldScores: unknown[] =
-        version === 1 ? [p.bestScore] : [p.legacyBestScore, ...Object.values(p.bestScores ?? {})];
-      for (const value of oldScores) if (score(value)) legacyBestScore = Math.max(legacyBestScore ?? 0, value);
+      const oldScores: unknown[] = [];
+      const best = version === 1 ? p.bestScore : p.legacyBestScore;
+      if (best !== null) oldScores.push(best);
+      if (version === 2) {
+        if (!p.bestScores || typeof p.bestScores !== 'object' || Array.isArray(p.bestScores)) damaged = true;
+        else oldScores.push(...Object.values(p.bestScores));
+      }
+      for (const value of oldScores) {
+        if (score(value)) legacyBestScore = Math.max(legacyBestScore ?? 0, value);
+        else damaged = true;
+      }
+      if (damaged) unreadable.push(key);
     } catch {
       unreadable.push(key);
     }
