@@ -89,3 +89,19 @@ it('rejects a damaged expanded candidate without changing the saved record', asy
   ).toEqual({ ok: false, reason: 'invalid' });
   expect(await repo.read(scope)).toEqual(record);
 });
+
+it('reports a partly unreadable old profile while retaining valid discoveries and the exact raw data', () => {
+  const storage = new FakeStorage();
+  const raw = JSON.stringify({
+    schemaVersion: 2,
+    bestScores: [],
+    legacyBestScore: 'old',
+    discoveredSets: ['S001', null],
+  });
+  storage.setItem('shatekki.profile.v2', raw);
+  const snapshot = collectLegacyProfile(scope, storage, new Set(bundle.catalog.sets.keys()));
+  expect(snapshot.unreadable).toEqual(['shatekki.profile.v2']);
+  expect(snapshot.discoveredSets).toEqual(['S001']);
+  expect(snapshot.legacyBestScore).toBeNull();
+  expect([...storage.data]).toEqual([['shatekki.profile.v2', raw]]);
+});
