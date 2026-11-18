@@ -11,6 +11,8 @@ import {
   mintId,
   type EffectPlan,
   type RewardId,
+  type RunState,
+  type ShotSummary,
   type GameplayBundle,
   type ShotRecord,
   type Vec3,
@@ -24,7 +26,13 @@ interface ShotStats {
   records: ShotRecord[];
 }
 
-export async function playRun(b: GameplayBundle, seed: number) {
+export interface ProbeShot {
+  beforeFire: RunState;
+  gameTick: number;
+  summary: ShotSummary;
+}
+
+export async function playRun(b: GameplayBundle, seed: number, observeShot?: (shot: ProbeShot) => void) {
   const rewardConfig = rewardConfigOf(b.expansion);
   const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfig), transformPolicy: b.behavior?.transformPolicy });
   const stats: ShotStats = { plans: [], records: [] };
@@ -97,6 +105,8 @@ export async function playRun(b: GameplayBundle, seed: number) {
     const bt = isExpandedRunState(s1) ? (s1.expansion.next.modifiers.bulletType ?? s1.bulletType) : s1.bulletType;
     c.dispatch({ type: 'AIM', ...aimAt(b, s1.standX, target, bt) });
     for (let i = 0; i < 5; i++) c.frame(0.1);
+    const beforeFire = c.current;
+    const gameTick = c.gameTick;
     if (!c.dispatch({ type: 'FIRE' })) throw new Error(`FIRE rejected in ${s1.phase}`);
     for (let i = 0; i < 6000 && c.current.phase === 'resolving'; i++) {
       if (c.awaitingAnswer) {
@@ -109,6 +119,7 @@ export async function playRun(b: GameplayBundle, seed: number) {
       maxCorks = Math.max(maxCorks, world.frame().projectiles.length);
     }
     if (c.current.phase === 'resolving') throw new Error('a shot never settled');
+    if (observeShot) observeShot({ beforeFire, gameTick, summary: c.snapshot().lastSummary! });
   }
   const end = c.current;
   if (end.phase !== 'ended') throw new Error(`incomplete run: ${b.key}/${seed}`);
