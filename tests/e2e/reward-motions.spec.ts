@@ -113,3 +113,31 @@ for (const reduce of [false, true]) {
     } else await expect(page.locator('.rwd-motion')).toHaveCount(0);
   });
 }
+
+test('enlarged choices scroll by touch before the final answer is tapped', async ({ page, context }) => {
+  test.setTimeout(120000);
+  const { shootShopkeeper } = await import('../helpers/shoot-shopkeeper');
+  await page.setViewportSize({ width: 375, height: 600 });
+  await page.goto('/?e2e=1');
+  await page.getByTestId('home-start').click();
+  await page.getByTestId('order-decline').click();
+  await shootShopkeeper(page);
+  await expect(page.getByTestId('shopkeeper-question')).toBeVisible({ timeout: 30000 });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Page.setFontSizes', { fontSizes: { standard: 48 } });
+  const choices = page.locator('.shopq-choices');
+  await expect.poll(() => choices.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(30);
+  const box = (await choices.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const bottom = box.y + box.height - 6;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{x, y: bottom}] });
+  for (let i = 1; i <= 8; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{x, y: bottom - i * box.height / 10}] });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => choices.evaluate(el => el.scrollTop)).toBeGreaterThan(10);
+  await expect(page.getByTestId('shopkeeper-question')).toHaveAttribute('data-answered', '0');
+  await page.getByTestId('shopq-choice-B').tap();
+  await expect(page.getByTestId('shopkeeper-question')).toBeHidden();
+  await cdp.detach();
+});

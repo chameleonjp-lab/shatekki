@@ -251,3 +251,6 @@
 @keyframes reward-seal { from { transform: scale(1.7) rotate(-20deg); } to { transform: scale(1) rotate(-6deg); } }
 @media (prefers-reduced-motion: reduce) { .rwd-motion { display: none; } }
 .rwd-close { width: 100%; min-height: 36px; margin-top: 4px; border: 1px solid #bb9566; border-radius: 6px; background: #4d3329; color: #fff5e1; font: inherit; }
+.shopq-scroll, .shopq-scroll .shopq-choice { touch-action: pan-y; }
+.shopq-scroll .shopq-choice { flex: 0 0 auto; }
+.shopq-scroll .shopq-choices, .shopq-scroll .shopq-body { overscroll-behavior: contain; }

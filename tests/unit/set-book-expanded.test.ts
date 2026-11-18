@@ -6,14 +6,13 @@ import { createExpansionTranslator } from '../../src/i18n/expansion-text';
 import { translate } from '../../src/i18n';
 import { setBookEntriesFromCatalog, setBookViewModel } from '../../src/ui/set-book';
 
-const bundle = getGameplayBundle('expanded-proposed');
-const entries = setBookEntriesFromCatalog(bundle.catalog);
 const text = createExpansionTranslator(
   () => 'ja',
   (k, p) => translate('ja', k as UiKey, p),
 );
 
-describe('set book with pair sets', () => {
+describe.each(['expanded-proposed', 'expanded-next'] as const)('%s: set book with pair sets', key => {
+  const entries = setBookEntriesFromCatalog(getGameplayBundle(key).catalog);
   it('lists 100 three-kind sets and 300 pair sets, with the kind count of each', () => {
     const vm = setBookViewModel({ sets: entries, discovered: [], completedThisRun: [] }, 'ja', { expandedText: text });
     expect(vm.entries.length).toBe(400);
@@ -59,6 +58,9 @@ describe('set book with pair sets', () => {
     expect(s.kinds).toBe(3);
   });
 
+});
+
+describe('common book behavior', () => {
   it('rules-v1 book is unchanged: 100 sets, no filter', () => {
     const v1 = setBookEntriesFromCatalog(RELEASE_CATALOG);
     const vm = setBookViewModel({ sets: v1, discovered: [], completedThisRun: [] }, 'ja');

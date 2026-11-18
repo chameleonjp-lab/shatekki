@@ -37,6 +37,7 @@ export interface QuestionPanelContent {
 }
 
 export interface QuestionPanelDeps {
+  readonly scrollable?: boolean;
   /** Return false when the command was rejected (the panel then re-enables). */
   onAnswer(command: AnswerShopkeeperCommand): boolean | void | Promise<boolean>;
   /** Explicitly resume after returning from landscape or another app. */
@@ -87,7 +88,7 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     return e;
   };
 
-  const overlay = mk('div', 'shopq');
+  const overlay = mk('div', deps.scrollable ? 'shopq shopq-scroll' : 'shopq');
   overlay.dataset.testid = 'shopkeeper-question';
   overlay.hidden = true;
   const card = mk('div', 'shopq-card');
@@ -220,7 +221,10 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     });
   }
   // The backdrop swallows touches so nothing underneath (fire, home, resume) can react to a stray tap.
-  on<Event>(overlay, 'touchmove', (e) => e.preventDefault());
+  on<Event>(overlay, 'touchmove', (e) => {
+    if (deps.scrollable) e.stopPropagation();
+    else e.preventDefault();
+  });
 
   const render = (c: QuestionPanelContent) => {
     titleEl.textContent = deps.t('shopq.title');

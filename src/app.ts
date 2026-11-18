@@ -515,6 +515,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       });
       // Mounted after the controls so it sits above them; its backdrop takes the touches while shown.
       questionPanel = expandedUi.createShopkeeperQuestionPanel(ui, {
+        scrollable: illustratedRewards,
         t: expText,
         onAnswer: uiCommand,
         onResume: bundle.behavior?.clock === 'fixed' ? () => {
