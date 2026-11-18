@@ -1,6 +1,19 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANS: Record<UiKey, string> = {
+  "save.legacyDailyBest": "旧记录（日期不详）：{score}分",
+  "save.quota": "存储空间不足。",
+  "save.pending": "正在保存…",
+  "save.failure": "未能保存本局游戏。",
+  "save.blocked": "请关闭另一个标签页后重试。",
+  "save.conflict": "游戏记录已在另一个窗口更新。",
+  "save.retry": "重试",
+  "save.memory": "不保存，直接玩",
+  "save.inFlight": "子弹已射出，本局将以中断状态结束。",
+  "save.abandon": "确认中断",
+  "save.unreadable": "部分旧记录无法读取。",
+  "save.reload": "读取最新记录",
+  "save.memoryNotice": "本局游戏不会保存在此设备上。",
   "app.restore.abandoned": "上一局在射击过程中中断，因此不会记录该局成绩。",
   "app.restore.ended": "上一局已结束。",
   "app.restore.quarantined": "无法读取保存的游戏。请开始新的一局。",

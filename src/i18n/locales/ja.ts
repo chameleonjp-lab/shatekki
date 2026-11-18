@@ -4,6 +4,19 @@
  * as a test failure. Placeholders use {name}. Logic must never branch on text.
  */
 export const JA = {
+  "save.legacyDailyBest": "日付不明の旧記録：{score}点",
+  "save.quota": "空き容量が不足しています。",
+  "save.pending": "保存しています…",
+  "save.failure": "保存できませんでした。",
+  "save.blocked": "別のタブを閉じてから再試行してください。",
+  "save.conflict": "別の画面で記録が更新されました。",
+  "save.retry": "再試行",
+  "save.memory": "この画面だけで遊ぶ",
+  "save.inFlight": "発射済みのため、この回は中断として終了します。",
+  "save.abandon": "中断を確定する",
+  "save.unreadable": "一部の旧記録を読み取れませんでした。",
+  "save.reload": "最新の記録を読む",
+  "save.memoryNotice": "この回は端末に記録されません。",
   "app.restore.abandoned": "前回は撃っている途中で中断されたため、そのプレイは記録されません。",
   "app.restore.ended": "前回のプレイは終わっています。",
   "app.restore.quarantined": "保存データを読めなかったため、新しく始めます。",

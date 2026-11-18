@@ -1,6 +1,19 @@
 import type { UiKey } from './ja';
 
 export const ES: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Récord anterior (fecha desconocida): {score} puntos",
+  "save.quota": "No hay suficiente espacio de almacenamiento.",
+  "save.pending": "Guardando…",
+  "save.failure": "No se pudo guardar la partida.",
+  "save.blocked": "Cierra la otra pestaña y vuelve a intentarlo.",
+  "save.conflict": "La partida se actualizó en otra ventana.",
+  "save.retry": "Reintentar",
+  "save.memory": "Jugar sin guardar",
+  "save.inFlight": "Ya disparaste. La partida terminará como interrumpida.",
+  "save.abandon": "Confirmar interrupción",
+  "save.unreadable": "No se pudieron leer algunos registros anteriores.",
+  "save.reload": "Cargar el último registro",
+  "save.memoryNotice": "Esta partida no se guardará en este dispositivo.",
   "app.restore.abandoned": "La partida anterior se interrumpió durante un disparo y no se registrará.",
   "app.restore.ended": "La partida anterior ha terminado.",
   "app.restore.quarantined": "No se pudo leer la partida guardada. Empieza una nueva.",

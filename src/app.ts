@@ -23,6 +23,9 @@ import {
   type TuningConfig,
 } from './contracts';
 import { GameController, type ControllerSnapshot } from './app/controller';
+import { AtomicGame } from './app/atomic-game';
+import { PersistedSession } from './app/persisted-session';
+import type { PersistedRecord, RunScope } from './contracts/persistence';
 import { CORE_RULES } from './app/rules';
 import { OFFICIAL_BUNDLE, type ExpandedUiKit } from './app/bundle';
 import { createExpandedRun } from './core/expanded-run';
@@ -164,6 +167,15 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // ------------------------------------------------------------ stores
   const storage = browserStorage(win);
+  const atomic = bundle.behavior?.persistence === 'atomic'
+    ? new AtomicGame(() => win.indexedDB, newRunId(win), bundle, storage, () => {
+        session = null;
+        clearEngine();
+        savePrompt('save.blocked', () => void loadAtomic());
+      })
+    : null;
+  root.dataset.rulesVersion = catalog.rulesVersion;
+  let session: PersistedSession | null = null;
   // Expanded rules write their own keys (EG06); rules-v1 keys and records are never touched by them.
   const normalRunStore: RunStore = expansion
     ? createRunStore(storage, newRunId(win), { catalog, tuning, layout, expansion, key: expandedRunKey(catalog.rulesVersion) })
@@ -181,20 +193,21 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let modeStorage: KeyValueStorage = storage;
   const setMode = (m: 'normal' | 'daily') => {
     mode = m;
+    root.dataset.mode = m;
     runStore = m === 'daily' && dailyRunStore ? dailyRunStore : normalRunStore;
     profile = m === 'daily' && dailyProfile ? dailyProfile : normalProfile;
     modeStorage = m === 'daily' ? dailyStorage : storage;
   };
   const souvenirs = hasDaily ? createSouvenirStore(storage) : null;
-  const settingsStore = createSettingsStore(storage);
+  const settingsStore = createSettingsStore(storage, undefined, !atomic);
   const nameStore = createPlayerNameStore(storage);
-  const ranking = createRankingService({ storage });
+  const ranking = createRankingService({ storage: atomic ? null : storage });
   const links = publicLinks();
   // The expanded prototype is never ranked (prototype values, internal builds only).
   const rankingAvailable = RANKING_CONFIG.gameSlug !== null && expansion === null;
-  let restore: RestoreResult = runStore.load();
+  let restore: RestoreResult = atomic ? {kind:'none'} : runStore.load();
   // A daily game in progress (or a kept daily result) comes back when the normal mode has nothing.
-  if (dailyRunStore && restore.kind === 'none') {
+  if (!atomic && dailyRunStore && restore.kind === 'none') {
     const d = dailyRunStore.load();
     if (d.kind !== 'none') {
       setMode('daily');
@@ -224,8 +237,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // created/resumed from a user gesture; failures never stop the game.
   const audio = createAudioEngine();
   let audioSettings: AudioSettings = settingsStore.load().audio;
-  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) =>
-    audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) => {
+    if (!atomic || reasons.length === 0) audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  };
   const unlockAudio = () => void audio.unlock().catch(() => undefined);
   root.addEventListener('pointerdown', unlockAudio, { capture: true });
   root.addEventListener('keydown', unlockAudio, { capture: true });
@@ -328,6 +342,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // ------------------------------------------------------------ environment
   const updateEnv = () => {
+    lastTs = 0;
     reasons = environmentPauseReasons(snapshot(win));
     rotate.hidden = !reasons.includes('landscape');
     root.dataset.pause = reasons.join(' ');
@@ -345,6 +360,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   const isStale = () => runStore.status().conflict || runStore.isStale();
   const markStale = () => {
+    if (atomic) return false;
     if (!isStale()) return false;
     stale.hidden = false;
     controller?.dispatch({ type: 'PAUSE', reason: 'manual' });
@@ -407,7 +423,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (disposed) return;
     const dt = lastTs ? (ts - lastTs) / 1000 : 0;
     lastTs = ts;
-    if (screen === 'game') controller?.frame(dt);
+    if (screen === 'game' && (!atomic || recovery.hidden)) controller?.frame(dt);
     raf = win.requestAnimationFrame(loop);
   };
 
@@ -418,7 +434,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         return cue('loadStart');
       case 'STOP_LOAD':
         // P5 (rewards versions): the latch sounds at the same moment as the perfect-load sound.
-        if (rewardCfg && s?.load?.tier === 'perfect') cue('critLatch');
+        if (rewardCfg && s?.load?.tier === 'perfect') {
+          cue('critLatch');
+          if (atomic) return;
+        }
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
       case 'FIRE':
         return cue('fire');
@@ -432,18 +451,31 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     }
   };
 
+  const uiCommand = (cmd: GameCommand): boolean | Promise<boolean> => {
+    if (markStale() || !controller || (atomic && !recovery.hidden)) return false;
+    if (session) return controller.dispatchPersisted(cmd).then(status => status === 'applied');
+    const accepted = controller.dispatch(cmd);
+    if (accepted) playAcceptedCue(cmd);
+    return accepted;
+  };
+
+  const playAcceptedCue = (cmd: GameCommand) => {
+    if (cmd.type === 'ANSWER_SHOPKEEPER') cue('answerAccepted');
+    else if (cmd.type === 'SET_POSITION') return;
+    else if (cmd.type === 'ORDER') cue(cmd.accept ? 'confirm' : 'cancel');
+    else playCommandCue(cmd);
+  };
+
   const mountPanel = () => {
     panel?.dispose();
     panel = mountControls(ui, {
-      dispatch: (cmd) => {
-        if (markStale() || !controller) return false;
-        const ok = controller.dispatch(cmd);
-        if (ok) playCommandCue(cmd as GameCommand);
-        return ok;
-      },
+      dispatch: (cmd) => uiCommand(cmd as GameCommand),
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
-      onRetry: () => void startRun({ name: runName }),
+      onRetry: () => {
+        if (atomic) void leaveResult(true);
+        else void startRun({ name: runName });
+      },
       ...(expansion ? { stand: standRangeOf(layout) } : {}),
     });
     questionPanel?.destroy();
@@ -459,19 +491,15 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         layout,
         t: expText,
         onJump: (x) => {
-          if (markStale() || !controller) return;
-          if (controller.dispatch({ type: 'SET_POSITION', x })) cue('select');
+          const accepted = uiCommand({type:'SET_POSITION', x});
+          if (accepted instanceof Promise) void accepted.then(ok => { if (ok) cue('select'); });
+          else if (accepted) cue('select');
         },
       });
       // Mounted after the controls so it sits above them; its backdrop takes the touches while shown.
       questionPanel = expandedUi.createShopkeeperQuestionPanel(ui, {
         t: expText,
-        onAnswer: (cmd) => {
-          if (markStale() || !controller) return false;
-          const ok = controller.dispatch(cmd);
-          if (ok) cue('answerAccepted');
-          return ok;
-        },
+        onAnswer: uiCommand,
       });
       effectResults = expandedUi.mountEffectResults(ui, {
         t: expText,
@@ -481,12 +509,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         rewardPanel = expandedUi.mountRewardPanel(ui, {
           t: expText,
           prizeName: (typeId) => prizeName(i18n.locale, typeId),
-          onOrder: (accept) => {
-            if (markStale() || !controller) return false;
-            const ok = controller.dispatch({ type: 'ORDER', accept });
-            if (ok) cue(accept ? 'confirm' : 'cancel');
-            return ok;
-          },
+          onOrder: (accept) => uiCommand({type:'ORDER', accept}),
         });
       }
       mapUpdatedAt = -Infinity;
@@ -565,11 +588,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const onRunEnded = (state: RunState, summary: ShotSummary | null) => {
     const result = finalResult(state);
     const lastShot = lastShotOf(summary);
-    const selfBestBefore = profile.load().bestScore;
-    const { newBest } = profile.recordRunEnd(result);
+    const selfBestBefore = atomic ? session!.record.selfBestBefore : profile.load().bestScore;
+    const newBest = atomic ? session!.record.newBest : profile.recordRunEnd(result).newBest;
     cue('runEnd');
     const fireSaveFailed = runStore.status().fireSaveFailed;
-    if (rewardCfg) {
+    if (atomic) {
+      atomic.keep(session!.record);
+    } else if (rewardCfg) {
       // Save what the result shows before the screen changes, then keep the ended run (plan T2).
       saveResultMeta(state.runId, selfBestBefore, newBest);
       runStore.saveStable(state);
@@ -578,7 +603,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (rankingAvailable && !fireSaveFailed) void ranking.submit(result).catch(() => undefined);
     // Let the last settle presentation play briefly before the result screen.
     win.setTimeout(() => {
-      if (disposed || controller?.current.runId !== state.runId) return;
+      if (disposed || screen !== 'game' || controller?.current.runId !== state.runId) return;
+      if (atomic && (!atomic.record?.resultViewOpen || !recovery.hidden)) return;
       showResult(result, selfBestBefore, newBest, lastShot);
     }, 900);
   };
@@ -593,6 +619,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         tuning,
         layout,
         expansion,
+        ...(session ? {session, onReplayed: showSavedRecord, reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false} : {}),
         onChange,
         onSimEvents: (events) => {
           for (const e of events) audio.handle(e, audioSettings);
@@ -602,10 +629,15 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           effectResults?.hide();
           rewardPanel?.hideCard();
           firedWithLastCork = s.ammo === 0;
+          if (atomic) return;
           runStore.saveAfterFire(s);
           markStale();
         },
         onCommandApplied: (cmd, s) => {
+          if (atomic) {
+            if (s.pauseReasons.every(reason => reason === 'manual')) playAcceptedCue(cmd);
+            return;
+          }
           // ORDER (A9): the answer is part of the run, so a reload before the first shot keeps it.
           if (cmd.type === 'STOP_LOAD' || cmd.type === 'ORDER') runStore.saveStable(s);
         },
@@ -615,7 +647,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           const effectCue = effectCueFor(summary.effects);
           if (rewardCfg && expandedUi) {
             // Rewards versions (P1-P3): one big moment per shot; everything else stays on the card.
-            const fresh = summary.newlyCompletedSets.length > 0 ? profile.discoverSets(summary.newlyCompletedSets) : [];
+            const fresh = session ? session.record.lastFreshSets : summary.newlyCompletedSets.length > 0 ? profile.discoverSets(summary.newlyCompletedSets) : [];
             const input = {
               collected: summary.chainCount,
               completedSets: summary.newlyCompletedSets,
@@ -642,11 +674,79 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (summary.bonusAmmoGranted > 0) cue('ammoBonus');
           }
           if (s.phase === 'ended') onRunEnded(s, summary);
-          else runStore.saveStable(s);
+          else if (!atomic) runStore.saveStable(s);
         },
       },
       initial,
     );
+
+  const recovery = doc.createElement('section');
+  recovery.className = 'save-dialog';
+  recovery.dataset.testid = 'save-dialog';
+  recovery.hidden = true;
+  recovery.setAttribute('role', 'alert');
+  root.append(recovery);
+
+  const savePrompt = (key: UiKey, retry?: () => void, conflict = false) => {
+    recovery.replaceChildren();
+    recovery.hidden = false;
+    root.dataset.saving = key;
+    ui.inert = screens.inert = resumeBox.inert = true;
+    panel?.cancelGestures();
+    const message = doc.createElement('p');
+    message.textContent = i18n.t(key);
+    recovery.append(message);
+    if (!retry) return;
+    for (const [label, action] of [
+      [conflict ? 'save.reload' : 'save.retry', retry],
+      ['save.memory', () => {
+        atomic!.useMemory();
+        session = null;
+        clearEngine();
+        dismissPrompt();
+        void startRun({name:null, daily:mode === 'daily'});
+      }],
+    ] as const) {
+      const button = doc.createElement('button');
+      button.className = 'btn';
+      button.dataset.testid = label;
+      button.textContent = i18n.t(label);
+      button.onclick = action;
+      recovery.append(button);
+    }
+  };
+
+  const clearEngine = () => {
+    controller = null;
+    audio.silence();
+    renderer?.dispose();
+    renderer = null;
+    world?.dispose();
+    world = null;
+  };
+
+  const dismissPrompt = () => {
+    recovery.hidden = true;
+    delete root.dataset.saving;
+    ui.inert = screens.inert = resumeBox.inert = false;
+    lastTs = 0;
+  };
+
+  const saveError = (error: unknown, retry: () => void) => {
+    const reason = (error as {reason?: string} | null)?.reason;
+    if (reason === 'conflict' || reason === 'invalid') savePrompt('save.conflict', () => void loadAtomic(), true);
+    else if (reason === 'blocked') savePrompt('save.blocked', retry);
+    else savePrompt(reason === 'quota' ? 'save.quota' : 'save.failure', retry);
+  };
+
+  const saveStatus = (current: PersistedSession) => {
+    if (session !== current || disposed) return;
+    if (current.status === 'ready') {
+      atomic!.keep(current.record);
+      dismissPrompt();
+    } else if (current.status === 'pending') savePrompt('save.pending');
+    else saveError({reason:current.reason}, () => void current.retry());
+  };
 
   const DAILY_DATE_KEY = 'shatekki.dailyDate';
   /** Start a new run with the name fixed now (null = anonymous), or continue a saved one. */
@@ -656,7 +756,6 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     status.textContent = i18n.t('app.status.preparing');
     try {
       const w = await ensureEngine();
-      clearScreen();
       let initial: RunState;
       if (opts.resume) {
         initial = rankingAvailable ? opts.resume : { ...opts.resume, playerName: null };
@@ -666,10 +765,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         // E4: a new daily game takes today's Japan date; the same date and version give the same stall.
         setMode(opts.daily && hasDaily ? 'daily' : 'normal');
         let seed = newSeed(win);
+        let scope: RunScope | undefined = atomic?.scope(mode);
         if (mode === 'daily') {
           const date = jstDateOf(Date.now());
           seed = dailySeed(date, catalog.rulesVersion);
-          try {
+          if (atomic) scope = atomic.scope(mode, date);
+          else try {
             modeStorage.setItem(DAILY_DATE_KEY, date);
           } catch {
             /* the stall is still fixed by the seed in the saved run */
@@ -677,20 +778,34 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         }
         const config = { runId: mintId.run(newRunId(win)), seed, tuning, playerName: runName };
         initial = expansion ? createExpandedRun(config, { catalog, tuning, layout, expansion }) : CORE_RULES.createRun(config, catalog);
-        runStore.saveStable(initial);
+        if (atomic && scope) {
+          savePrompt('save.pending');
+          await atomic.start(scope, initial);
+        } else runStore.saveStable(initial);
       }
       if (rankingAvailable) ranking.beginRun({ runId: initial.runId, playerName: runName, valueStatus: initial.valueStatus });
+      clearScreen();
+      if (atomic && atomic.record) {
+        session = new PersistedSession(atomic.repo, atomic.record, saveStatus);
+        root.dataset.dailyDate = atomic.record.scope.mode === 'daily' ? atomic.record.scope.startedDateJst : '';
+        dismissPrompt();
+      }
       controller = makeController(w, initial);
       controller.setEnvironmentPause(reasons);
       setScreen('game');
       mountPanel();
       root.dataset.started = 'true';
       notice.hidden = true;
+      if (atomic?.memory || atomic?.unreadable) {
+        notice.textContent = i18n.t(atomic.memory ? 'save.memoryNotice' : 'save.unreadable');
+        notice.hidden = false;
+      }
       if (!raf) {
         lastTs = 0;
         raf = win.requestAnimationFrame(loop);
       }
     } catch (err) {
+      if (atomic) { saveError(err, () => void startRun(opts)); return; }
       console.error('start failed', err);
       noticeKey = 'app.error.start';
       notice.textContent = i18n.t(noticeKey);
@@ -702,7 +817,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
 
   // ------------------------------------------------------------ screens
-  const openSetBook = () => {
+  const openSetBook = async () => {
+    if (atomic) {
+      try { await atomic.refreshProfile(); }
+      catch (err) { saveError(err, () => void openSetBook()); return; }
+      dismissPrompt();
+    }
     bookHandle?.dispose();
     const last = controller?.current ?? shownEnded;
     bookHandle = mountSetBook(
@@ -718,7 +838,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       },
       {
         sets: setBookEntriesFromCatalog(catalog),
-        discovered: profile.load().discoveredSets,
+        discovered: atomic ? atomic.profile(atomic.record?.scope ?? atomic.scope(mode)).discoveredSets : profile.load().discoveredSets,
         completedThisRun: last && screen === 'result' ? last.completedSets : [],
         prototypeHints: isPrototype,
       },
@@ -749,7 +869,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         onOpenSetBook: openSetBook,
       },
-      { nameDraft: nameStore.get() ?? '', selfBest: normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
+      { nameDraft: nameStore.get() ?? '', selfBest: atomic ? atomic.profile(atomic.scope('normal')).bestScore : normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
     );
     // Rewards versions: today's stall (E4) and the souvenir shelf (E3) under the normal start.
     if (hasDaily && dailyProfile) {
@@ -770,12 +890,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         });
         const note = doc.createElement('p');
         note.className = 'note';
-        const best = dailyProfile.load().bestScore;
+        const best = atomic ? atomic.profile(atomic.scope('daily', date)).bestScore : dailyProfile.load().bestScore;
         note.textContent = `${expText('daily.note', { date })} ${best === null ? '' : expText('daily.best', { score: best })}`.trim();
+        const oldBest = atomic?.profile(atomic.scope('daily', date)).legacyBestScore;
+        if (oldBest != null) note.append(' ', i18n.t('save.legacyDailyBest', {score:oldBest}));
         const shelf = doc.createElement('p');
         shelf.className = 'note';
         shelf.dataset.testid = 'home-souvenirs';
-        const slots = souvenirs?.load().slots ?? [];
+        const slots = atomic ? atomic.shelf.slots : souvenirs?.load().slots ?? [];
         shelf.textContent = `${expText('souvenir.title')}: ${slots.map((s) => (s ? prizeName(i18n.locale, s.typeId) : expText('souvenir.empty'))).join(' / ')}`;
         sec.append(btn, note, shelf);
         col.appendChild(sec);
@@ -804,6 +926,20 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   let shownEnded: RunState | null = null;
   let souvenirView: SouvenirShelfHandle | null = null;
+  const leaveResult = async (play: boolean) => {
+    const daily = mode === 'daily';
+    if (atomic) {
+      if (!recovery.hidden) return;
+      savePrompt('save.pending');
+      try { await atomic.close(); }
+      catch (err) { saveError(err, () => { dismissPrompt(); void leaveResult(play); }); return; }
+      dismissPrompt();
+      if (!play) { await loadAtomic(); return; }
+    } else closeKeptResult();
+    if (play) await startRun({name:runName, daily});
+    else showHome();
+  };
+
   const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null, readOnly = false) => {
     clearScreen();
     setScreen('result');
@@ -816,14 +952,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       screens,
       {
         i18n,
-        onRetry: () => {
-          closeKeptResult();
-          void startRun({ name: runName, daily: mode === 'daily' });
-        },
-        onHome: () => {
-          closeKeptResult();
-          showHome();
-        },
+        onRetry: () => void leaveResult(true),
+        onHome: () => void leaveResult(false),
         onRetrySubmit: () => void ranking.retryPending({ includePermanent: false }).catch(() => undefined),
         onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
         onOpenSetBook: openSetBook,
@@ -835,10 +965,22 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     // E3: the souvenir shelf under the result (rewards versions; the same three slots in both modes).
     souvenirView?.dispose();
     souvenirView = null;
-    if (souvenirs) {
+    if (souvenirs && !atomic?.memory) {
       const col = screens.querySelector<HTMLElement>('.scr-result .scr-col');
       const won = [...new Set(result.collected.map((c) => String(c.typeId)))];
-      if (col) souvenirView = mountSouvenirShelf(col, { store: souvenirs, t: expText, name: (k) => prizeName(i18n.locale, k) }, { runId: result.runId, completed: result.status === 'completed', wonTypeIds: won });
+      const store = atomic ? {
+        load: () => atomic.shelf,
+        place: async (input: Parameters<typeof souvenirs.place>[0]) => {
+          const r = await atomic.repo.place({...input, expectedRevision:atomic.shelf.slotRevision});
+          if (r.ok) atomic.shelf = r.shelf;
+          else if (r.reason === 'conflict') {
+            atomic.shelf = r.current;
+            return {ok:false, reason:'saveFailed'} as const;
+          }
+          return r;
+        },
+      } : souvenirs;
+      if (col) souvenirView = mountSouvenirShelf(col, { store, t: expText, name: (k) => prizeName(i18n.locale, k) }, { runId: result.runId, completed: result.status === 'completed', wonTypeIds: won });
     }
     void loadHeavyModules().then(({ view }) => {
       if (screen !== 'result' || readOnly) return;
@@ -864,7 +1006,56 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (screen === 'game') mountPanel();
   });
 
+  const showSavedRecord = (record: PersistedRecord) => {
+    clearScreen();
+    atomic!.keep(record);
+    session = null;
+    clearEngine();
+    setMode(record.scope.mode);
+    root.dataset.dailyDate = record.scope.mode === 'daily' ? record.scope.startedDateJst : '';
+    dismissPrompt();
+    if (record.result) {
+      if (!record.resultViewOpen) { showHome(); return; }
+      shownEnded = record.state;
+      showResult(record.result, record.selfBestBefore, record.newBest, lastShotOf(record.lastSummary), true);
+    } else {
+      setScreen('resume');
+      const flight = !!record.state.inFlight;
+      resumeTitle.textContent = i18n.t(flight ? 'save.inFlight' : 'app.resume.title');
+      resumeBtn.textContent = i18n.t(flight ? 'save.abandon' : 'app.resume.continue');
+      newBtn.hidden = flight;
+    }
+  };
+
+  const loadAtomic = async () => {
+    savePrompt('save.pending');
+    session = null;
+    clearEngine();
+    try {
+      const record = await atomic!.open();
+      if (disposed) return;
+      dismissPrompt();
+      if (record) showSavedRecord(record);
+      else showHome();
+    } catch (error) { saveError(error, () => void loadAtomic()); }
+  };
+
+  const resumeAtomic = async (abandon: boolean) => {
+    if (!atomic || !recovery.hidden) return;
+    savePrompt('save.pending');
+    try {
+      const record = await atomic.claim();
+      if (record.result) { showSavedRecord(record); return; }
+      if (abandon) {
+        const next = CORE_RULES.reduceGame(record.state,{type:'ABANDON'}, {catalog,tuning,layout,expansion});
+        session = new PersistedSession(atomic.repo, record, saveStatus);
+        await session.command(next, record.state.runId + '/abandon', record.gameTick, reply => showSavedRecord(reply.record));
+      } else await startRun({name:null, resume:record.state});
+    } catch (error) { saveError(error, () => { dismissPrompt(); void resumeAtomic(abandon); }); }
+  };
+
   resumeBtn.addEventListener('click', () => {
+    if (atomic) { void resumeAtomic(false); return; }
     if (restore.kind === 'resume') {
       const s = restore.state;
       restore = { kind: 'none' };
@@ -872,11 +1063,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     }
   });
   newBtn.addEventListener('click', () => {
+    if (atomic) { void resumeAtomic(true); return; }
     restore = { kind: 'none' };
     showHome();
   });
 
-  if (restore.kind === 'resume') setScreen('resume');
+  if (atomic) void loadAtomic();
+  else if (restore.kind === 'resume') setScreen('resume');
   else if (keptEnded) {
     // Read only: no points, refills, stamps, sounds of the shot or self-best registration again.
     const meta = readResultMeta(keptEnded.runId);
@@ -916,6 +1109,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     currentPauseReasons: () => reasons,
     dispose() {
       disposed = true;
+      atomic?.repo?.close();
       win.cancelAnimationFrame(raf);
       win.removeEventListener('resize', onResize);
       win.removeEventListener('orientationchange', onResize);

@@ -39,6 +39,8 @@ import {
   type ViewState,
   type ExpansionCatalog,
 } from '../contracts';
+import type { ConfirmedPresentation, PersistedRecord, SaveReply } from '../contracts/persistence';
+import type { DispatchResult, PersistedSession } from './persisted-session';
 import { rewardConfigOf, rewardViewState } from '../core/rewards';
 
 export interface RulesApi {
@@ -83,6 +85,10 @@ export interface ControllerDeps {
   /** Expanded rules catalog of the same GameplayBundle; absent/null = rules-v1. */
   readonly expansion?: ExpansionCatalog | null;
   /** Called after any state change (command, frame, settlement). */
+  readonly session?: PersistedSession;
+  readonly onReplayed?: (record: PersistedRecord) => void;
+  readonly onConfirmed?: (event: ConfirmedPresentation) => void;
+  readonly reducedMotion?: () => boolean;
   readonly onChange?: (snapshot: ControllerSnapshot) => void;
   readonly onSimEvents?: (events: readonly SimEvent[]) => void;
   readonly onShotSettled?: (summary: ShotSummary, state: RunState) => void;
@@ -101,6 +107,10 @@ export class GameController {
   private lastFrame: SimulationFrame;
   private presentationSkipped = false;
   private readonly ctx: RulesContext;
+  private delayedFire: (() => void) | null = null;
+  get gameTick(): number { return 0; }
+  get persistencePending(): boolean { return !!this.deps.session && this.deps.session.status !== 'ready'; }
+
   private previewKey = '';
   private preview: AimPreview | null = null;
 
@@ -109,6 +119,7 @@ export class GameController {
     initial: RunState,
   ) {
     this.state = initial;
+    this.lastSummary = deps.session?.record.lastSummary ?? null;
     this.ctx = { tuning: deps.tuning, catalog: deps.catalog, layout: deps.layout, expansion: deps.expansion ?? null };
     deps.world.syncShelf(initial.shelf, initial.clocks.motionSec);
     this.lastFrame = deps.world.frame();
@@ -172,7 +183,50 @@ export class GameController {
   /**
    * Untrusted UI input. Returns true when the rules accepted it (state changed).
    */
+  async dispatchPersisted(input: unknown): Promise<DispatchResult> {
+    const parsed = parseCommand(input);
+    if (!parsed.ok || this.persistencePending) return 'rejected';
+    const cmd = parsed.command;
+    const session = this.deps.session;
+    if (!session) return this.dispatch(input) ? 'applied' : 'rejected';
+    if (['SET_POSITION', 'AIM', 'PAUSE', 'RESUME', 'SKIP_PRESENTATION'].includes(cmd.type)) {
+      return this.applyLocal(cmd) ? 'applied' : 'rejected';
+    }
+    const before = this.state;
+    if (cmd.type === 'ANSWER_SHOPKEEPER' && before.pauseReasons.length) return 'rejected';
+    const after = cmd.type === 'ANSWER_SHOPKEEPER'
+      ? this.deps.rules.answerShopkeeper?.(before, cmd, this.ctx) ?? before
+      : this.deps.rules.reduceGame(before, cmd, this.ctx);
+    if (after === before) return 'rejected';
+    const operationId = cmd.type === 'FIRE' ? `${after.runId}/${after.shotsFired}/fire`
+      : `${after.runId}/${session.record.token.revision + 1}/${cmd.type}`;
+    return session.command(after, operationId, this.gameTick, (reply) => {
+      if (reply.replayed) return this.replay(reply.record);
+      this.state = {...reply.record.state, pauseReasons: this.state.pauseReasons};
+      if (cmd.type === 'ANSWER_SHOPKEEPER') this.resumeIfPlanned();
+      if (cmd.type === 'STOP_LOAD' && after.load?.tier === 'perfect') {
+        this.deps.onConfirmed?.({kind:'perfectLoad', runId:after.runId, shotNumber:after.shotsFired + 1,
+          operationId, load:after.load, replayed:false, reducedMotion:this.deps.reducedMotion?.() ?? false});
+      }
+      if (cmd.type === 'FIRE' && this.state.pauseReasons.length > 0) {
+        this.delayedFire = () => this.finishCommand(cmd, before, this.state);
+        this.emit();
+      } else this.finishCommand(cmd, before, this.state);
+    });
+  }
+
+  private replay(record: PersistedRecord): void {
+    this.state = record.state;
+    this.lastSummary = record.lastSummary;
+    this.deps.onReplayed?.(record);
+  }
+
   dispatch(input: unknown): boolean {
+    if (this.deps.session) return false;
+    return this.applyLocal(input);
+  }
+
+  private applyLocal(input: unknown): boolean {
     const parsed = parseCommand(input);
     if (!parsed.ok) return false;
     const command = parsed.command;
@@ -185,6 +239,15 @@ export class GameController {
     const after = this.deps.rules.reduceGame(before, command, this.ctx);
     if (after === before) return command.type === 'SKIP_PRESENTATION';
     this.state = after;
+    return this.finishCommand(command, before, after);
+  }
+
+  private finishCommand(command: GameCommand, before: RunState, after: RunState): boolean {
+    if (command.type === 'RESUME' && after.pauseReasons.length === 0 && this.delayedFire) {
+      const fire = this.delayedFire;
+      this.delayedFire = null;
+      fire();
+    }
     if (command.type === 'FIRE' && before.phase === 'aiming' && after.phase === 'resolving' && after.inFlight) {
       this.presentationSkipped = false;
       this.deps.onShotFired?.(after);
@@ -260,15 +323,15 @@ export class GameController {
     const current = new Set(this.state.pauseReasons);
     for (const r of ['hidden', 'landscape'] as const) {
       const want = reasons.includes(r);
-      if (want && !current.has(r)) this.dispatch({ type: 'PAUSE', reason: r });
-      if (!want && current.has(r)) this.dispatch({ type: 'RESUME', reason: r });
+      if (want && !current.has(r)) this.applyLocal({ type: 'PAUSE', reason: r });
+      if (!want && current.has(r)) this.applyLocal({ type: 'RESUME', reason: r });
     }
   }
 
   /** Advance one animation frame. */
   frame(rawDtSec: number): void {
     const dt = Math.max(0, Math.min(MAX_FRAME_DT, Number.isFinite(rawDtSec) ? rawDtSec : 0));
-    if (this.state.pauseReasons.length > 0) {
+    if (this.persistencePending || this.state.pauseReasons.length > 0) {
       this.render();
       return;
     }
@@ -309,9 +372,23 @@ export class GameController {
       expanded && this.deps.rules.resolveExpandedShot
         ? this.deps.rules.resolveExpandedShot(this.state, record, this.ctx)
         : this.deps.rules.resolveShot(this.state, record, this.deps.catalog, this.deps.tuning);
+    const session = this.deps.session;
+    if (session) {
+      void session.settle(state, summary, this.gameTick, (reply) => {
+        if (reply.replayed) return this.replay(reply.record);
+        this.applySettlement({...reply.record.state, pauseReasons: this.state.pauseReasons}, summary, reply);
+        this.emit();
+      });
+    } else this.applySettlement(state, summary);
+  }
+
+  private applySettlement(state: RunState, summary: ShotSummary, reply?: Extract<SaveReply, {ok:true}>): void {
     this.state = state;
     this.lastSummary = summary;
     if (state.phase !== 'ended') this.deps.world.syncShelf(state.shelf, state.clocks.motionSec);
+    if (reply) this.deps.onConfirmed?.({kind:'shot', runId:state.runId, shotId:summary.shotId, summary,
+      freshSets:reply.freshSets, ammoBeforeShot:reply.record.ammoBeforeShot ?? 0, replayed:false,
+      reducedMotion:this.deps.reducedMotion?.() ?? false});
     this.deps.onShotSettled?.(summary, state);
     void this.deps.renderer?.present(summary, { skip: this.presentationSkipped });
   }
