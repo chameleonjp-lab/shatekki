@@ -13,12 +13,16 @@ const questions = JSON.parse(readFileSync('data/expansion-v2/questions.json', 'u
 const ids = questions.map(q => q.id).sort();
 
 function longestPanel(locale: Locale) {
-  const length = (q: typeof questions[number]) => {
-    const parts = [questionText(locale, q.id)];
-    for (const side of ['A', 'B'] as const) parts.push(choiceText(locale, q.id, side), groupLabel(locale, q[side].group));
-    return Array.from(parts.join('')).length;
-  };
-  const longest = questions.reduce((best, next) => length(next) > length(best) ? next : best);
+  const panels = questions.map(q => {
+    const promptLength = Array.from(questionText(locale, q.id)).length;
+    const choices = [q.A, q.B].map((choice, i) =>
+      choiceText(locale, q.id, i === 0 ? 'A' : 'B') + groupLabel(locale, choice.group),
+    ).join('');
+    return { id: q.id, promptLength, choiceLength: Array.from(choices).length };
+  });
+  // Among equally long prompts, exercise the one with the longest pair of buttons.
+  const [longest] = panels.sort((a, b) => b.promptLength - a.promptLength || b.choiceLength - a.choiceLength);
+  if (!longest) throw Error('Empty question catalog');
   for (let seed = 1; seed <= 20_000; seed++) {
     if (shuffleOnce(seedRng(seed ^ 0x1b873593), ids).items[0] === longest.id) return { seed, id: longest.id };
   }
