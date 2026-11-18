@@ -93,10 +93,4 @@ export class AtomicGame {
   async close(): Promise<void> {
     this.keep(requireRecord(await this.repo.closeResult(this.record!.token)));
   }
-
-  async refreshProfile(): Promise<void> {
-    if (!this.record) return;
-    const scope = this.record.scope;
-    this.profiles.set(this.source(scope), await this.repo.readProfile(scope));
-  }
 }

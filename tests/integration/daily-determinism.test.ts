@@ -7,7 +7,7 @@ import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { createExpandedRun } from '../../src/core/expanded-run';
 import { dailyStart } from '../../src/core/daily';
 import { rewardDevicesFor, rewardConfigOf } from '../../src/core/rewards';
-import { mintId, type GameCommand } from '../../src/contracts';
+import { mintId, type GameCommand, type ImpactEvent, type PrizeContactEvent } from '../../src/contracts';
 import { expansionText } from '../../src/i18n/expansion-text';
 import { questionContentFor } from '../../src/ui/shopkeeper-question';
 import { createShotWorld } from '../../src/sim/world';
@@ -28,14 +28,26 @@ async function play(dateMs: number, locale: 'ja' | 'en' | 'th', displayDt: numbe
   const b = getGameplayBundle('expanded-next');
   const { date, seed } = dailyStart(dateMs, b.catalog.rulesVersion);
   const initial = createExpandedRun({ seed, runId: mintId.run(`daily-${locale}-${displayDt}`), tuning: b.tuning, playerName: null }, { ...b, expansion: b.expansion! });
-  const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfigOf(b.expansion)), transformPolicy: b.behavior?.transformPolicy });
+  const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfigOf(b.expansion)),
+    reportPrizeContacts: b.behavior?.presentation === 'confirmed-motions', transformPolicy: b.behavior?.transformPolicy });
   const shots: unknown[] = [];
   const questions: string[] = [];
+  const contacts: { tick: number; impact: Omit<ImpactEvent, 'runId'> | PrizeContactEvent }[] = [];
   const renderedText: string[] = [];
   const c = new GameController({ ...b, rules: CORE_RULES, clockPolicy: b.behavior?.clock, transformPolicy: b.behavior?.transformPolicy, world, renderer: null,
+    onSimEvents(events) {
+      for (const e of events) {
+        if (e.type === 'prizeContact') contacts.push({ tick: c.gameTick, impact: e });
+        if (e.type === 'impact') {
+          const { runId, ...impact } = e;
+          expect(runId).toBe(initial.runId);
+          contacts.push({ tick: c.gameTick, impact });
+        }
+      }
+    },
     onShotSettled(summary, state) {
       shots.push({ tick: c.gameTick, score: state.score, ammo: state.ammo, collected: summary.collected, sets: state.completedSets,
-        rng: state.expansion?.rng, draw: state.draw, effects: summary.effects, ledger: summary.ledger, poses: state.shelf });
+        expansion: state.expansion, draw: state.draw, effects: summary.effects, ledger: summary.ledger, poses: state.shelf });
     },
   }, initial);
   const keeper = b.layout.shopkeeper.find(part => part.part === 'body')!.box.center;
@@ -84,7 +96,8 @@ async function play(dateMs: number, locale: 'ja' | 'en' | 'th', displayDt: numbe
     until(3600);
     expect(shots).toHaveLength(2);
     expect(questions.length).toBeGreaterThan(0);
-    return { semantics: { date, seed, shots, questions, inputs }, renderedText };
+    expect(contacts.length).toBeGreaterThan(0);
+    return { semantics: { date, seed, shots, questions, inputs, contacts }, renderedText };
   } finally {
     world.dispose();
   }

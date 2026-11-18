@@ -82,8 +82,10 @@ import {
 } from './collisions';
 import { mountBasePose, mountedPose, mountedPoseForShape } from './motion';
 import { createPrizeBody } from './prize';
+import { observePrizeContacts } from './prize-contacts';
 import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, splitChildMarks, type Projectile, type ProjectileExpanded } from './shot';
 import { planTransforms } from './transform-plan';
+import { launchAngles } from './launch-angles';
 
 let rapierReady: Promise<void> | null = null;
 function initRapier(): Promise<void> {
@@ -186,6 +188,8 @@ export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
 /** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
 export interface ShotWorldOptions {
   readonly transformPolicy?: TransformPolicy;
+  /** Report physical prize impacts for live sound and sparks. No effect on scoring. */
+  readonly reportPrizeContacts?: boolean;
   readonly limits?: Pick<ExpansionLimits, 'reflections' | 'maxPowerMultiplier'>;
   /** Rules versions with A2-A4 (r003): the chime, the piggy-bank slot and the seesaw tray. */
   readonly rewardDevices?: RewardDeviceLayout;
@@ -204,6 +208,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   world.timestep = fixedDt;
 
   const targets = new Map<number, Target>();
+  const prizeContacts = options.reportPrizeContacts ? observePrizeContacts(world, tuning.limits, handle => {
+    const target = targets.get(handle);
+    if (target?.t === 'prize') return target.id;
+    if (target?.t === 'surface' && target.id.startsWith('shelf-')) return null;
+    return undefined;
+  }) : null;
   const live = new Map<PrizeInstanceId, LivePrize>();
   const slotById = new Map<string, SlotGeometry>(layout.slots.map((s) => [s.slotId, s]));
   const corkShape = new RAPIER.Ball(tuning.cork.radius);
@@ -248,6 +258,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   };
 
   // ---- A5: the target collider exists only while its shot flies
+  const targetRotation = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
   let rewardTargetCollider: RAPIER.Collider | null = null;
   const removeRewardTarget = (): void => {
     if (!rewardTargetCollider) return;
@@ -258,11 +269,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const addRewardTarget = (g: RewardTargetGeometry): void => {
     removeRewardTarget();
     // A thin cylinder whose axis points at the player (+z): rotate the y-axis cylinder 90° about x.
-    const half = Math.SQRT1_2;
     const c = world.createCollider(
       RAPIER.ColliderDesc.cylinder(REWARD_TARGET_HALF_THICKNESS, g.outerRadius)
         .setTranslation(g.center.x, g.center.y, g.center.z)
-        .setRotation({ x: half, y: 0, z: 0, w: half })
+        .setRotation(targetRotation)
         .setFriction(SURFACE_FRICTION.paper)
         .setRestitution(0),
       fixedBody,
@@ -336,7 +346,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   };
 
   const refreshQueries = () => {
-    world.step(); // Rapier updates its scene-query structures during step()
+    world.step(prizeContacts?.queue); // Rapier updates its scene-query structures during step()
   };
 
   function mountPose(base: Pose, motionCfg: PrizeRuntimeConfig, cfg: PrizeRuntimeConfig, anchored: boolean, time: number): Pose {
@@ -357,7 +367,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       const anchor = supportedBottom ? src.motionAnchor : undefined;
       const base = mounted ? anchor?.base ?? mountBasePose(slot!, motionCfg) : null;
       const pose = base ? mountPose(base, motionCfg, cfg, !!anchor, motionSec) : src.pose;
-      const { body, collider } = createPrizeBody(world, cfg, pose, mounted);
+      const { body, collider } = createPrizeBody(world, cfg, pose, mounted, !!prizeContacts);
       targets.set(collider.handle, { t: 'prize', id: src.instanceId });
       const lp: LivePrize = {
         src,
@@ -825,7 +835,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const position = { x: t.x, y: t.y + (newHalf - oldHalf), z: t.z };
     targets.delete(lp.collider.handle);
     world.removeRigidBody(lp.body);
-    const { body, collider } = createPrizeBody(world, newCfg, { position, rotation }, false);
+    const { body, collider } = createPrizeBody(world, newCfg, { position, rotation }, false, !!prizeContacts);
     body.setLinvel(lin, true);
     body.setAngvel(ang, true);
     targets.set(collider.handle, { t: 'prize', id: lp.src.instanceId });
@@ -910,7 +920,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const ang = lp.body.angvel();
     targets.delete(lp.collider.handle);
     world.removeRigidBody(lp.body);
-    const { body, collider } = createPrizeBody(world, newCfg, pose, lp.mounted);
+    const { body, collider } = createPrizeBody(world, newCfg, pose, lp.mounted, !!prizeContacts);
     if (!lp.mounted) {
       body.setLinvel(lin, true);
       body.setAngvel(ang, true);
@@ -1012,8 +1022,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       a.elapsed += fixedDt;
       if (a.stage === 'flight') for (const p of [...a.projectiles]) if (!p.ended) stepProjectile(a, p, fixedDt);
     }
-    world.step();
+    if (a) prizeContacts?.beforeStep(live.values());
+    world.step(prizeContacts?.queue);
     if (a && active === a) {
+      prizeContacts?.afterStep(a.shotId, event => pending.push(event));
       // A3: record a pass through the tray BEFORE collection removes the prize (same step counts).
       detectTray(a);
       detectCollections(a);
@@ -1055,6 +1067,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       ];
     }
     const spec = ballisticForModifiers(tuning, request.bulletType, m);
+    const angles = launchAngles(m.launch);
     const baseLimit = tuning.limits.maxReflectionsPerCork + tuning.bulletTypes[spec.bulletType].extraReflections + m.extraReflections;
     const x: ProjectileExpanded = {
       radius: spec.corkRadius ?? tuning.cork.radius,
@@ -1065,11 +1078,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       restitutionMult: m.restitutionMult,
       reflectionLimit: Math.max(xLimits.reflections.min, Math.min(xLimits.reflections.max, baseLimit)),
       splitSpreadMult: m.splitSpreadMult,
-      share: 1 / m.launch.count,
+      share: 1 / angles.length,
       maxPowerMultiplier: xLimits.maxPowerMultiplier,
     };
-    const s = m.launch.spreadRad;
-    const dirs = m.launch.count === 1 ? [d] : m.launch.count === 2 ? [rotateY(d, s), rotateY(d, -s)] : [d, rotateY(d, s), rotateY(d, -s)];
+    const dirs = angles.map(angle => angle === 0 ? d : rotateY(d, angle));
     return dirs.map((dir, i) => ({
       id: mintId.projectile(request.shotId, i),
       generation: m.launch.count === 1 ? 0 : 1,
@@ -1086,7 +1098,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   };
 
   // ---- FX098: read-only first-contact estimate
-  const previewFirstContact = (request: ShotRequest, m: ShotModifiers): AimPreview => {
+  const previewFirstContact = (request: ShotRequest, m: ShotModifiers, target?: RewardTargetGeometry): AimPreview => {
     if (disposed) throw new Error('world disposed');
     const dir = normalize(request.direction);
     if (len(dir) === 0 || !Number.isFinite(dir.x + dir.y + dir.z)) throw new RangeError('invalid shot direction');
@@ -1094,6 +1106,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     const spec = ballisticForModifiers(tuning, request.bulletType, m);
     const radius = spec.corkRadius ?? tuning.cork.radius;
     const shape = ballFor(radius);
+    // Before firing, the disc has no collider in the world. Sweep the same
+    // shape separately so looking at it cannot change the simulation.
+    const disc = target ? new RAPIER.Cylinder(REWARD_TARGET_HALF_THICKNESS, target.outerRadius) : null;
     let pos = request.origin;
     let vel = scale(dir, spec.speed);
     const points: Vec3[] = [pos];
@@ -1101,6 +1116,13 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     for (let i = 0; i < steps; i++) {
       vel = { ...vel, y: vel.y - spec.gravity * fixedDt };
       const hit = world.castShape(pos, IDENT, vel, shape, 0, fixedDt, false);
+      if (disc && target && Math.abs(pos.z - target.center.z) <= REWARD_TARGET_HALF_THICKNESS + radius + Math.abs(vel.z) * fixedDt) {
+        const touch = disc.castShape(target.center, targetRotation, { x: 0, y: 0, z: 0 }, shape, pos, IDENT, vel, 0, hit?.time_of_impact ?? fixedDt, false);
+        if (touch) {
+          points.push(add(pos, scale(vel, touch.time_of_impact)));
+          return { points, firstHitTargetId: REWARD_TARGET_SURFACE_ID, approximate: true };
+        }
+      }
       if (hit) {
         const toi = Math.min(fixedDt, Math.max(0, hit.time_of_impact));
         pos = add(pos, scale(vel, toi));
@@ -1147,6 +1169,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (len(d) === 0 || !Number.isFinite(d.x + d.y + d.z)) throw new RangeError('invalid shot direction');
     if (context.expanded) validateModifiers(context.expanded.modifiers);
     outcomes.clear();
+    prizeContacts?.startShot();
     justCollected = [];
     for (const p of live.values()) {
       p.hits = [];
@@ -1251,6 +1274,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      prizeContacts?.queue.free();
       world.free();
     },
   };

@@ -1,11 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
+import { restoreBeforeShot } from '../helpers/outcome-checkpoint';
+import { readRecordedRun } from '../helpers/read-recorded-run';
 import { RANKING_CONFIG } from '../../src/ranking/config';
 
 async function start(page: Page, version: string, port: number) {
   await page.goto(`http://127.0.0.1:${port}/?e2e=1`);
   await expect(page.locator('#app')).toHaveAttribute('data-rules-version', version);
   await page.getByTestId('home-start').click();
-  if (version !== 'rules-v1') await page.getByTestId('order-decline').click();
+  if (version !== 'rules-v1') {
+    await page.getByTestId('order-decline').click();
+    await expect(page.getByTestId('reward-order')).toBeHidden();
+  }
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
 }
 
@@ -97,3 +102,51 @@ for (const [version, port] of [['rules-v1', 4173], ['rules-v2-proposed-r006', 41
     expect(await page.evaluate(() => localStorage.getItem('shatekki.ranking-pending.v1'))).toBeNull();
   });
 }
+
+test.describe('36-slot booth overview', () => {
+  test.use({ baseURL: 'http://127.0.0.1:4178' });
+
+  test('marks the same series on and off screen without firing or changing aim', async ({ page }) => {
+    // The initial nine ordinary shots have activated the kitchen series. Three
+    // original prizes and one refill are on the right while the camera is left.
+    const before = await restoreBeforeShot(page, 'ended');
+    expect(before.expansion?.outlineSeries).toBe('SER20');
+    const map = page.getByTestId('booth-map');
+    await expect(map.locator('.bm-tile')).toHaveCount(36);
+    await expect(page.getByTestId('exp-outline')).toContainText('おままごと台所');
+    const marked = map.locator('.bm-tile[data-outlined="1"]');
+    await expect(marked).toHaveCount(4);
+    const outlineColor = await map.locator('.booth-map-grid').evaluate(el => getComputedStyle(el).getPropertyValue('--bm-outline').trim());
+    expect(outlineColor.toUpperCase()).toBe('#7DACC2');
+    expect(await map.locator('.bm-tile').evaluateAll(tiles =>
+      tiles.flatMap((tile, i) => tile.getAttribute('data-outlined') === '1' ? [i + 1] : []),
+    )).toEqual([8, 9, 10, 19]);
+    for (const mark of await marked.locator('.bm-pip').allTextContents()) expect(mark).toBe('◆');
+    const bounds = (await map.boundingBox())!;
+    await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    const after = await readRecordedRun(page);
+    expect(after.state.aim).toEqual(before.aim);
+    expect(after.state.standX).toEqual(before.standX);
+    expect(after.state.shotsFired).toBe(9);
+    expect(after.state.ammo).toBe(1);
+    expect(after.state.expansion?.cells).toEqual(before.expansion?.cells);
+  });
+
+  test('moves the stand between the two ends without shooting or using a cell', async ({ page }) => {
+    await start(page, 'rules-v2-proposed-r006', 4178);
+    const slider = page.getByTestId('stand-slider');
+    const grid = page.locator('.booth-map-grid');
+    const bounds = (await grid.boundingBox())!;
+    const before = await readRecordedRun(page);
+    for (const [x, value] of [[bounds.x + 1, '-2.35'], [bounds.x + bounds.width - 1, '2.35']] as const) {
+      await page.touchscreen.tap(x, bounds.y + bounds.height / 2);
+      await expect(slider).toHaveValue(value);
+    }
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
+    const after = await readRecordedRun(page);
+    expect(after.state.shotsFired).toBe(0);
+    expect(after.state.ammo).toBe(10);
+    expect(after.state.expansion?.cells).toEqual(before.state.expansion?.cells);
+    expect(after.state.aim).toEqual(before.state.aim);
+  });
+});

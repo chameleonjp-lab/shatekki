@@ -18,6 +18,7 @@ import {
   type PauseReason,
   type RunState,
   type RuntimeCatalog,
+  type SetId,
   type ShotSummary,
   type ShotWorld,
   type TuningConfig,
@@ -321,6 +322,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let shownQuestion = '';
   let screenHandle: ScreenHandle<never> | null = null;
   let bookHandle: ScreenHandle<never> | null = null;
+  let bookRequest = 0;
   let rankingUnsub: (() => void) | null = null;
   let runName: string | null = null;
   let raf = 0;
@@ -329,6 +331,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let starting = false;
 
   const setScreen = (s: Screen) => {
+    bookRequest++;
     if (s !== 'game') {
       rewardMotions?.clear();
       effectResults?.hide();
@@ -390,14 +393,6 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const onChange = (snap: ControllerSnapshot) => {
     panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
-    if (import.meta.env.VITE_SHATEKKI_PREVIEW_METER === '1') {
-      win.shatekkiMeasureFrame?.({
-        run: snap.state.runId, shot: snap.state.shotsFired,
-        corks: snap.frame.projectiles.length, prizes: snap.frame.prizes.length,
-        cells: snap.view.expansion?.cells.length ?? 0, paused: snap.view.paused,
-        stage: snap.frame.stage, chain: snap.lastSummary?.chainCount ?? 0,
-      });
-    }
     if (expansion) updateExpandedUi(snap);
     if (rewardPanel && rewardCfg) rewardPanel.update(snap.view.expansion?.rewards, { shots: rewardCfg.order.shots, amount: rewardCfg.order.amount });
   };
@@ -422,11 +417,16 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       }
       questionPanel.setPaused(snap.view.paused, !reasons.length && !controller?.persistencePending);
     }
-    // The overview is display only; a few updates per second are enough on a phone.
+    // During flight the overview only needs a few updates per second.
     const now = win.performance.now();
     if (boothMap && (now - mapUpdatedAt > 150 || snap.state.phase !== 'resolving')) {
       mapUpdatedAt = now;
+      const series = ex?.outlineSeries && expansion?.series.get(ex.outlineSeries);
       boothMap.update({
+        ...(series && expandedUi ? {
+          outlined: new Set(expandedUi.seriesOutlineTargets(snap.frame.prizes, series)),
+          outlineColor: series.color,
+        } : {}),
         standX: snap.view.standX,
         aspect: (canvas.clientWidth || win.innerWidth) / Math.max(1, canvas.clientHeight || win.innerHeight),
         prizes: snap.frame.prizes,
@@ -440,7 +440,18 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (disposed) return;
     const dt = lastTs ? (ts - lastTs) / 1000 : 0;
     lastTs = ts;
-    if (screen === 'game' && (!atomic || recovery.hidden)) controller?.frame(dt);
+    if (screen === 'game' && (!atomic || recovery.hidden) && controller) {
+      controller.frame(dt);
+      if (import.meta.env.VITE_SHATEKKI_PREVIEW_METER === '1' && win.shatekkiMeasureFrame) {
+        const state = controller.current;
+        const graph = renderer?.graph;
+        win.shatekkiMeasureFrame(ts, graph && !controller.persistencePending && !controller.awaitingAnswer && !state.pauseReasons.length ? {
+          run: state.runId, shot: state.shotsFired, corks: graph.projectiles.size,
+          prizes: [...graph.prizes.values()].filter(prize => prize.mesh.visible).length,
+          cells: graph.cells?.cellCount ?? 0,
+        } : null);
+      }
+    }
     raf = win.requestAnimationFrame(loop);
   };
 
@@ -541,6 +552,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
               effectResults?.show(event.summary);
               rewardPanel?.showShot({
                 ...input,
+                collectedPrizes: event.summary.collected,
                 staticCard: event.replayed || event.reducedMotion,
                 setName: id => setDisplayName(i18n.locale, String(id), expText) || String(id),
                 setMembers: id => catalog.sets.get(id)?.requiredTypeIds ?? [],
@@ -557,7 +569,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const ensureEngine = async (): Promise<ShotWorld> => {
     if (world) return world;
     const { sim, view } = await loadHeavyModules();
-    const w = await sim.createShotWorld(layout, catalog, tuning, { transformPolicy: bundle.behavior?.transformPolicy, rewardDevices: rewardCfg ? rewardDevicesFor(rewardCfg) : undefined });
+    const w = await sim.createShotWorld(layout, catalog, tuning, {
+      transformPolicy: bundle.behavior?.transformPolicy,
+      reportPrizeContacts: illustratedRewards,
+      rewardDevices: rewardCfg ? rewardDevicesFor(rewardCfg) : undefined,
+    });
     world = w;
     try {
       renderer = view.createThreeRenderer(canvas, {
@@ -588,10 +604,17 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
 
   /** The settled summary of the shot that ended the run (expanded rules show it on the result). */
-  const lastShotOf = (summary: ShotSummary | null): LastShotInput | null =>
-    expansion && summary
-      ? { shotNumber: summary.shotNumber, effects: summary.effects ?? [], deferredTransforms: summary.deferredTransforms ?? [], ammoAfter: summary.ammoAfter, ...(summary.rewards ? { rewards: summary.rewards } : {}) }
-      : null;
+  const lastShotOf = (summary: ShotSummary | null, fresh: readonly SetId[] = []): LastShotInput | null => {
+    if (!expansion || !summary) return null;
+    return {
+      shotNumber: summary.shotNumber,
+      effects: summary.effects ?? [],
+      deferredTransforms: summary.deferredTransforms ?? [],
+      ammoAfter: summary.ammoAfter,
+      ...(summary.rewards ? { rewards: summary.rewards } : {}),
+      ...(illustratedRewards ? { sets: summary.newlyCompletedSets.map(setId => ({ setId, fresh: fresh.includes(setId) })) } : {}),
+    };
+  };
   /** Rewards versions keep the ended run so a reload opens the same result (plan T2); this records what the result showed. */
   const resultMetaKey = `shatekki.resultView.${catalog.rulesVersion}`;
   const saveResultMeta = (runId: string, selfBestBefore: number | null, newBest: boolean) => {
@@ -624,7 +647,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   const onRunEnded = (state: RunState, summary: ShotSummary | null) => {
     const result = finalResult(state);
-    const lastShot = lastShotOf(summary);
+    const lastShot = lastShotOf(summary, session?.record.lastFreshSets);
     const selfBestBefore = atomic ? session!.record.selfBestBefore : profile.load().bestScore;
     const newBest = atomic ? session!.record.newBest : profile.recordRunEnd(result).newBest;
     cue('runEnd');
@@ -650,16 +673,16 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     new GameController(
       {
         rules: CORE_RULES,
+        preciseRewardAim: illustratedRewards,
         world: w,
         renderer,
         catalog,
         tuning,
         layout,
         expansion,
-        onConfirmed: event => rewardMotions?.presentRewardMotion({
-          ...event, reducedMotion: event.reducedMotion || (event.kind === 'shot' && controller?.skipRequested === true),
-        }),
-        ...(session ? {session, onReplayed: showSavedRecord, reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false} : {}),
+        onConfirmed: event => rewardMotions?.presentRewardMotion(event),
+        reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+        ...(session ? {session, onReplayed: showSavedRecord} : {}),
         clockPolicy: bundle.behavior?.clock,
         initialGameTick: session?.record.gameTick,
         transformPolicy: bundle.behavior?.transformPolicy,
@@ -686,6 +709,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           if (cmd.type === 'STOP_LOAD' || cmd.type === 'ORDER') runStore.saveStable(s);
         },
         onShotSettled: (summary, s) => {
+          if (import.meta.env.VITE_SHATEKKI_PREVIEW_METER === '1') {
+            win.shatekkiMeasureSettlement?.(win.performance.now(), s.runId, summary.shotNumber, summary.chainCount, summary.runEnded);
+          }
           if (illustratedRewards) {
             if (s.phase === 'ended') onRunEnded(s, summary);
             return;
@@ -874,11 +900,19 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // ------------------------------------------------------------ screens
   const openSetBook = async () => {
+    let discovered: readonly SetId[];
     if (atomic) {
-      try { await atomic.refreshProfile(); }
-      catch (err) { saveError(err, () => void openSetBook()); return; }
-      dismissPrompt();
-    }
+      const request = ++bookRequest;
+      const current = () => request === bookRequest && !starting && !disposed && recovery.hidden;
+      try {
+        const scope = atomic.record?.scope ?? atomic.scope(mode);
+        discovered = (await atomic.repo.readProfile(scope)).discoveredSets;
+      } catch (err) {
+        if (current()) saveError(err, () => { dismissPrompt(); void openSetBook(); });
+        return;
+      }
+      if (!current()) return;
+    } else discovered = profile.load().discoveredSets;
     bookHandle?.dispose();
     const last = controller?.current ?? shownEnded;
     bookHandle = mountSetBook(
@@ -894,7 +928,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       },
       {
         sets: setBookEntriesFromCatalog(catalog),
-        discovered: atomic ? atomic.profile(atomic.record?.scope ?? atomic.scope(mode)).discoveredSets : profile.load().discoveredSets,
+        discovered,
         completedThisRun: last && screen === 'result' ? last.completedSets : [],
         prototypeHints: isPrototype,
       },
@@ -985,8 +1019,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           describeEffects: (i) => expandedUi.effectResultsModel(i, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity }),
           ...(rewardCfg
             ? {
-                describeReward: (o) => {
-                  const l = expandedUi.rewardLine(o, expText, illustratedRewards);
+                describeReward: (o, collected) => {
+                  const details = illustratedRewards ? { collected, prizeName: (id: string) => prizeName(i18n.locale, id) } : undefined;
+                  const l = expandedUi.rewardLine(o, expText, details);
                   return { sourceLabel: expText('reward.card.title'), name: l.name, text: l.text, note: null, applied: l.granted > 0 };
                 },
                 bestShot: (r) => expandedUi.bestShotOf(r),
@@ -1028,6 +1063,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         onRetrySubmit: () => void ranking.retryPending({ includePermanent: false }).catch(() => undefined),
         onRetryTop: () => void ranking.fetchTop().catch(() => undefined),
         onOpenSetBook: openSetBook,
+        ...(illustratedRewards && expandedUi ? {
+          renderLastSet: set => expandedUi.renderRewardSet(
+            doc, { ...set, members: catalog.sets.get(set.setId)?.requiredTypeIds ?? [] },
+            id => prizeName(i18n.locale, id), expText('reward.set.seal'),
+          ),
+        } : {}),
         ...(resultText ? { text: resultText } : {}),
       },
       { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable, lastShot },
@@ -1090,7 +1131,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (record.result) {
       if (!record.resultViewOpen) { showHome(); return; }
       shownEnded = record.state;
-      showResult(record.result, record.selfBestBefore, record.newBest, lastShotOf(record.lastSummary), true);
+      showResult(record.result, record.selfBestBefore, record.newBest, lastShotOf(record.lastSummary, record.lastFreshSets), true);
     } else {
       setScreen('resume');
       const flight = !!record.state.inFlight;

@@ -8,6 +8,7 @@ import {
   type DeviceKind,
   type ImpactEvent,
   type ImpactTarget,
+  type PresentOptions,
   type RunState,
   type RuntimeCatalog,
   type ShotRecord,
@@ -49,7 +50,7 @@ const devEvent = (kind: DeviceKind): SimEvent => ({
   projectileId: mintId.projectile(mintId.shot(1), 0),
 });
 
-function setup(opts: { camera?: THREE.PerspectiveCamera; hud?: EffectsHud } = {}) {
+function setup(opts: { camera?: THREE.PerspectiveCamera; hud?: EffectsHud; illustratedRewards?: boolean } = {}) {
   const layer = new THREE.Group();
   const parts = new Map<string, THREE.Mesh>();
   for (const p of BOOTH_LAYOUT.shopkeeper) parts.set(p.part, new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1)));
@@ -61,6 +62,7 @@ function setup(opts: { camera?: THREE.PerspectiveCamera; hud?: EffectsHud } = {}
     shopkeeperParts: parts,
     prizeObject: () => prize,
     projectilePosition: () => P(0, 1.3, -1.5),
+    illustratedRewards: opts.illustratedRewards,
     ...(opts.camera ? { camera: () => opts.camera!, size: () => ({ width: 400, height: 800 }) } : {}),
     ...(opts.hud ? { hud: opts.hud } : {}),
   });
@@ -194,7 +196,11 @@ describe('off-screen success cue (AC26)', () => {
   it('points an arrow with an i18n key at an active device that is outside the view', () => {
     const { cues, hud } = mkHud();
     const { fx } = setup({ camera: cam, hud });
-    fx.handleEvents([devEvent('ammo')], 0); // the ammo plate is far to the right of the frame
+    const plate = dev('ammo');
+    fx.handleEvents([
+      devEvent('ammo'),
+      impact({ kind: 'device', deviceId: plate.deviceId, deviceKind: 'ammo', activated: true }, plate.box.center),
+    ], 0);
     expect(cues.length).toBe(1);
     expect(cues[0]!.key).toBe('fx.offscreen.device.ammo');
     expect(Number.isFinite(cues[0]!.angle)).toBe(true);
@@ -251,6 +257,34 @@ describe('present()', () => {
     expect(chains).toEqual([3]);
   });
 
+  it('leaves a confirmed illustrated collection and set to its single reward presenter', async () => {
+    const chains: number[] = [];
+    const { fx } = setup({ illustratedRewards: true, hud: { offscreen: () => undefined, chain: n => chains.push(n) } });
+    const done = fx.present(summary(3, 1, 3), { skip: false });
+    tick(fx, 0, 0.6);
+    expect(fx.stats()).toMatchObject({ particlesAlive: 0, ringsAlive: 0 });
+    expect(chains).toEqual([]);
+    await done;
+    fx.dispose();
+  });
+
+  it('keeps the legacy settlement still under reduced motion while reporting the confirmed outcome', async () => {
+    const chain = vi.fn();
+    const classified = vi.fn();
+    const fx = createEffects({
+      layer: new THREE.Group(), layout: BOOTH_LAYOUT, shopkeeperParts: new Map(), prizeObject: () => null,
+      projectilePosition: () => null, hud: { offscreen: () => undefined, chain }, onClassified: classified,
+    });
+    const complete = summary(3, 1, 3);
+    const done = fx.present(complete, { skip: false, reducedMotion: true });
+    tick(fx, 0, 0.6);
+    expect(fx.stats()).toMatchObject({ particlesAlive: 0, ringsAlive: 0 });
+    expect(chain).not.toHaveBeenCalled();
+    expect(classified).toHaveBeenCalledWith('success', complete);
+    await done;
+    fx.dispose();
+  });
+
   it('reports the classification only from present (after settlement)', async () => {
     const seen: string[] = [];
     const layer = new THREE.Group();
@@ -274,7 +308,7 @@ describe('skipping changes presentation only (AC27, decision 26)', () => {
     return o;
   };
 
-  function run(skip: boolean) {
+  function run(skip: boolean, reducedMotion = false) {
     n = 1000;
     const layer = new THREE.Group();
     const parts = new Map<string, THREE.Mesh>();
@@ -315,16 +349,22 @@ describe('skipping changes presentation only (AC27, decision 26)', () => {
         fx.handleEvents(frame.events, frame.simTimeSec);
         fx.update(frame.simTimeSec);
       },
-      present: (s: ShotSummary, o: { skip: boolean }) => fx.present(s, o),
+      present: vi.fn((s: ShotSummary, o: PresentOptions) => fx.present(s, o)),
       resize: () => undefined,
       dispose: () => undefined,
     };
-    const c = new GameController({ rules, world, renderer, catalog, tuning, layout: BOOTH_LAYOUT }, state);
+    const c = new GameController({ rules, world, renderer, catalog, tuning, layout: BOOTH_LAYOUT, reducedMotion: () => reducedMotion }, state);
     c.dispatch({ type: 'FIRE' });
     if (skip) c.dispatch({ type: 'SKIP_PRESENTATION' });
     for (let i = 0; i < 6; i++) c.frame(1 / 60);
-    return { state: c.current, summary: c.snapshot().lastSummary, frames: JSON.stringify(frames), summaryJson: JSON.stringify(summaryOut) };
+    return { state: c.current, summary: c.snapshot().lastSummary, frames: JSON.stringify(frames), summaryJson: JSON.stringify(summaryOut), presentation: renderer.present.mock.calls[0]?.[1] };
   }
+
+  it('passes the device motion preference through settlement even when the player has not skipped', () => {
+    const runWithPreference = run(false, true);
+    expect(runWithPreference.presentation).toMatchObject({ skip: false, reducedMotion: true });
+    expect(runWithPreference.state).toEqual(run(false).state);
+  });
 
   it('same events + summary with and without skip give identical controller-visible state, and inputs are untouched', () => {
     const a = run(false);

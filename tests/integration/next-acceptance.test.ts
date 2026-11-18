@@ -1,3 +1,5 @@
+import { PerspectiveCamera } from 'three';
+import { applyFrame, createExpandedView, createSceneGraph } from '../../src/view';
 import graceInputs from '../fixtures/next-seed-380112.json';
 import mixedSetInputs from '../fixtures/next-seed-39595.json';
 import { expect, it, vi } from 'vitest';
@@ -5,10 +7,12 @@ import { GameController } from '../../src/app/controller';
 import { PersistedSession } from '../../src/app/persisted-session';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
-import { mintId, isAmmoBalanced, isLedgerEntryConsistent, type ShotSummary, type ShotStage, type ExpandedRunState } from '../../src/contracts';
+import { asPrizeTypeId, BASE_SHOT_MODIFIERS, mintId, isAmmoBalanced, isLedgerEntryConsistent, type ShotSummary, type ShotStage, type SimEvent, type SeriesId, type EffectId, type QuestionId, type ExpandedRunState } from '../../src/contracts';
 import type { ConfirmedPresentation } from '../../src/contracts/persistence';
 import { buildLedgerEntry } from '../../src/core/scoring';
 import { validateRunState } from '../../src/core/session';
+import { swayOffset } from '../../src/core/aim';
+import { spawnPrize } from '../../src/core/replenish';
 import { createExpandedRun } from '../../src/core/expanded-run';
 import { rewardDevicesFor, TARGET_AIM } from '../../src/core/rewards';
 import { createMemoryRunRepository } from '../../src/persistence/indexed-run-repository';
@@ -162,21 +166,25 @@ async function booth(initial: ExpandedRunState) {
   expect(validateRunState(initial, b.catalog, b.tuning, b.layout, b.expansion)).toBeNull();
   const rules = b.expansion!.profile.rewards!;
   const world = await createShotWorld(b.layout, b.catalog, b.tuning, {
-    transformPolicy: b.behavior?.transformPolicy, rewardDevices: rewardDevicesFor(rules),
+    transformPolicy: b.behavior?.transformPolicy, rewardDevices: rewardDevicesFor(rules), reportPrizeContacts: true,
   });
   const stages: { shotId: string; stage: ShotStage }[] = [];
+  const history: { tick: number; event: SimEvent }[] = [];
   const summaries: ShotSummary[] = [];
   const c = new GameController({ ...b, world, rules: CORE_RULES, renderer: null,
     transformPolicy: b.behavior?.transformPolicy, clockPolicy: b.behavior?.clock,
     onSimEvents(events) {
-      for (const e of events) if (e.type === 'shotStage') stages.push({ shotId: e.shotId, stage: e.stage });
+      for (const event of events) {
+        history.push({ tick: c.gameTick, event });
+        if (event.type === 'shotStage') stages.push({ shotId: event.shotId, stage: event.stage });
+      }
     },
     onShotSettled: summary => summaries.push(summary),
   }, initial);
-  const fire = (x: number, yaw: number, pitch: number) => {
+  const fire = (x: number, yaw: number, pitch: number, chargeSec = 0.6) => {
     c.dispatch({ type: 'SET_POSITION', x });
     expect(c.dispatch({ type: 'CONFIRM_POSITION' })).toBe(true);
-    c.frame(0.6);
+    c.frame(chargeSec);
     expect(c.dispatch({ type: 'STOP_LOAD' })).toBe(true);
     c.dispatch({ type: 'AIM', yaw, pitch });
     expect(c.dispatch({ type: 'FIRE' })).toBe(true);
@@ -188,7 +196,7 @@ async function booth(initial: ExpandedRunState) {
     expect(c.current.phase).not.toBe('resolving');
     return summaries.at(-1)!;
   };
-  return { c, stages, summaries, fire, dispose: () => world.dispose() };
+  return { c, stages, history, summaries, fire, dispose: () => world.dispose() };
 }
 
 function initialBooth(seed = 7919) {
@@ -282,4 +290,182 @@ it('r006 drops an unapplied penalty at zero before scoring a later hidden-target
   } finally {
     scene.dispose();
   }
+});
+
+it('r006 doubles the physical damage only after the power plate and changes the bullet for the next shot', async () => {
+  const b = getGameplayBundle('expanded-next');
+  const scene = await booth(initialBooth(15838));
+  try {
+    const power = scene.fire(-2.1307599303591993, -0.24182657575700434, 0.15305341492639854, 0);
+    const impacts = scene.history.flatMap(({ event }) => event.type === 'impact' ? [event] : []);
+    expect(impacts[0]?.target).toMatchObject({ deviceKind: 'power', activated: true });
+    const contact = impacts.find(e => e.target.kind === 'prize')!;
+    const hit = power.prizeOutcomes.flatMap(o => o.hits).find(h => h.projectileId === contact.projectileId && h.reflectionIndex === contact.reflectionIndex)!;
+    const load = b.tuning.loading.tiers.find(t => t.tier === 'weak')!;
+    const expected = b.tuning.cork.baseDamage * load.damageMultiplier * Math.min(1, contact.speed / b.tuning.cork.speed);
+    expect(hit.damage).toBeCloseTo(expected * b.tuning.devices.powerMultiplier, 8);
+
+    const plate = b.layout.devices.find(d => d.kind === 'bulletType')!.box;
+    const x = b.layout.camera.standMinX;
+    const aim = aimAt(b, x, { ...plate.center, z: plate.center.z + plate.halfExtents.z }, 'standard');
+    const change = scene.fire(x, aim.yaw, aim.pitch, 0);
+    expect(change.effects?.filter(e => e.source.kind === 'device')).toEqual([
+      expect.objectContaining({ source: { kind: 'device', deviceKind: 'bulletType', deviceId: 'dev-bullet-1' }, outcome: 'applied' }),
+    ]);
+    expect(scene.c.current.bulletType).toBe('heavy');
+    scene.fire(x, 0, 0, 0);
+    expect(scene.history.flatMap(({ event }) => event.type === 'projectileSpawned' ? [event.bulletType] : []))
+      .toEqual(['standard', 'standard', 'heavy']);
+  } finally { scene.dispose(); }
+});
+
+it('r006 pays the side-wall ammo plate in full and applies the ceiling plate to its chosen individual', async () => {
+  const ammo = await booth(initialBooth(31676));
+  try {
+    const shot = ammo.fire(2.160527939144522, 0.2047172164055519, 0.237223048042506, 0);
+    const hit = ammo.history.flatMap(({ event }) => event.type === 'impact' && event.target.kind === 'device' ? [event] : []);
+    expect(hit).toHaveLength(1);
+    expect(hit[0]).toMatchObject({ reflectionIndex: 3, target: { deviceKind: 'ammo', activated: true } });
+    expect(shot.effects).toContainEqual(expect.objectContaining({ source: { kind: 'device', deviceId: 'dev-ammo-1', deviceKind: 'ammo' }, ammoRequested: 2, ammoDelta: 2 }));
+    expect(ammo.c.current).toMatchObject({ ammo: 11, bonusAmmoTotal: 2, shotsFired: 1 });
+  } finally { ammo.dispose(); }
+
+  const initial = initialBooth(39595);
+  const question = 'Q002' as QuestionId;
+  // Keep the real 36 prizes. The cell and the subsequent answer have no type-change effect.
+  const transform = await booth({ ...initial, expansion: { ...initial.expansion,
+    cells: initial.expansion.cells.map(c => c.cellId === 'cell-r1-c10' ? { ...c, effectId: 'FX004' as EffectId } : c),
+    questionOrder: [question, ...initial.expansion.questionOrder.filter(id => id !== question)],
+  } });
+  try {
+    const shot = transform.fire(0.08059814742300658, -0.002194160758517683, 0.24174440609524028, 0);
+    const effect = shot.effects!.find(e => e.source.kind === 'device')!;
+    expect(effect).toMatchObject({ source: { deviceKind: 'transform' }, outcome: 'applied' });
+    const impact = transform.history.find(({ event }) => event.type === 'impact' && event.target.kind === 'device');
+    expect(impact?.event).toMatchObject({ reflectionIndex: 2 });
+    expect(shot.appliedTransforms).toEqual([{ requestId: effect.requestId, instanceId: 'i0030', fromTypeId: 'P007', toTypeId: 'P065' }]);
+    expect(shot.transforms).toHaveLength(1);
+    expect(shot.collected).toHaveLength(0);
+    expect(shot.ledger.prizePoints).toBe(0);
+  } finally { transform.dispose(); }
+});
+
+it('r006 combines a direct hit and two reflected keeper hits on two body parts into one question', async () => {
+  const initial = initialBooth();
+  const scene = await booth({ ...initial, expansion: { ...initial.expansion,
+    next: { ...initial.expansion.next, modifiers: { ...BASE_SHOT_MODIFIERS, launch: { count: 3, spreadRad: 0.175 } } },
+  } });
+  try {
+    const shot = scene.fire(2.0881149310502223, 0.29260181603953245, -0.017171114289667472, 0);
+    const hits = scene.history.flatMap(({ event }) => event.type === 'impact' && event.target.kind === 'shopkeeper'
+      ? [[event.projectileId, event.target.part, event.reflectionIndex]] : []);
+    expect(hits).toEqual([['s01-c0', 'body', 0], ['s01-c2', 'body', 2], ['s01-c1', 'feet', 5]]);
+    expect(shot.effects?.filter(e => e.source.kind === 'answer')).toHaveLength(1);
+    expect(scene.c.current.expansion!.questionCursor).toBe(1);
+    expect(shot.ledger.items).toEqual([
+      { kind: 'shopkeeper', refId: 'body', points: 10 }, { kind: 'shopkeeper', refId: 'feet', points: 15 },
+    ]);
+  } finally { scene.dispose(); }
+});
+
+it('r006 asks once when a child from the left split plate crosses the booth and strikes the keeper on the right', async () => {
+  const initial = initialBooth();
+  // Keep every initial prize. The pre-shot reservations are all registered catalogue values.
+  const scene = await booth({ ...initial, bulletType: 'bouncy', expansion: { ...initial.expansion,
+    next: { ...initial.expansion.next, modifiers: { ...BASE_SHOT_MODIFIERS,
+      launch: { count: 3, spreadRad: 0.175 }, damageMult: 1.5, pushMult: 0.75,
+      gravityMult: 0.75, restitutionMult: 0.85, splitSpreadMult: 1.5 } },
+  } });
+  try {
+    const sway = swayOffset(initial, getGameplayBundle('expanded-next').tuning);
+    const shot = scene.fire(-2.0403354228939863, -0.1114923849585466 - sway.yaw, 0.2678914013314061 - sway.pitch, 0);
+    const spawned = scene.history.flatMap(({ event }) => event.type === 'projectileSpawned' ? [event] : []);
+    const hit = scene.history.flatMap(({ event }) => event.type === 'impact' && event.target.kind === 'shopkeeper' ? [event] : []);
+    expect(shot.devicesActivated).toContain('dev-split-1');
+    expect(hit).toHaveLength(1);
+    expect(hit[0]).toMatchObject({ projectileId: 's01-c4', target: { part: 'hat' }, reflectionIndex: 1 });
+    const child = spawned.find(e => e.projectileId === hit[0]!.projectileId)!;
+    expect(child.generation).toBe(2);
+    expect(spawned.some(e => e.projectileId === child.parentId && e.parentId === null)).toBe(true);
+    expect(shot.effects?.filter(e => e.source.kind === 'answer')).toHaveLength(1);
+    expect(scene.c.current.expansion!.questionCursor).toBe(1);
+    expect(shot.ledger.items).toContainEqual({ kind: 'shopkeeper', refId: 'hat', points: 30 });
+  } finally { scene.dispose(); }
+});
+
+it('r006 uses one effect per cell on a simultaneous multishot boundary hit and the last reservation wins', async () => {
+  const b = getGameplayBundle('expanded-next');
+  const initial = initialBooth();
+  const ids: Record<string, EffectId> = { 'cell-r2-c06': 'FX005' as EffectId, 'cell-r2-c07': 'FX004' as EffectId };
+  const prizes = b.layout.slots.map((s, i) => spawnPrize(b.catalog, asPrizeTypeId('P009'), s, i + 1, 0));
+  const scene = await booth({ ...initial, shelf: { ...initial.shelf, prizes }, expansion: { ...initial.expansion,
+    cells: initial.expansion.cells.map(c => ({ ...c, effectId: ids[c.cellId] ?? c.effectId })),
+    next: { ...initial.expansion.next, modifiers: { ...BASE_SHOT_MODIFIERS, launch: { count: 3, spreadRad: 0.175 } } },
+  } });
+  try {
+    const left = b.layout.backgroundCells!.find(c => c.cellId === 'cell-r2-c06')!.box;
+    const aim = aimAt(b, 0, { ...left.center, x: left.center.x + left.halfExtents.x }, 'standard');
+    const sway = swayOffset(initial, b.tuning);
+    const shot = scene.fire(0, aim.yaw - sway.yaw, aim.pitch - sway.pitch, 0);
+    const center = scene.history.find(({ event }) => event.type === 'impact' && event.projectileId === 's01-c0')!.event;
+    expect(center.type === 'impact' && center.point.x).toBeCloseTo(left.center.x + left.halfExtents.x, 5);
+    const hits = scene.history.flatMap(({ tick, event }) => event.type === 'impact' && event.target.kind === 'cell'
+      ? [{ tick, id: event.target.cellId, active: event.target.activated }] : []);
+    expect(new Set(hits.map(h => h.tick)).size).toBe(1);
+    expect(hits.map(h => [h.id, h.active])).toEqual([['cell-r2-c06', true], ['cell-r2-c06', false], ['cell-r2-c07', true]]);
+    expect(shot.effects?.filter(e => e.source.kind === 'cell').map(e => e.effectId)).toEqual(['FX005', 'FX004']);
+    expect(scene.c.current.expansion!.cells.filter(c => c.used).map(c => c.cellId)).toEqual(Object.keys(ids));
+    expect(scene.c.current.expansion!.next.modifiers).toEqual({ ...BASE_SHOT_MODIFIERS, damageMult: 1.25 });
+    scene.fire(0, aim.yaw, aim.pitch, 0);
+    expect(scene.c.current.expansion!.next.modifiers).toEqual(BASE_SHOT_MODIFIERS);
+  } finally { scene.dispose(); }
+});
+
+it('r006 keeps stock and outlines independent, awards no points for a new outline, and closes both when play ends', async () => {
+  const b = getGameplayBundle('expanded-next'), initial = initialBooth();
+  const prizes = b.layout.slots.map((s, i) => spawnPrize(b.catalog, asPrizeTypeId('P009'), s, i + 1, 0));
+  const effects: Record<string, EffectId> = { 'cell-r2-c06': 'FX062' as EffectId, 'cell-r2-c07': 'FX043' as EffectId };
+  const scene = await booth({ ...initial, ammo: 2, shotsFired: 18, bonusAmmoTotal: 10,
+    ledger: Array.from({ length: 18 }, (_, i) => buildLedgerEntry(mintId.shot(i + 1), 0, [])),
+    shelf: { ...initial.shelf, prizes }, expansion: { ...initial.expansion,
+      assortmentSeries: 'SER01' as SeriesId, outlineSeries: 'SER07' as SeriesId,
+      cells: initial.expansion.cells.map(c => ({ ...c, effectId: effects[c.cellId] ?? c.effectId })),
+    } });
+  const graph = createSceneGraph({ layout: b.layout, resolvePrize: id => b.catalog.prizes.get(id)! });
+  const display = createExpandedView({ graph, layout: b.layout, catalog: b.catalog, expansion: b.expansion!,
+    illustratedRewards: true, translate: key => key, prizeName: id => id });
+  const camera = new PerspectiveCamera();
+  const draw = (game: GameController) => {
+    const { frame, view } = game.snapshot();
+    applyFrame(graph, frame);
+    return display.update(frame, view, camera, { width: 402, height: 700 })!;
+  };
+  try {
+    const shootCell = (id: string) => {
+      const cell = b.layout.backgroundCells!.find(c => c.cellId === id)!.box;
+      const target = { ...cell.center, x: cell.center.x + 0.13 };
+      const aim = aimAt(b, cell.center.x, target, 'standard');
+      return scene.fire(cell.center.x, aim.yaw, aim.pitch, 0);
+    };
+    const outline = shootCell('cell-r2-c06');
+    expect(outline.effects?.map(e => e.effectId)).toEqual(['FX062']);
+    expect(scene.c.viewState().expansion).toMatchObject({ assortmentSeries: 'SER01', outlineSeries: 'SER02' });
+    expect(outline.collected).toEqual([]);
+    expect(outline.newlyCompletedSets).toEqual([]);
+    expect(outline.ledger.scoreAfter).toBe(0);
+    expect(draw(scene.c).outline).not.toBeNull();
+    const left = await booth(scene.c.current as ExpandedRunState);
+    try {
+      expect(left.c.dispatch({ type: 'ABANDON' })).toBe(true);
+      expect(left.c.viewState().expansion).toMatchObject({ assortmentSeries: null, outlineSeries: null });
+      expect(draw(left.c)).toMatchObject({ assortment: null, outline: null, stats: { outlined: 0 } });
+    } finally { left.dispose(); }
+    const stock = shootCell('cell-r2-c07');
+    expect(stock.effects?.map(e => e.effectId)).toEqual(['FX043']);
+    expect(stock.appliedTransforms!.length).toBeGreaterThan(0);
+    expect(stock.runEnded).toBe(true);
+    expect(scene.c.current.expansion).toMatchObject({ assortmentSeries: 'SER03', outlineSeries: 'SER02' });
+    expect(scene.c.viewState().expansion).toMatchObject({ assortmentSeries: null, outlineSeries: null });
+    expect(draw(scene.c)).toMatchObject({ assortment: null, outline: null, stats: { outlined: 0 } });
+  } finally { display.dispose(); graph.dispose(); scene.dispose(); }
 });

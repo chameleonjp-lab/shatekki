@@ -4,12 +4,14 @@
  * that gave +1 apart from one that gave nothing.
  */
 import { describe, expect, it } from 'vitest';
-import type { EffectId, FinalResult, PlannedEffect, SetId } from '../../src/contracts';
+import { asPrizeTypeId, mintId, type EffectId, type FinalResult, type PlannedEffect, type SetId } from '../../src/contracts';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { LOCALES, translate, type Locale, type UiKey } from '../../src/i18n';
 import { expandedLine } from '../../src/i18n/expanded-content';
 import { createExpansionTranslator } from '../../src/i18n/expansion-text';
+import { prizeName } from '../../src/i18n/content';
 import { effectResultsModel } from '../../src/ui/effect-results';
+import { rewardLine } from '../../src/ui/reward-panel';
 import { resultViewModel, type LastShotInput, type ResultInput } from '../../src/ui/result';
 import { setBookEntriesFromCatalog, setBookViewModel } from '../../src/ui/set-book';
 
@@ -95,6 +97,29 @@ describe('result set names (plan T1, F2)', () => {
 
 describe('last shot on the result screen (plan T1, F2)', () => {
   const six: PlannedEffect[] = [1, 2, 3, 10, 30, 65].map((n, i) => planned({ requestId: `r${i}` as never, effectId: fx(n) }));
+
+  it('reopens a capped seesaw receipt with the prize that earned it on the final shot', () => {
+    const collected = [
+      { instanceId: mintId.instance(29), typeId: asPrizeTypeId('P013'), shotId: mintId.shot(10) },
+      { instanceId: mintId.instance(28), typeId: asPrizeTypeId('P094'), shotId: mintId.shot(10) },
+    ];
+    const saved = input({ ...result([]), collected }, {
+      shotNumber: 10, effects: [], deferredTransforms: [], ammoAfter: 0,
+      rewards: [{ id: 'A3', key: 'seesaw:i0028', shotNumber: 10, offered: 2, granted: 0 }],
+    });
+    const locale = 'en';
+    const t = textFor(locale).t;
+    const reopened = resultViewModel(JSON.parse(JSON.stringify(saved)), locale, {
+      ...optionsFor(locale),
+      describeReward(o, collected) {
+        const line = rewardLine(o, t, { collected, prizeName: id => prizeName(locale, id) });
+        return { ...line, applied: line.granted > 0, sourceLabel: t('reward.card.title'), note: null };
+      },
+    });
+    expect(reopened.lastShot?.lines[0]).toMatchObject({
+      name: t('reward.name.A3') + ' · ' + prizeName(locale, 'P094'), text: t('reward.capped'), applied: false,
+    });
+  });
 
   it('lists all six effects of the last shot, not the 5-line card, with the shot number', () => {
     const vm = resultViewModel(input(result([]), { shotNumber: 10, effects: six, deferredTransforms: [], ammoAfter: 0 }), 'ja', optionsFor('ja'));

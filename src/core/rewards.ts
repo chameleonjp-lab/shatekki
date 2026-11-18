@@ -14,6 +14,8 @@
  * nothing is derived from what the screen shows.
  */
 import type {
+  AimAngles,
+  BallisticSpec,
   BoothLayout,
   CollectedPrize,
   ExpandedRunState,
@@ -37,8 +39,9 @@ import type {
   ShelfState,
   SlotGeometry,
   TuningConfig,
+  Vec3,
 } from '../contracts';
-import { BASE_SHOT_MODIFIERS, aimDirection, ballisticFor, corkFreeFlightPath, isExpandedRunState, muzzlePosition, NO_REWARD_CONTACTS, slotRowColumn } from '../contracts';
+import { BASE_SHOT_MODIFIERS, REWARD_TARGET_HALF_THICKNESS, aimDirection, ballisticFor, corkFreeFlightPath, isExpandedRunState, muzzlePosition, NO_REWARD_CONTACTS, slotRowColumn } from '../contracts';
 import { rngNext, seedRng } from '../catalog/rng';
 import { realAmmoAdd, withAmmoAdded, type EffectWork } from './gameplay-effects';
 
@@ -121,6 +124,33 @@ export function rewardDevicesFor(cfg: RewardConfig | null): RewardDeviceLayout {
     piggySlot: rewardEnabled(cfg, 'A4') ? PIGGY_SLOT_BOX : null,
     seesawTray: rewardEnabled(cfg, 'A3') ? SEESAW_TRAY_BOX : null,
   };
+}
+
+/** Cheap bounds around the flight at a device's depth. Only nearby aims need a physics query. */
+export function aimNearReward(rewards: RewardViewState, layout: BoothLayout, standX: number, aim: AimAngles, flight: BallisticSpec): boolean {
+  const origin = muzzlePosition(layout, standX);
+  const dir = aimDirection(layout, standX, aim);
+  const vz = dir.z * flight.speed;
+  if (vz >= 0) return false;
+  const vx = dir.x * flight.speed;
+  const vy = dir.y * flight.speed;
+  // Leave one extra cork radius around the estimate. The physical sweep
+  // decides the contact, including grazing hits within its own tolerance.
+  const margin = 2 * (flight.corkRadius ?? 0);
+  const near = (center: Vec3, hx: number, hy: number, hz: number) => {
+    const time = (center.z - origin.z) / vz;
+    const span = (hz + margin) / -vz;
+    const x = origin.x + vx * time;
+    if (time + span < 0 || Math.abs(x - center.x) > hx + margin + Math.abs(vx) * span) return false;
+    const y = origin.y + vy * time - 0.5 * flight.gravity * time * (time + flight.fixedStepSec);
+    const dy = (Math.abs(vy - flight.gravity * time) + flight.gravity * (span + flight.fixedStepSec)) * span;
+    return Math.abs(y - center.y) <= hy + margin + dy + flight.gravity * flight.fixedStepSec ** 2;
+  };
+  for (const box of [rewards.devices.chime, rewards.devices.piggySlot]) {
+    if (box && near(box.center, box.halfExtents.x, box.halfExtents.y, box.halfExtents.z)) return true;
+  }
+  const disc = rewards.target?.geometry;
+  return !!disc && near(disc.center, disc.outerRadius, disc.outerRadius, REWARD_TARGET_HALF_THICKNESS);
 }
 
 // --------------------------------------------------------- A5: the target

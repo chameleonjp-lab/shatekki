@@ -68,6 +68,8 @@ export interface ViewState {
   readonly paused: boolean;
   /** Cork speed/gravity for the next shot, so the reticle shows where the cork really goes. */
   readonly ballistic: BallisticSpec;
+  /** First contact in the current physics scene for an aim near a reward device. */
+  readonly rewardAim?: AimPreview;
   /** Expanded rules only. */
   readonly expansion?: ExpansionViewState;
 }
@@ -75,6 +77,8 @@ export interface ViewState {
 export interface PresentOptions {
   /** decision 26: skipping changes presentation only, never results. */
   readonly skip: boolean;
+  /** The user's animation preference at the time the shot was confirmed. */
+  readonly reducedMotion?: boolean;
 }
 
 export interface Renderer {

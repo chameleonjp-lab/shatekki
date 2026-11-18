@@ -4,16 +4,21 @@ import { expect, type Page } from '@playwright/test';
 import type { RunState } from '../../src/contracts';
 import type { PersistedRecord } from '../../src/contracts/persistence';
 
-type Outcome = 'ended' | 'rescued' | 'capped';
+type Outcome = 'ended' | 'rescued' | 'capped' | 'deferred';
+type ShotStart = { beforeFire: RunState; gameTick: number };
 
 /** Restore a stable pre-FIRE state from a seeded game played by scripted-player.
  * The candidate computes the upcoming flight, scoring, discoveries and display.
  * Callers use a fresh browser context and may keep its clock paused for tick-precise input.
  */
 export async function restoreBeforeShot(page: Page, outcome: Outcome, previousDiscoveries: readonly string[] = []) {
-  const { beforeFire, gameTick } = JSON.parse(gunzipSync(readFileSync(
+  const shot = JSON.parse(gunzipSync(readFileSync(
     new URL(`../fixtures/outcomes/${outcome}.json.gz`, import.meta.url),
-  )).toString()) as { beforeFire: RunState; gameTick: number };
+  )).toString()) as ShotStart;
+  return restoreShotStart(page, shot, previousDiscoveries);
+}
+
+export async function restoreShotStart(page: Page, { beforeFire, gameTick }: ShotStart, previousDiscoveries: readonly string[] = []) {
   await page.goto('/?e2e=1');
   await expect(page.locator('#app')).toHaveAttribute('data-rules-version', beforeFire.rulesVersion);
   await expect(page.getByTestId('home-start')).toBeVisible();

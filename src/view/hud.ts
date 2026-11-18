@@ -29,20 +29,20 @@ export function createDomHud(canvas: HTMLElement, options: DomHudOptions = {}): 
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5';
   host.appendChild(layer);
 
-  const timers = new Set<ReturnType<typeof setTimeout>>();
-  const later = (fn: () => void, ms: number) => {
-    const t = setTimeout(() => {
-      timers.delete(t);
-      fn();
-    }, ms);
-    timers.add(t);
+  const timers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
+  const hideAfter = (el: HTMLElement, ms: number) => {
+    clearTimeout(timers.get(el));
+    timers.set(el, setTimeout(() => {
+      timers.delete(el);
+      el.style.display = 'none';
+    }, ms));
   };
 
   const arrows: HTMLElement[] = [];
   for (let i = 0; i < 3; i++) {
     const el = doc.createElement('div');
     el.style.cssText =
-      'position:absolute;left:0;top:0;display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(255,236,170,.92);color:#3a1d12;font:700 12px/1.2 system-ui,sans-serif;white-space:nowrap;box-shadow:0 1px 6px rgba(0,0,0,.4)';
+      'position:absolute;left:0;top:0;display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(255,236,170,.92);color:#3a1d12;font:700 12px/1.2 system-ui,sans-serif;width:max-content;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;box-shadow:0 1px 6px rgba(0,0,0,.4)';
     const glyph = doc.createElement('span');
     glyph.textContent = '▶';
     glyph.setAttribute('aria-hidden', 'true');
@@ -70,22 +70,21 @@ export function createDomHud(canvas: HTMLElement, options: DomHudOptions = {}): 
       glyph.style.display = 'inline-block';
       glyph.style.transform = `rotate(${cue.angle}rad)`;
       el.style.display = 'flex';
-      el.style.transform = `translate(calc(${cue.x}px - 50%), calc(${cue.y}px - 50%))`;
-      later(() => {
-        el.style.display = 'none';
-      }, ARROW_LIFE_MS);
+      const { width, height } = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(layer.clientWidth - width, cue.x - width / 2));
+      const y = Math.max(0, Math.min(layer.clientHeight - height, cue.y - height / 2));
+      el.style.transform = `translate(${x}px, ${y}px)`;
+      hideAfter(el, ARROW_LIFE_MS);
     },
     chain(count: number): void {
       const text = options.translate ? options.translate('fx.chain', { count }) : '';
       chainEl.textContent = text && text !== 'fx.chain' ? text : `×${count}`;
       chainEl.style.display = 'block';
       chainEl.style.transform = 'translateX(-50%)' + (options.reducedMotion?.() ? '' : ' scale(1.1)');
-      later(() => {
-        chainEl.style.display = 'none';
-      }, CHAIN_LIFE_MS);
+      hideAfter(chainEl, CHAIN_LIFE_MS);
     },
     dispose(): void {
-      for (const t of timers) clearTimeout(t);
+      for (const t of timers.values()) clearTimeout(t);
       timers.clear();
       layer.remove();
     },

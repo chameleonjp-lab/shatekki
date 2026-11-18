@@ -458,13 +458,17 @@ export function setPickInflate(graph: SceneGraph, radius: number): void {
 const GUN_PHASES = new Set(['position', 'loading', 'aiming']);
 
 /** Place the gun and the 3D reticle for the effective aim. Returns the reticle ray result. */
-export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic' | 'expansion'>>): ReticleResult {
+export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic' | 'expansion' | 'rewardAim'>>): ReticleResult {
   const { layout } = graph;
-  setPickInflate(graph, view.ballistic?.corkRadius ?? graph.internals.basePickInflate);
-  graph.internals.rewardPick?.update(view.expansion?.rewards, graph.internals.pickInflate);
-  graph.prizeLayer.updateMatrixWorld(true);
-  graph.booth.proxies.updateMatrixWorld(true);
-  const r = computeReticle(layout, view.standX, view.effectiveAim, graph.pickTargets(), 6, view.ballistic);
+  let targets: readonly THREE.Object3D[] = [];
+  if (!view.rewardAim) {
+    setPickInflate(graph, view.ballistic?.corkRadius ?? graph.internals.basePickInflate);
+    graph.internals.rewardPick?.update(view.expansion?.rewards, graph.internals.pickInflate);
+    graph.prizeLayer.updateMatrixWorld(true);
+    graph.booth.proxies.updateMatrixWorld(true);
+    targets = graph.pickTargets();
+  }
+  const r = computeReticle(layout, view.standX, view.effectiveAim, targets, 6, view.ballistic, view.rewardAim);
 
   const m = muzzlePosition(layout, view.standX);
   const dir = aimDirection(layout, view.standX, view.effectiveAim);

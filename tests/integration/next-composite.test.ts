@@ -1,10 +1,10 @@
 import { PerspectiveCamera } from 'three';
-import { applyCameraPose, applyFrame, cameraPose, createExpandedView, createSceneGraph, projectToScreen } from '../../src/view';
+import { applyCameraPose, applyFrame, cameraPose, createEffects, createExpandedView, createSceneGraph, projectToScreen, type OffscreenCue } from '../../src/view';
 import { expect, it } from 'vitest';
 import { GameController } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
-import { BASE_SHOT_MODIFIERS, isAmmoBalanced, isLedgerEntryConsistent, type EffectId, type ImpactEvent, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
+import { BASE_SHOT_MODIFIERS, isAmmoBalanced, isLedgerEntryConsistent, type EffectId, type EventId, type ImpactEvent, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
 import { rewardDevicesFor } from '../../src/core/rewards';
 import { createShotWorld } from '../../src/sim/world';
 import { aimAt } from '../helpers/aim-at';
@@ -21,7 +21,7 @@ const yaw = (left.yaw + right.yaw) / 2;
 const pitch = aimAt(bundle, stand, {...wall(12), x:wall(12).x + 0.1}, 'standard').pitch;
 const aim = {standX:stand, yaw, pitch, count:3 as const, spreadRad:(right.yaw - left.yaw) / 2};
 
-async function composite(skip: boolean, capped = false, viewX = stand) {
+async function composite(skip: boolean, capped = false, viewX = stand, frameSec = 1 / 60) {
   // Pre-shot setup only. The two hits, question, series changes, falls and
   // score are computed by the candidate's rules and its actual Rapier world.
   const start = buildState(bundle, {
@@ -40,14 +40,28 @@ async function composite(skip: boolean, capped = false, viewX = stand) {
   const graph = createSceneGraph({ layout, resolvePrize: id => catalog.prizes.get(id)! });
   const display = createExpandedView({graph, layout, catalog, expansion:expansion!, illustratedRewards:true,
     translate:key => key, prizeName:id => id});
+  const cues: OffscreenCue[] = [];
+  const effects = createEffects({
+    layer: graph.effectsLayer, layout, shopkeeperParts: graph.booth.shopkeeper,
+    prizeObject: id => graph.prizes.get(id)?.mesh ?? null,
+    projectilePosition: id => graph.projectiles.get(id)?.position ?? null,
+    camera: () => camera, size: () => ({ width, height }),
+    hud: { offscreen: cue => cues.push(cue), chain: () => {} },
+  });
+  const pending: EventId[] = [];
   const impacts: ImpactEvent[] = [];
   const confirmed: ShotSummary[] = [];
   const stages: ShotStage[] = [];
   const c = new GameController({ ...bundle, rules:CORE_RULES, world,
     renderer: {
       render(frame, view) {
+        if (pending.length || frame.events.length) {
+          expect(frame.events.map(event => event.eventId)).toEqual(pending);
+          pending.length = 0;
+        }
         applyFrame(graph, frame);
         display.update(frame, view, camera, { width, height });
+        effects.handleEvents(frame.events, frame.simTimeSec);
       },
       present: async () => {}, resize: () => {}, dispose: () => graph.dispose(),
     },
@@ -55,6 +69,7 @@ async function composite(skip: boolean, capped = false, viewX = stand) {
     onShotSettled: summary => confirmed.push(summary),
     onSimEvents: events => {
       for (const event of events) {
+        pending.push(event.eventId);
         if (event.type === 'shotStage') stages.push(event.stage);
         if (event.type === 'impact') impacts.push(event);
       }
@@ -69,7 +84,7 @@ async function composite(skip: boolean, capped = false, viewX = stand) {
     expect(c.dispatch({type:'FIRE'})).toBe(true);
     expect(c.current.expansion!.active).toEqual(start.expansion.next);
     expect(c.current.expansion!.next.modifiers).toEqual(BASE_SHOT_MODIFIERS);
-    for(let i=0;i<3000 && !c.awaitingAnswer;i++) c.frame(1/60);
+    for(let i=0;i<3000 && !c.awaitingAnswer;i++) c.frame(frameSec);
     const flight=c.current.inFlight!;
     expect(flight.stage).toBe('question');
     expect(flight.barrier?.collectedDuringFlight).toEqual([]);
@@ -90,7 +105,7 @@ async function composite(skip: boolean, capped = false, viewX = stand) {
     const answer={type:'ANSWER_SHOPKEEPER',shotId:flight.shotId,questionId:question.questionId,choice:'B'};
     expect(c.dispatch(answer)).toBe(true);
     expect(c.dispatch(answer)).toBe(false);
-    for(let i=0;i<4000 && c.current.phase==='resolving';i++) c.frame(1/60);
+    for(let i=0;i<4000 && c.current.phase==='resolving';i++) c.frame(frameSec);
     expect(confirmed).toHaveLength(1);
     expect(c.current.ledger).toHaveLength(1);
     const ledger = confirmed[0]!.ledger;
@@ -101,9 +116,11 @@ async function composite(skip: boolean, capped = false, viewX = stand) {
     expect(stages.filter(stage => stage === 'grace').length).toBeLessThanOrEqual(1);
     const edgeHit = impacts.find(event => event.target.kind === 'cell' && event.target.cellId === 'cell-r2-c12')!;
     const onscreen = projectToScreen(camera, edgeHit.point, width, height) !== null;
+    const rightCell = cues.find(cue => cue.key === 'fx.offscreen.cell' && cue.x > width / 2);
+    if (viewX !== stand) expect(rightCell).toBeDefined();
     expect(onscreen).toBe(viewX === stand);
     return {summary: confirmed[0]!, state: c.current, gameTick: c.gameTick, impacts};
-  } finally { display.dispose(); graph.dispose(); world.dispose(); }
+  } finally { effects.dispose(); display.dispose(); graph.dispose(); world.dispose(); }
 }
 
 it('r006 confirms two- and three-prize sets after the last cork, several cells, a question, retyping and falls', async () => {
@@ -138,9 +155,9 @@ it('r006 confirms two- and three-prize sets after the last cork, several cells, 
   expect(state.phase).toBe('position');
 });
 
-it('AC14/CH-AC04: changing only the view leaves off-screen impacts, collections, effects and settlement identical', async () => {
-  const visible = await composite(false);
-  const offscreen = await composite(false, false, layout.camera.standMinX);
+it.each([1 / 60, 1 / 30])('AC14/AC26: every impact reaches the view exactly once at a frame interval of %f seconds', async frameSec => {
+  const visible = await composite(false, false, stand, frameSec);
+  const offscreen = await composite(false, false, layout.camera.standMinX, frameSec);
   expect(offscreen).toEqual(visible);
   console.info('r006 camera replay', { impacts: visible.impacts.length, won: visible.summary.collected.length,
     effects: visible.summary.effects!.length, score: visible.state.score });

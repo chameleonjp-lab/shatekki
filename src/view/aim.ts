@@ -8,7 +8,7 @@
  * and elevation, so (0, 0) is exactly muzzle -> aimTarget.
  */
 import * as THREE from 'three';
-import type { AimAngles, BallisticSpec, BoothLayout, Vec3 } from '../contracts';
+import type { AimAngles, AimPreview, BallisticSpec, BoothLayout, Vec3 } from '../contracts';
 import { aimDirection as sharedAimDirection, corkFreeFlightPath, muzzlePosition as sharedMuzzle, aimTargetPosition as sharedAimTarget } from '../contracts';
 
 export function muzzlePosition(layout: BoothLayout, standX: number): Vec3 {
@@ -51,10 +51,21 @@ export function computeReticle(
   targets: readonly THREE.Object3D[],
   maxDistance = 6,
   ballistic?: BallisticSpec,
+  preview?: AimPreview,
 ): ReticleResult {
   const m = muzzlePosition(layout, standX);
   const origin = new THREE.Vector3(m.x, m.y, m.z);
   const direction = aimDirection(layout, standX, aim);
+  const end = preview?.points.at(-1);
+  if (preview && end) {
+    const point = new THREE.Vector3().copy(end);
+    let distance = 0;
+    for (let i = 1; i < preview.points.length; i++) {
+      const a = preview.points[i - 1]!, b = preview.points[i]!;
+      distance += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    }
+    return { origin, direction, point, distance, hit: preview.firstHitTargetId !== null, normal: null };
+  }
   const objs = targets as THREE.Object3D[];
   if (!ballistic) {
     raycaster.set(origin, direction);

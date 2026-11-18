@@ -119,6 +119,8 @@ export const mintId = {
   shot: (n: number) => `s${String(n).padStart(2, '0')}` as ShotId,
   projectile: (shot: ShotId, n: number) => `${shot}-c${n}` as ProjectileId,
   event: (shot: ShotId, n: number) => `${shot}-e${n}` as EventId,
+  /** Presentation-only contacts have their own sequence so recorded event ids stay stable. */
+  prizeContact: (shot: ShotId, n: number) => `${shot}-contact${n}` as EventId,
   run: (s: string) => s as RunId,
   device: (s: string) => s as DeviceId,
   barrier: (shot: ShotId) => `${shot}-barrier` as BarrierId,

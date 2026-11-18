@@ -1,4 +1,6 @@
 /** Helpers for expanded-shot tests (not a test file): a minimal complete plan and a runner that resumes at the barrier. */
+import RAPIER from '@dimforge/rapier3d-compat';
+import { vi } from 'vitest';
 import { makeRequest } from '../unit/helpers';
 import {
   BASE_SHOT_MODIFIERS,
@@ -18,6 +20,18 @@ import {
   type SimulationFrame,
   type TransformIntent,
 } from '../../src/contracts';
+
+/** Observe native contacts and velocities without exposing mutable Rapier objects to gameplay code. */
+export async function inspectRapierWorld(makeWorld: () => Promise<ShotWorld>) {
+  const creation = vi.spyOn(RAPIER.World.prototype, 'createRigidBody');
+  try {
+    const world = await makeWorld();
+    const rapier = creation.mock.contexts[0];
+    if (rapier instanceof RAPIER.World) return { world, rapier };
+    world.dispose();
+    throw new Error('missing Rapier world');
+  } finally { creation.mockRestore(); }
+}
 
 export function planFor(barrier: FlightBarrier, transforms: readonly TransformIntent[] = [], over: Partial<EffectPlan> = {}): EffectPlan {
   return {

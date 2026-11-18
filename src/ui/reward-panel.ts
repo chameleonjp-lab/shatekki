@@ -12,7 +12,7 @@
  * Pure model + a small DOM mount. Text comes only from the injected translator; nothing here
  * changes the run (the order buttons go through the normal command path).
  */
-import type { RewardId, RewardOutcome, RewardViewState, SetId } from '../contracts';
+import { mintId, type CollectedPrize, type RewardId, type RewardOutcome, type RewardViewState, type SetId } from '../contracts';
 import './expanded.css';
 import { prizePortrait } from '../view/prize-portrait';
 
@@ -93,16 +93,60 @@ export interface RewardCardModel {
 }
 
 export interface RewardCardInput extends ShotMomentInput {
+  /** The kind at collection, including a change made during the shot. */
+  readonly collectedPrizes?: readonly CollectedPrize[];
   readonly setMembers?: (id: SetId) => readonly string[];
   readonly staticCard?: boolean;
   readonly setName: (id: SetId) => string;
 }
 
-export function rewardLine(o: RewardOutcome, t: RewardText, showTargetRing = false): RewardLine {
+/** The same confirmed set, member artwork and first-discovery stamp on the slip and result. */
+export function renderRewardSet(doc: Document, set: RewardCardModel['sets'][number], prizeName: (id: string) => string, discoveryLabel: string): HTMLElement {
+  const row = doc.createElement('div');
+  row.className = set.fresh ? 'rwd-set rwd-set-fresh' : 'rwd-set';
+  row.dataset.set = set.setId;
+  if (set.fresh) {
+    const seal = doc.createElement('span');
+    seal.className = 'rwd-seal';
+    seal.textContent = discoveryLabel;
+    row.appendChild(seal);
+  }
+  const title = doc.createElement('span');
+  title.className = 'rwd-set-name';
+  title.textContent = set.name;
+  row.appendChild(title);
+  if (set.members.length > 0) {
+    const members = doc.createElement('div');
+    members.className = 'rwd-members';
+    for (const id of set.members) {
+      const tile = doc.createElement('span');
+      tile.className = 'rwd-member';
+      const name = doc.createElement('span');
+      name.className = 'rwd-prize-name';
+      name.textContent = prizeName(id);
+      tile.append(prizePortrait(doc, id), name);
+      members.appendChild(tile);
+    }
+    row.appendChild(members);
+  }
+  return row;
+}
+
+interface RewardDetails {
+  readonly collected: readonly CollectedPrize[];
+  readonly prizeName?: (typeId: string) => string;
+}
+
+export function rewardLine(o: RewardOutcome, t: RewardText, details?: RewardDetails): RewardLine {
   let name = t(`reward.name.${o.id}`);
-  if (showTargetRing && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
+  if (details && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
     const hit = t(o.key === 'target:center' ? 'reward.target.hitCenter' : 'reward.target.hitOuter');
     name = `${name} · ${hit}`;
+  }
+  if (details?.prizeName && o.id === 'A3') {
+    const shot = mintId.shot(o.shotNumber);
+    const prize = details.collected.find(p => p.shotId === shot && o.key === `seesaw:${p.instanceId}`);
+    if (prize) name = `${name} · ${details.prizeName(prize.typeId)}`;
   }
   let text: string;
   if (o.granted <= 0) text = t('reward.capped');
@@ -111,7 +155,7 @@ export function rewardLine(o: RewardOutcome, t: RewardText, showTargetRing = fal
   return { id: o.id, name, text, granted: o.granted };
 }
 
-export function rewardCardModel(i: RewardCardInput, t: RewardText): RewardCardModel {
+export function rewardCardModel(i: RewardCardInput, t: RewardText, prizeName?: (typeId: string) => string): RewardCardModel {
   const m = shotMoment(i);
   const fresh = new Set<string>(i.freshSets);
   let headline = '';
@@ -119,7 +163,8 @@ export function rewardCardModel(i: RewardCardInput, t: RewardText): RewardCardMo
   else if (m.big === 'continue') headline = t('reward.continue', { n: i.ammoAfter });
   else if (m.big === 'multiTake') headline = t('reward.take.many', { n: i.collected });
   const sets = i.completedSets.map((id) => ({ setId: id, name: i.setName(id), fresh: fresh.has(id), members: i.setMembers?.(id) ?? [] }));
-  const lines = i.rewards.map(o => rewardLine(o, t, Boolean(i.setMembers)));
+  const details = i.collectedPrizes || i.setMembers ? { collected: i.collectedPrizes ?? [], prizeName } : undefined;
+  const lines = i.rewards.map(o => rewardLine(o, t, details));
   const calm = m.capped ? t('reward.continue.none') : null;
   return { title: t('reward.card.title'), headline, big: m.big, sets, lines, calm, any: headline !== '' || lines.length > 0 || sets.length > 0 || calm !== null };
 }
@@ -220,6 +265,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
   const clearT = deps.clearTimeout ?? ((id) => globalThis.clearTimeout(id as ReturnType<typeof setTimeout>));
   let timer: unknown = null;
   let answered = false;
+  let hasCloseButton = false;
   const hideCard = () => {
     if (timer !== null) clearT(timer);
     timer = null;
@@ -230,7 +276,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
   }
   card.addEventListener('click', (e) => {
     e.stopPropagation();
-    hideCard();
+    if (!hasCloseButton) hideCard();
   });
   const answer = (yes: boolean) => (e: Event) => {
     e.stopPropagation();
@@ -271,7 +317,8 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
     },
     showShot(input) {
       card.dataset.static = String(input.staticCard === true);
-      const m = rewardCardModel(input, deps.t);
+      const m = rewardCardModel(input, deps.t, deps.prizeName);
+      hasCloseButton = input.setMembers !== undefined && m.sets.length > 0;
       if (!m.any) {
         hideCard();
         return;
@@ -286,26 +333,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
         parts.push(h);
       }
       for (const s of m.sets) {
-        const row = mk('div', s.fresh ? 'rwd-set rwd-set-fresh' : 'rwd-set');
-        row.dataset.set = s.setId;
-        row.textContent = s.name;
-        if (s.members.length) {
-          const members = mk('div', 'rwd-members');
-          for (const id of s.members) {
-            const tile = mk('span', 'rwd-member');
-            const name = mk('span', 'rwd-prize-name');
-            name.textContent = deps.prizeName(id);
-            tile.append(prizePortrait(doc, id), name);
-            members.appendChild(tile);
-          }
-          row.appendChild(members);
-        }
-        if (s.fresh) {
-          const seal = mk('span', 'rwd-seal');
-          seal.textContent = deps.t('reward.set.seal');
-          row.prepend(seal);
-        }
-        parts.push(row);
+        parts.push(renderRewardSet(doc, s, deps.prizeName, deps.t('reward.set.seal')));
       }
       if (m.lines.length > 0) {
         const list = mk('ul', 'rwd-list');
@@ -322,11 +350,12 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
         c.textContent = m.calm;
         parts.push(c);
       }
-      if (input.setMembers && m.sets.length > 0) {
+      if (hasCloseButton) {
         const close = mk('button', 'rwd-close');
         close.type = 'button';
         close.textContent = deps.t('settings.close');
         close.dataset.testid = 'reward-close';
+        close.addEventListener('click', hideCard);
         parts.push(close);
       }
       card.replaceChildren(...parts);
@@ -334,7 +363,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
       if (timer !== null) clearT(timer);
       // The first-discovery slip can contain several illustrated sets and long
       // translated names. The next shot or the close button dismisses it.
-      timer = input.setMembers && m.sets.length ? null : setT(hideCard, REWARD_CARD_SHOW_MS);
+      timer = hasCloseButton ? null : setT(hideCard, REWARD_CARD_SHOW_MS);
     },
     hideCard,
     destroy() {

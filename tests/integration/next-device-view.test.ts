@@ -1,16 +1,23 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
+import { GameController } from '../../src/app/controller';
+import { CORE_RULES } from '../../src/app/rules';
 import {
-  REWARD_TARGET_HALF_THICKNESS, ballisticFor, mintId, asPrizeTypeId, IDENTITY_QUAT,
-  type RewardViewState, type SimulationFrame, type ExpansionViewState, type PrizeFrame,
+  BASE_SHOT_MODIFIERS, REWARD_TARGET_HALF_THICKNESS, aimDirection, ballisticFor, mintId, muzzlePosition, asPrizeTypeId, IDENTITY_QUAT,
+  type Box3, type RewardViewState, type SimulationFrame, type ExpansionViewState, type PrizeFrame,
 } from '../../src/contracts';
+import { createExpandedRun } from '../../src/core/expanded-run';
 import { rewardDevicesFor, TARGET_AIM, targetGeometryAt } from '../../src/core/rewards';
+import { clampAim } from '../../src/core/aim';
 import { LOCALES, translate, type Locale, type UiKey } from '../../src/i18n';
-import { createExpandedView } from '../../src/view/expanded-view';
+import { createExpandedView, projectToScreen } from '../../src/view/expanded-view';
 import { createSceneGraph, updateAim } from '../../src/view/scene';
 import { BAG_OFFSET, createRewardProps } from '../../src/view/reward-props';
+import { createShotWorld, REWARD_CHIME_SURFACE_ID, REWARD_PIGGY_SURFACE_ID, REWARD_TARGET_SURFACE_ID } from '../../src/sim/world';
 import { aimAt } from '../helpers/aim-at';
+import { makeRequest } from '../unit/helpers';
+import { expandedCtx, runExpanded } from './expanded-helpers';
 
 const bundle = getGameplayBundle('expanded-next');
 const config = bundle.expansion!.profile.rewards!;
@@ -70,7 +77,7 @@ describe('r006 reward devices and price tags', () => {
     }
   });
 
-  it('keeps all drawn vertices within the actual device volumes, before and after a grant', () => {
+  it('keeps the collecting mouth, resonating bell, tray and target aligned before and after a grant', () => {
     const props = createRewardProps(true);
     try {
       for (const used of [false, true]) {
@@ -79,20 +86,144 @@ describe('r006 reward devices and price tags', () => {
         }), []);
         props.group.updateMatrixWorld(true);
         const shapes = [
-          ['chime', devices.chime!], ['piggy', devices.piggySlot!], ['seesaw', devices.seesawTray!],
-          ['target', { center: target.center, halfExtents: { x: target.outerRadius, y: target.outerRadius, z: REWARD_TARGET_HALF_THICKNESS } }],
+          ['chime-bell', devices.chime!], ['deposit-opening', devices.piggySlot!], ['reward-seesaw', devices.seesawTray!],
+          ['reward-target', { center: target.center, halfExtents: { x: target.outerRadius, y: target.outerRadius, z: REWARD_TARGET_HALF_THICKNESS } }],
         ] as const;
         for (const [name, box] of shapes) {
-          const drawn = drawnBounds(props.group.getObjectByName('reward-' + name)!);
+          const drawn = drawnBounds(props.group.getObjectByName(name)!);
           expect(drawn.isEmpty()).toBe(false);
           for (const axis of ['x', 'y', 'z'] as const) {
-            expect(drawn.min[axis], name + ' ' + axis).toBeGreaterThanOrEqual(box.center[axis] - box.halfExtents[axis] - 0.00001);
-            expect(drawn.max[axis], name + ' ' + axis).toBeLessThanOrEqual(box.center[axis] + box.halfExtents[axis] + 0.00001);
+            const lo = box.center[axis] - box.halfExtents[axis], hi = box.center[axis] + box.halfExtents[axis];
+            if (name === 'deposit-opening' || name === 'chime-bell') {
+              expect(drawn.min[axis], name + ' ' + axis).toBeCloseTo(lo, 5);
+              expect(drawn.max[axis], name + ' ' + axis).toBeCloseTo(hi, 5);
+            } else {
+              expect(drawn.min[axis], name + ' ' + axis).toBeGreaterThanOrEqual(lo - 0.00001);
+              expect(drawn.max[axis], name + ' ' + axis).toBeLessThanOrEqual(hi + 0.00001);
+            }
           }
         }
       }
     } finally {
       props.dispose();
+    }
+  });
+
+  it.each([
+    [0.75, -1.25, false, 1], [0.75, -1.05, true, 1], [0.95, -1.25, true, 1], [0.75, -1.25, true, 1.2],
+  ] as const)('matches the ordinary reticle to a real shot grazing the lip at (%s, %s), deposit %s, cork size %s', async (x, y, deposits, radiusMult) => {
+    const graph = graphForTest();
+    const world = await createShotWorld(bundle.layout, bundle.catalog, bundle.tuning, { rewardDevices: devices });
+    const initial = createExpandedRun(
+      { runId: mintId.run('aim-at-lip'), seed: 7919, tuning: bundle.tuning, playerName: null },
+      { ...bundle, expansion: bundle.expansion! },
+    );
+    const query = vi.spyOn(world, 'previewFirstContact');
+    const controller = new GameController({ ...bundle, clockPolicy: 'fixed', rules: CORE_RULES, preciseRewardAim: true, world, renderer: null }, {
+      ...initial, expansion: { ...initial.expansion, next: { ...initial.expansion.next, modifiers: { ...BASE_SHOT_MODIFIERS, radiusMult } } },
+    });
+    const slot = devices.piggySlot!;
+    try {
+      expect(controller.dispatch({ type: 'SET_POSITION', x: standX })).toBe(true);
+      controller.dispatch({ type: 'CONFIRM_POSITION' });
+      controller.frame(0.1);
+      controller.dispatch({ type: 'STOP_LOAD' });
+      const initialView = controller.viewState();
+      expect(initialView.rewardAim).toBeUndefined();
+      expect(query).not.toHaveBeenCalled();
+      const point = { x: slot.center.x + x * slot.halfExtents.x, y: slot.center.y + y * slot.halfExtents.y, z: slot.center.z + slot.halfExtents.z };
+      const aimed = aimAt(bundle, standX, point, 'standard');
+      controller.dispatch({ type: 'AIM', yaw: aimed.yaw - initialView.effectiveAim.yaw, pitch: aimed.pitch - initialView.effectiveAim.pitch });
+      const before = controller.viewState();
+      const predicted = before.rewardAim;
+      expect(predicted).toBeDefined();
+      expect(before.expansion?.aimPreview).toBeNull();
+      expect(predicted!.firstHitTargetId === REWARD_PIGGY_SURFACE_ID).toBe(deposits);
+      expect(controller.viewState().rewardAim).toBe(predicted);
+      expect(query).toHaveBeenCalledTimes(1);
+      const reticle = updateAim(graph, before);
+      expect(reticle.point.toArray()).toEqual(new THREE.Vector3().copy(predicted!.points.at(-1)!).toArray());
+      expect(controller.dispatch({ type: 'FIRE' })).toBe(true);
+      for (let i = 0; i < 300 && controller.current.phase === 'resolving'; i++) controller.frame(1 / 30);
+      expect(controller.current.phase).toBe('position');
+      expect(controller.current.expansion!.rewards!.piggyDeposits).toEqual(deposits ? [1] : []);
+    } finally {
+      query.mockRestore();
+      graph.dispose();
+      world.dispose();
+    }
+  });
+
+  it('looks at the last-cork disc before firing without adding it to the world, and matches the actual center, outer ring and miss', async () => {
+    const world = await createShotWorld(bundle.layout, bundle.catalog, bundle.tuning, { rewardDevices: devices });
+    try {
+      world.syncShelf({ prizes: [], nextInstanceNumber: 1, deferredSlots: [] }, 0);
+      for (const [yaw, ring] of [[0, 'center'], [0.07, 'outer'], [0.15, null]] as const) {
+        const request = makeRequest({
+          origin: muzzlePosition(bundle.layout, standX), direction: aimDirection(bundle.layout, standX, { ...TARGET_AIM, yaw: TARGET_AIM.yaw + yaw }),
+        });
+        const preview = world.previewFirstContact(request, BASE_SHOT_MODIFIERS, target);
+        expect(preview.firstHitTargetId === REWARD_TARGET_SURFACE_ID).toBe(ring !== null);
+        expect(world.previewFirstContact(request, BASE_SHOT_MODIFIERS).firstHitTargetId).not.toBe(REWARD_TARGET_SURFACE_ID);
+        const shot = runExpanded(world, request, expandedCtx({ rewards: true, rewardTarget: target }));
+        expect(shot.record.rewardContacts?.targetHit).toBe(ring);
+      }
+    } finally { world.dispose(); }
+  });
+
+  it('shoots the visible mouth at the center and both edges, and misses on the solid pink bank and the hanging paper', async () => {
+    const props = createRewardProps(true);
+    const world = await createShotWorld(bundle.layout, bundle.catalog, bundle.tuning, { rewardDevices: devices });
+    world.syncShelf({ prizes: [], nextInstanceNumber: 1, deferredSlots: [] }, 0);
+    props.update(view(), []);
+    props.group.updateMatrixWorld(true);
+    const eye = new THREE.Vector3(standX, bundle.layout.camera.eye.y, bundle.layout.camera.eye.z);
+    const muzzle = muzzlePosition(bundle.layout, standX);
+    const drawn = (root: THREE.Object3D, point: THREE.Vector3) => {
+      const meshes: THREE.Object3D[] = [];
+      root.traverseVisible(o => { if (o instanceof THREE.Mesh) meshes.push(o); });
+      return new THREE.Raycaster(eye, point.clone().sub(eye).normalize()).intersectObjects(meshes, false)[0]?.object;
+    };
+    const face = (b: Box3, x: number, y: number) => new THREE.Vector3(
+      b.center.x + x * b.halfExtents.x, b.center.y + y * b.halfExtents.y, b.center.z + b.halfExtents.z,
+    );
+    let shots = 0;
+    const fire = (point: THREE.Vector3) => {
+      const aim = clampAim(aimAt(bundle, standX, point, 'standard'), bundle.layout);
+      const direction = aimDirection(bundle.layout, standX, aim);
+      return runExpanded(world, makeRequest({ origin: muzzle, direction }, ++shots), expandedCtx({ rewards: true }));
+    };
+    try {
+      const bank = props.group.getObjectByName('reward-piggy')!;
+      for (const [x, y] of [[0, -0.8], [-0.82, 0.3], [0.82, 0.7], [0, 0.18]] as const) {
+        const point = face(devices.piggySlot!, x, y);
+        expect(drawn(bank, point)?.name).toBe('deposit-opening');
+        const shot = fire(point);
+        expect(shot.record.rewardContacts?.piggyDeposit).toBe(true);
+        const impact = shot.impacts.find(e => e.target.kind === 'surface' && e.target.surfaceId === REWARD_PIGGY_SURFACE_ID);
+        expect(impact).toBeDefined();
+        expect(drawn(bank, new THREE.Vector3().copy(impact!.point))?.name).toBe('deposit-opening');
+      }
+      const body = bank.getObjectByName('piggy-body')!;
+      const slot = devices.piggySlot!;
+      expect(drawnBounds(body).max.y + bundle.tuning.cork.radius).toBeLessThan(slot.center.y - slot.halfExtents.y);
+      const bodyPoint = body.getWorldPosition(new THREE.Vector3());
+      expect(body.getObjectById(drawn(bank, bodyPoint)!.id)).toBeDefined();
+      for (let i = 0; i < 2; i++) expect(fire(bodyPoint).record.rewardContacts?.piggyDeposit).toBe(false);
+
+      const chime = props.group.getObjectByName('reward-chime')!;
+      const bell = face(devices.chime!, 0.65, -0.65);
+      expect(drawn(chime, bell)?.name).toBe('chime-bell');
+      const paper = chime.getObjectByName('chime-paper')!.getWorldPosition(new THREE.Vector3());
+      expect(drawn(chime, paper)?.name).toBe('chime-paper');
+      const touchesBell = (point: THREE.Vector3) => fire(point).impacts.some(
+        e => e.target.kind === 'surface' && e.target.surfaceId === REWARD_CHIME_SURFACE_ID,
+      );
+      expect(touchesBell(bell)).toBe(true);
+      expect(touchesBell(paper)).toBe(false);
+    } finally {
+      props.dispose();
+      world.dispose();
     }
   });
 
@@ -129,6 +260,16 @@ describe('r006 reward devices and price tags', () => {
     const frame: SimulationFrame = { simTimeSec: 0, stage: null, shotId: null, projectiles: [], prizes: [original], events: [] };
     const labels = (f = frame) => expanded.update(f, state, camera, { width: 402, height: 874 })!.rewardLabels;
     try {
+      const topEdges = [
+        ['reward:device:A2', devices.chime!.center, devices.chime!.halfExtents.y],
+        ['reward:device:A3', devices.seesawTray!.center, devices.seesawTray!.halfExtents.y],
+        ['reward:device:A4', devices.piggySlot!.center, devices.piggySlot!.halfExtents.y],
+        ['reward:target:fixed', target.center, target.outerRadius],
+      ] as const;
+      for (const [id, center, halfHeight] of topEdges) {
+        const top = projectToScreen(camera, { ...center, y: center.y + halfHeight }, 402, 874)!;
+        expect(labels().find(l => l.id === id)!.y, id).toBeLessThanOrEqual(top.y);
+      }
       for (locale of LOCALES) {
         const names = labels().map(l => l.accessibleName);
         for (const id of ['A1', 'A2', 'A3', 'A4', 'A5']) {

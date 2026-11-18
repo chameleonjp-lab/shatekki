@@ -231,7 +231,8 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
         ];
         for (const d of devices) {
           if (!d.box) continue;
-          const s = projectToScreen(camera, d.box.center, size.width, size.height);
+          const center = d.box.center;
+          const s = projectToScreen(camera, { x: center.x, y: center.y + d.box.halfExtents.y, z: center.z }, size.width, size.height);
           if (!s) continue;
           const status = d.spent ? ui('reward.device.spent') : '';
           const accessibleName = [ui(`reward.name.${d.id}`), d.id === 'A4' ? count : '', status].filter(Boolean).join(' · ');
@@ -257,7 +258,9 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       }
     }
     if (placed.target && ex.rewards?.target) {
-      const s = projectToScreen(camera, placed.target, size.width, size.height);
+      const center = placed.target;
+      const y = center.y + (deps.illustratedRewards ? ex.rewards.target.geometry.outerRadius : 0);
+      const s = projectToScreen(camera, { x: center.x, y, z: center.z }, size.width, size.height);
       const o = ex.rewards.target.offered;
       if (s) {
         const text = ui('reward.target.label', { center: o.center, outer: o.outer });

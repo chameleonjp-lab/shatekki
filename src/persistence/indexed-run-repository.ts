@@ -1,8 +1,8 @@
-import { isAmmoBalanced, type GameplayBundle, type RunState, type SetId } from '../contracts';
+import { isAmmoBalanced, type GameplayBundle, type KeyValueStorage, type RunState, type SetId } from '../contracts';
+import { RELEASE_CATALOG } from '../catalog/release-config';
 import type {
   CommandWrite,
   PersistedRecord,
-  RevisionedShelf,
   RunRepository,
   RunScope,
   SavedProfile,
@@ -20,7 +20,7 @@ import {
   type CheckpointTransaction,
   type Store,
 } from './checkpoint-database';
-import { collectLegacyProfile, readLegacyShelf } from './legacy-import';
+import { checkSouvenirSlots, collectLegacyProfile, readLegacyShelf } from './legacy-import';
 import { SOUVENIR_KEY, SOUVENIR_SLOTS } from './souvenirs';
 
 const invalid = { ok: false, reason: 'invalid' } as const;
@@ -42,10 +42,6 @@ const sameToken = (a: SaveToken, b: SaveToken) =>
 const validScope = (scope: RunScope) =>
   /^[a-zA-Z0-9.-]+$/.test(scope.rulesVersion) &&
   (scope.mode === 'normal' || (scope.mode === 'daily' && /^\d{4}-\d{2}-\d{2}$/.test(scope.startedDateJst)));
-const emptyShelf = (): RevisionedShelf => ({
-  slots: Array.from({ length: SOUVENIR_SLOTS }, () => null),
-  slotRevision: 0,
-});
 
 async function profile(tx: CheckpointTransaction, scope: RunScope): Promise<SavedProfile> {
   const book = await tx.get<Omit<SavedProfile, 'bestScore'>>('profiles', bookKey(scope));
@@ -54,11 +50,6 @@ async function profile(tx: CheckpointTransaction, scope: RunScope): Promise<Save
     legacyBestScore: book?.legacyBestScore ?? null,
     bestScore: (await tx.get<number>('profiles', bestKey(scope))) ?? null,
   };
-}
-async function shelf(tx: CheckpointTransaction): Promise<RevisionedShelf> {
-  const slots = (await tx.get<RevisionedShelf['slots']>('souvenirs', 'shared')) ?? emptyShelf().slots;
-  const slotRevision = (await tx.get<number>('meta', 'slotRevision')) ?? 0;
-  return { slots, slotRevision };
 }
 
 /** Canonical plain JSON. Compute before opening the transaction. */
@@ -112,6 +103,7 @@ function createRepository(
   ephemeral: boolean,
   bundle?: GameplayBundle,
 ): RunRepository {
+  const knownPrizes = (bundle?.catalog ?? RELEASE_CATALOG).prizes;
   const validState = (state: RunState) =>
     bundle
       ? validateRunState(state, bundle.catalog, bundle.tuning, bundle.layout, bundle.expansion) === null
@@ -137,6 +129,42 @@ function createRepository(
     } catch (error) {
       return { ok: false, reason: databaseFailure(error) };
     }
+  }
+
+  async function readSharedShelf(tx: CheckpointTransaction) {
+    const stored = await tx.get<unknown>('souvenirs', 'shared');
+    const checked = stored === undefined
+      ? { slots: Array.from({ length: SOUVENIR_SLOTS }, () => null), damaged: false }
+      : checkSouvenirSlots(stored, knownPrizes);
+    const slotRevision = (await tx.get<number>('meta', 'slotRevision')) ?? 0;
+    return { exists: stored !== undefined, damaged: checked.damaged, shelf: { slots: checked.slots, slotRevision } };
+  }
+
+  /** Report any skipped slots even when retrying a previously committed import. */
+  async function importShelf(tx: CheckpointTransaction, storage: Pick<KeyValueStorage, 'getItem'>): Promise<boolean> {
+    const current = await readSharedShelf(tx);
+    if (current.damaged) {
+      // An earlier build may already have imported duplicates or unknown kinds. A newer win keeps its slot.
+      tx.put('souvenirs', 'shared', current.shelf.slots);
+      tx.put('meta', 'slotRevision', current.shelf.slotRevision + 1);
+      tx.put('meta', 'shelfImported', 'partial');
+      return true;
+    }
+    const imported = await tx.get<true | 'partial'>('meta', 'shelfImported');
+    if (imported) return imported === 'partial';
+    let legacy;
+    try {
+      legacy = readLegacyShelf(storage, knownPrizes);
+    } catch {
+      // A denied read or unparseable value can be tried again at the next explicit start.
+      return true;
+    }
+    if (legacy && !current.exists && (!legacy.damaged || legacy.slots.some(slot => slot !== null))) {
+      tx.put('souvenirs', 'shared', legacy.slots);
+      tx.put('meta', 'slotRevision', current.shelf.slotRevision + 1);
+    }
+    tx.put('meta', 'shelfImported', legacy?.damaged ? 'partial' : true);
+    return legacy?.damaged ?? false;
   }
 
   async function save(input: CommandWrite | ShotWrite): Promise<SaveReply> {
@@ -244,7 +272,7 @@ function createRepository(
     readActiveScope: (version) =>
       db.transact('readonly', ['meta'], async (tx) => (await tx.get<RunScope>('meta', activeKey(version))) ?? null),
     readProfile: (scope) => db.transact('readonly', ['profiles'], (tx) => profile(tx, scope)),
-    readShelf: () => db.transact('readonly', ['souvenirs', 'meta'], shelf),
+    readShelf: () => db.transact('readonly', ['souvenirs', 'meta'], async tx => (await readSharedShelf(tx)).shelf),
 
     async importLegacy(scope, storage, knownSets) {
       if (ephemeral) return { unreadable: [] };
@@ -257,19 +285,8 @@ function createRepository(
         if (sets.length !== before.discoveredSets.length || best !== before.legacyBestScore) {
           tx.put('profiles', bookKey(scope), { discoveredSets: sets, legacyBestScore: best });
         }
-        if (!(await tx.get<boolean>('meta', 'shelfImported'))) {
-          let oldShelf;
-          try {
-            oldShelf = readLegacyShelf(storage);
-          } catch {
-            unreadable.push(SOUVENIR_KEY);
-          }
-          if (oldShelf && (await tx.get('souvenirs', 'shared')) === undefined) {
-            tx.put('souvenirs', 'shared', oldShelf.slots);
-            tx.put('meta', 'slotRevision', 1);
-          }
-          if (!unreadable.includes(SOUVENIR_KEY)) tx.put('meta', 'shelfImported', true);
-        }
+        const shelfWasUnreadable = await importShelf(tx, storage);
+        if (shelfWasUnreadable) unreadable.push(SOUVENIR_KEY);
         const importKey = key('import', bookKey(scope));
         const stamp = canonical({ discoveredSets, legacyBestScore, unreadable });
         if ((await tx.get<string>('meta', importKey)) !== stamp) tx.put('meta', importKey, stamp);
@@ -361,7 +378,7 @@ function createRepository(
       if (ephemeral) return { ok: false, reason: 'notWonInThisGame' };
       try {
         return await db.transact('readwrite', ['runs', 'meta', 'souvenirs'], async (tx) => {
-          const current = await shelf(tx);
+          const { shelf: current } = await readSharedShelf(tx);
           const record = await tx.runById(runId);
           if (
             !record ||

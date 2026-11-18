@@ -49,6 +49,7 @@ export function createPrizeBody(
   config: PrizeRuntimeConfig,
   pose: Pose,
   mounted: boolean,
+  reportContacts = false,
 ): PrizeBodyHandles {
   const desc = mounted ? RAPIER.RigidBodyDesc.kinematicPositionBased() : RAPIER.RigidBodyDesc.dynamic();
   desc
@@ -62,6 +63,7 @@ export function createPrizeBody(
     .setFriction(config.friction)
     .setRestitution(config.restitution)
     .setMassProperties(config.massKg, config.centerOfMass, boxInertia(config.shape, config.massKg), { x: 0, y: 0, z: 0, w: 1 });
+  if (reportContacts) cDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
   const collider = world.createCollider(cDesc, body);
   return { body, collider };
 }

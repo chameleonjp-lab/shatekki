@@ -86,6 +86,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const hud: EffectsHud | undefined = deps.hud === false ? undefined : (deps.hud ?? domHud ?? undefined);
   const fx: Effects = createEffects({
     layer: graph.effectsLayer,
+    illustratedRewards: deps.expanded?.illustratedRewards,
     layout,
     shopkeeperParts: graph.booth.shopkeeper,
     prizeObject: (id) => graph.prizes.get(id)?.mesh ?? null,
@@ -115,7 +116,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     },
     present(summary: ShotSummary, options: PresentOptions): Promise<void> {
       // Settle effects. Skipping is presentation-only: it never changes what happened.
-      if (deps.expanded?.illustratedRewards) expandedView?.showConfirmedTransforms(summary.appliedTransforms ?? [], !options.skip);
+      if (deps.expanded?.illustratedRewards) expandedView?.showConfirmedTransforms(summary.appliedTransforms ?? [], !options.skip && !options.reducedMotion);
       return fx.present(summary, options);
     },
     resize(w: number, h: number): void {

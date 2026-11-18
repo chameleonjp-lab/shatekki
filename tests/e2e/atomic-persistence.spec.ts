@@ -57,22 +57,28 @@ test('reading while a shot flies has no effect; competing claims abandon it exac
   const other = await context.newPage();
   await Promise.all([open(page, 'a'), open(other, 'b')]);
   const initial = await fresh(page, 'two-tabs');
-  let record = saved(
-    await page.evaluate(([s, state]) => window.repository.start(s, state, null), [scope, initial] as const),
-  );
+  const starts = await Promise.all([page, other].map(tab =>
+    tab.evaluate(([s, state]) => window.repository.start(s, state, null), [scope, initial] as const),
+  ));
+  expect(starts.filter(reply => !reply.ok)).toEqual([{ ok: false, reason: 'conflict' }]);
+  let record = saved(starts.find(reply => reply.ok)!);
+  const writer = record.ownerId === 'a' ? page : other;
+  const reader = writer === page ? other : page;
   let state: RunState = initial;
   for (const type of ['CONFIRM_POSITION', 'STOP_LOAD', 'FIRE'] as const) {
-    state = await page.evaluate(([s, t]) => window.checkpointTest.reduce(s, { type: t }), [state, type] as const);
-    record = saved(
-      await page.evaluate((input) => window.repository.saveCommand(input), {
-        expected: record.token,
-        operationId: type === 'FIRE' ? 'two-tabs/1/fire' : type,
-        state,
-        gameTick: 0,
-      }),
-    );
+    state = await writer.evaluate(([s, t]) => window.checkpointTest.reduce(s, { type: t }), [state, type] as const);
+    const input = { expected: record.token, operationId: type === 'FIRE' ? 'two-tabs/1/fire' : type, state, gameTick: 0 };
+    const ownerWrite = writer.evaluate(command => window.repository.saveCommand(command), input);
+    if (type === 'FIRE') {
+      // Both tabs have the current token. A different command under the same operation ID must never be a replay.
+      const competing = reader.evaluate(command => window.repository.saveCommand(command), { ...input, gameTick: 1 });
+      const [applied, denied] = await Promise.all([ownerWrite, competing]);
+      expect(applied).toMatchObject({ ok: true, replayed: false });
+      expect(denied).toMatchObject({ ok: false, reason: expect.stringMatching(/^(conflict|invalid)$/) });
+      record = saved(applied);
+    } else record = saved(await ownerWrite);
   }
-  const read = await other.evaluate((s) => window.repository.read(s), scope);
+  const read = await reader.evaluate((s) => window.repository.read(s), scope);
   expect(read).toEqual(record);
   const attempt = (p: Page) =>
     p.evaluate(([s, t]) => window.repository.claim(s, t, 'abandonInFlight'), [scope, record.token] as const);
@@ -103,7 +109,8 @@ test('aborting after the receipt put rolls back the whole settlement; retry and 
   page,
   context,
 }) => {
-  await open(page, 'owner');
+  const other = await context.newPage();
+  await Promise.all([open(page, 'owner'), open(other, 'other')]);
   const initial = await fresh(page, 'settle');
   let record = saved(
     await page.evaluate(([s, state]) => window.repository.start(s, state, null), [scope, initial] as const),
@@ -181,7 +188,13 @@ test('aborting after the receipt put rolls back the whole settlement; retry and 
         discoveredSets: [],
       });
     }
-    const committed = await page.evaluate((i) => window.repository.commitShot(i), input);
+    const ownerWrite = page.evaluate(i => window.repository.commitShot(i), input);
+    if (last) {
+      const competitor = other.evaluate(i => window.repository.commitShot(i), { ...input, gameTick: n + 1 });
+      const [, denied] = await Promise.all([ownerWrite, competitor]);
+      expect(denied).toMatchObject({ ok: false, reason: expect.stringMatching(/^(conflict|invalid)$/) });
+    }
+    const committed = await ownerWrite;
     record = saved(committed);
     if (last) {
       expect(committed).toMatchObject({ freshSets: ['S001'], record: { newBest: true, result: { score: 100 } } });
@@ -209,8 +222,6 @@ test('aborting after the receipt put rolls back the whole settlement; retry and 
       }),
     ).toMatchObject({ ok: true, changed: true });
   }
-  const other = await context.newPage();
-  await open(other, 'other');
   const replace = (p: Page, i: number) =>
     p.evaluate((input) => window.repository.place(input), {
       runId: initial.runId,
@@ -245,7 +256,9 @@ test('rollback and incremental legacy import preserve raw keys and daily discove
     );
     localStorage.setItem(
       'shatekki.souvenirs.v1',
-      JSON.stringify({ slots: [null, { typeId: 'P003', runId: 'earlier' }, null] }),
+      JSON.stringify({ slots: [
+        { typeId: 'P001', runId: 'earlier' }, { typeId: 'P001', runId: 'duplicate' }, { typeId: 'P999', runId: 'missing' },
+      ] }),
     );
     localStorage.setItem('shatekki.ranking-pending.v1', 'do not change');
     const before = JSON.stringify(localStorage);
@@ -292,12 +305,53 @@ test('rollback and incremental legacy import preserve raw keys and daily discove
     failed: true,
     rolledBack: { discoveredSets: [], bestScore: null },
     emptyShelf: { slotRevision: 0, slots: [null, null, null] },
-    first: { unreadable: ['shatekki.profile.v1', 'shatekki.profile.v2'] },
+    first: { unreadable: ['shatekki.profile.v1', 'shatekki.profile.v2', 'shatekki.souvenirs.v1'] },
     imported: { discoveredSets: ['S001', 'PAIR002'], bestScore: null, legacyBestScore: 800 },
     rawUnchanged: true,
     updatedUnchanged: true,
     incremental: { discoveredSets: ['S001', 'PAIR002', 'S002'], bestScore: null },
     daily: { discoveredSets: ['S005'], legacyBestScore: 124, bestScore: null },
-    shelf: { slotRevision: 1, slots: [null, { typeId: 'P003', runId: 'earlier' }, null] },
+    shelf: { slotRevision: 1, slots: [{ typeId: 'P001', runId: 'earlier' }, null, null] },
   });
+});
+
+test('a shelf imported by an older build is cleaned once, keeping newer valid slots and invalidating its former revision', async ({ page }) => {
+  await open(page, 'reader');
+  const result = await page.evaluate(async scope => {
+    const original = JSON.stringify({ slots: [null, { typeId: 'P006', runId: 'old' }, null] });
+    localStorage.setItem('shatekki.souvenirs.v1', original);
+    const newer = { typeId: 'P004', runId: 'won-later' };
+    const storedSlots = [newer, { typeId: 'P004', runId: 'duplicate' }, { typeId: 'P999', runId: 'missing' }];
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('shatekki.checkpoints');
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(['meta', 'souvenirs'], 'readwrite');
+        tx.objectStore('meta').put(true, 'shelfImported');
+        tx.objectStore('meta').put(8, 'slotRevision');
+        tx.objectStore('souvenirs').put(storedSlots, 'shared');
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error);
+      });
+      const preview = await window.repository.readShelf();
+      const onDiskAfterReading = await new Promise<unknown>((resolve, reject) => {
+        const read = db.transaction('souvenirs').objectStore('souvenirs').get('shared');
+        read.onsuccess = () => resolve(read.result);
+        read.onerror = () => reject(read.error);
+      });
+      const book = new Set(window.checkpointTest.bundle.catalog.sets.keys());
+      const warning = await window.repository.importLegacy(scope, localStorage, book);
+      const repaired = await window.repository.readShelf();
+      await window.repository.importLegacy(scope, localStorage, book);
+      return { preview, readOnly: JSON.stringify(onDiskAfterReading) === JSON.stringify(storedSlots),
+        warning, repaired, repeated: await window.repository.readShelf(), raw: localStorage.getItem('shatekki.souvenirs.v1') === original };
+    } finally { db.close(); }
+  }, scope);
+  const clean = [{ typeId: 'P004', runId: 'won-later' }, null, null];
+  expect(result).toEqual({ preview: { slotRevision: 8, slots: clean }, readOnly: true,
+    warning: { unreadable: ['shatekki.souvenirs.v1'] }, repaired: { slotRevision: 9, slots: clean },
+    repeated: { slotRevision: 9, slots: clean }, raw: true });
 });
