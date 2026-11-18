@@ -151,4 +151,3 @@ export async function playRun(b: GameplayBundle, seed: number) {
     wallMs: Math.round(performance.now() - started),
   };
 }
-
