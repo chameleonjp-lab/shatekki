@@ -14,6 +14,7 @@
  */
 import type { RewardId, RewardOutcome, RewardViewState, SetId } from '../contracts';
 import './expanded.css';
+import { prizePortrait } from '../view/prize-portrait';
 
 type Params = Readonly<Record<string, string | number>>;
 export type RewardText = (key: string, params?: Params) => string;
@@ -84,7 +85,7 @@ export interface RewardCardModel {
   readonly headline: string;
   readonly big: ShotMomentKind | null;
   /** P2: set names, the first-time ones marked. */
-  readonly sets: ReadonlyArray<{ readonly name: string; readonly fresh: boolean }>;
+  readonly sets: ReadonlyArray<{ readonly setId: SetId; readonly name: string; readonly fresh: boolean; readonly members: readonly string[] }>;
   readonly lines: readonly RewardLine[];
   /** Calm reason when the last cork could not be refilled. */
   readonly calm: string | null;
@@ -92,6 +93,8 @@ export interface RewardCardModel {
 }
 
 export interface RewardCardInput extends ShotMomentInput {
+  readonly setMembers?: (id: SetId) => readonly string[];
+  readonly staticCard?: boolean;
   readonly setName: (id: SetId) => string;
 }
 
@@ -111,8 +114,15 @@ export function rewardCardModel(i: RewardCardInput, t: RewardText): RewardCardMo
   if (m.big === 'setFirst') headline = i.completedSets.length > 1 ? t('reward.set.many', { n: i.completedSets.length }) : t('reward.set.first');
   else if (m.big === 'continue') headline = t('reward.continue', { n: i.ammoAfter });
   else if (m.big === 'multiTake') headline = t('reward.take.many', { n: i.collected });
-  const sets = i.completedSets.map((id) => ({ name: i.setName(id), fresh: fresh.has(id) }));
-  const lines = i.rewards.map((o) => rewardLine(o, t));
+  const sets = i.completedSets.map((id) => ({ setId: id, name: i.setName(id), fresh: fresh.has(id), members: i.setMembers?.(id) ?? [] }));
+  const lines = i.rewards.map((o) => {
+    const line = rewardLine(o, t);
+    if (i.setMembers && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
+      const hit = t(o.key === 'target:center' ? 'reward.target.hitCenter' : 'reward.target.hitOuter');
+      return { ...line, name: `${line.name} · ${hit}` };
+    }
+    return line;
+  });
   const calm = m.capped ? t('reward.continue.none') : null;
   return { title: t('reward.card.title'), headline, big: m.big, sets, lines, calm, any: headline !== '' || lines.length > 0 || sets.length > 0 || calm !== null };
 }
@@ -263,6 +273,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
       strip.hidden = sm.chips.length === 0;
     },
     showShot(input) {
+      card.dataset.static = String(input.staticCard === true);
       const m = rewardCardModel(input, deps.t);
       if (!m.any) {
         hideCard();
@@ -279,7 +290,19 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
       }
       for (const s of m.sets) {
         const row = mk('div', s.fresh ? 'rwd-set rwd-set-fresh' : 'rwd-set');
+        row.dataset.set = s.setId;
         row.textContent = s.name;
+        if (s.members.length) {
+          const members = mk('div', 'rwd-members');
+          for (const id of s.members) {
+            const tile = mk('span', 'rwd-member');
+            const name = mk('span', 'rwd-prize-name');
+            name.textContent = deps.prizeName(id);
+            tile.append(prizePortrait(doc, id), name);
+            members.appendChild(tile);
+          }
+          row.appendChild(members);
+        }
         if (s.fresh) {
           const seal = mk('span', 'rwd-seal');
           seal.textContent = deps.t('reward.set.seal');

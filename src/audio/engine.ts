@@ -305,7 +305,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         let reqs: readonly SoundRequest[];
         if (event.type === 'ui') {
           const cue = (event as UiCueExt).cue;
-          if (cue === 'loadStop' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
+          if (cue === 'loadStop' || cue === 'critLatch' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
           reqs = soundsForUiCue(event as UiCueExt);
         } else {
           reqs = soundsForSimEvent(event);

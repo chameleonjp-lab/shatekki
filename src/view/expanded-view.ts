@@ -10,7 +10,7 @@
  * rules-v1 (no `view.expansion`) draws nothing here.
  */
 import * as THREE from 'three';
-import type { BoothLayout, ExpansionCatalog, HintKind, MotionSpec, PrizeFrame, PrizeTypeId, RuntimeCatalog, SimulationFrame, Vec3, ViewState } from '../contracts';
+import type { AppliedTransform, BoothLayout, ExpansionCatalog, HintKind, MotionSpec, PrizeFrame, PrizeTypeId, RuntimeCatalog, SimulationFrame, Vec3, ViewState } from '../contracts';
 import type { SceneGraph } from './scene';
 import { angleReadout, computeHintLabels, signedDeg, TrajectoryRecorder, type AngleReadout, type HintLabel, type HintTone } from './gameplay-hints';
 import { createHint3D, CORK_COLORS, type Hint3D } from './hint-3d';
@@ -20,6 +20,7 @@ import { createRewardProps } from './reward-props';
 export type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 export interface ExpandedViewDeps {
+  readonly illustratedRewards?: boolean;
   readonly graph: SceneGraph;
   readonly layout: BoothLayout;
   readonly catalog: RuntimeCatalog;
@@ -69,6 +70,7 @@ export interface ExpandedViewModel {
 
 export interface ExpandedView {
   update(frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }): ExpandedViewModel | null;
+  showConfirmedTransforms(transforms: readonly AppliedTransform[]): void;
   lastModel(): ExpandedViewModel | null;
   dispose(): void;
 }
@@ -92,11 +94,12 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   const hint3d: Hint3D = createHint3D();
   graph.scene.add(hint3d.group);
   const recorder = new TrajectoryRecorder();
-  const rewardProps = createRewardProps();
+  const rewardProps = createRewardProps(deps.illustratedRewards);
   graph.scene.add(rewardProps.group);
   /** P4: price tags on prizes whose kind really changed, for a few seconds of simulation time. */
   const changed = new Map<string, { readonly toTypeId: PrizeTypeId; readonly untilSec: number }>();
   const TAG_SEC = 3;
+  let confirmed: readonly AppliedTransform[] = [];
   /** First kind each individual was seen as: the mount keeps running that kind's motion after a transform. */
   const firstKind = new Map<string, PrizeTypeId>();
   let last: ExpandedViewModel | null = null;
@@ -210,7 +213,10 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       if (s) rewardLabels.push({ id: 'reward:bag', x: s.x, y: s.y, text: ui('reward.bag.label', { n: ex.rewards.bagOffer }), tone: 'badge', color: '#d9a441' });
     }
     if (ex.rewards) {
-      for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
+      if (deps.illustratedRewards) {
+        for (const t of confirmed) changed.set(t.instanceId, { toTypeId: t.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
+        confirmed = [];
+      } else for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
       for (const [id, c] of [...changed]) {
         const p = byId.get(id);
         if (!p || frame.simTimeSec > c.untilSec) {
@@ -255,6 +261,7 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       }
       return last;
     },
+    showConfirmedTransforms(transforms) { confirmed = transforms; },
     lastModel: () => last,
     dispose() {
       graph.scene.remove(rewardProps.group);

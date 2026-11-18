@@ -23,7 +23,7 @@ const BAG_TIE = 0x7a2e1f;
 /** The bag hangs at the front-right of its prize (m). */
 export const BAG_OFFSET = { x: 0.085, y: -0.02, z: 0.11 } as const;
 
-export function createRewardProps(): RewardProps {
+export function createRewardProps(illustrated = false): RewardProps {
   const group = new THREE.Group();
   group.name = 'reward-props';
 
@@ -82,7 +82,35 @@ export function createRewardProps(): RewardProps {
   group.add(chime, piggy, seesaw);
   const spent = (m: THREE.MeshStandardMaterial, base: number, used: boolean) => m.color.setHex(used ? 0x6b625c : base);
 
+  // In the candidate, the slit and the tray lip sit inside the physics boxes.
+  // The two inlaid coins are a count of distinct paid shots, not of split corks.
+  const ink = deviceMat(0x392b38);
+  const brass = deviceMat(0xf9ce67);
+  const coins: THREE.Mesh[] = [];
+  let tick: THREE.Mesh | undefined;
+  if (illustrated) {
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.23, 0.04), ink);
+    slot.name = 'deposit-opening';
+    slot.position.set(0, 0.18, 0.96);
+    piggy.add(slot);
+    for (const x of [-0.27, 0.27]) {
+      const coin = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), brass);
+      coin.position.set(x, -0.34, 0.94);
+      coins.push(coin);
+      piggy.add(coin);
+    }
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.015, 0.02), brass);
+    lip.position.set(0, 0.018, 0.47);
+    trayMesh.add(lip);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.06, 5, 20), brass);
+    rim.rotation.x = Math.PI / 2;
+    bell.add(rim);
+    tick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.009, 0.002), ink);
+    tick.rotation.z = -0.55;
+    chime.add(tick);
+  }
   const bagAt = new THREE.Vector3();
+  const rotation = new THREE.Quaternion();
   const targetAt = new THREE.Vector3();
 
   return {
@@ -108,6 +136,13 @@ export function createRewardProps(): RewardProps {
       bag.visible = owner !== undefined;
       if (owner) {
         bag.position.set(owner.position.x + BAG_OFFSET.x, owner.position.y + BAG_OFFSET.y, owner.position.z + BAG_OFFSET.z);
+        if (illustrated) {
+          const q = owner.rotation;
+          rotation.set(q.x, q.y, q.z, q.w);
+          bag.position.set(BAG_OFFSET.x, BAG_OFFSET.y, BAG_OFFSET.z).applyQuaternion(rotation);
+          bag.position.add(owner.position);
+          bag.quaternion.copy(rotation);
+        }
         bagAt.copy(bag.position);
       }
       // devices: spent ones keep their place in a dull colour (the seesaw still collects, without ammo)
@@ -120,6 +155,13 @@ export function createRewardProps(): RewardProps {
         bell.position.y = b.halfExtents.y * 0.2;
         strip.scale.set(b.halfExtents.x * 0.8, b.halfExtents.y * 1.1, 1);
         strip.position.y = -b.halfExtents.y * 0.5;
+        if (illustrated) {
+          strip.scale.z = b.halfExtents.z * 2;
+          if (tick) {
+            tick.visible = Boolean(rewards?.chimeUsed);
+            tick.position.set(0, b.halfExtents.y * 0.35, b.halfExtents.z);
+          }
+        }
         // the paper strip turns over once the chime has paid
         strip.rotation.y = rewards?.chimeUsed ? Math.PI / 2 : 0;
         spent(chimeMat, 0x9fd3e6, rewards?.chimeUsed ?? false);
@@ -129,6 +171,11 @@ export function createRewardProps(): RewardProps {
         const b = d.piggySlot;
         piggy.position.set(b.center.x, b.center.y - b.halfExtents.y * 0.6, b.center.z - b.halfExtents.z * 0.4);
         piggy.scale.set(b.halfExtents.x * 1.2, b.halfExtents.y * 1.4, b.halfExtents.z * 1.4);
+        if (illustrated) {
+          piggy.position.copy(b.center);
+          piggy.scale.copy(b.halfExtents);
+          coins.forEach((coin, i) => { coin.visible = i < (rewards?.piggyDeposits ?? 0); });
+        }
         spent(piggyMat, 0xf2a7b8, rewards?.piggyDone ?? false);
       }
       seesaw.visible = Boolean(d?.seesawTray);

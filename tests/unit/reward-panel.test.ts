@@ -45,10 +45,10 @@ describe('reward lines and cards', () => {
   });
 
   it('names every set, marks the first-time ones, and says "2組完成" for several', () => {
-    const m = rewardCardModel({ ...base, collected: 4, completedSets: ['PAIR001' as SetId, 'S001' as SetId], freshSets: ['S001' as SetId], setName: (id) => `name-${id}` }, t);
+    const m = rewardCardModel({ ...base, collected: 4, completedSets: ['PAIR001' as SetId, 'S001' as SetId], freshSets: ['S001' as SetId], setMembers: id => id === 'S001' ? ['P003','P005','P007'] : ['P011','P012'], setName: (id) => `name-${id}` }, t);
     expect(m.big).toBe('setFirst');
     expect(m.headline).toBe(t('reward.set.many', { n: 2 }));
-    expect(m.sets).toEqual([{ name: 'name-PAIR001', fresh: false }, { name: 'name-S001', fresh: true }]);
+    expect(m.sets).toEqual([{ setId: 'PAIR001', name: 'name-PAIR001', fresh: false, members: ['P011','P012'] }, { setId: 'S001', name: 'name-S001', fresh: true, members: ['P003','P005','P007'] }]);
   });
 
   it('shows "あと3発" when the last cork comes back three', () => {
