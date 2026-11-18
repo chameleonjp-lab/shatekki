@@ -55,9 +55,9 @@ try {
     await page.reload();
     await expect(page.locator('#app')).toHaveAttribute('data-rules-version', version);
   }
-  async function start() {
-    await page.getByTestId('home-start').click();
-    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 20_000 });
+  async function start(target = page) {
+    await target.getByTestId('home-start').click();
+    await expect(target.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 20_000 });
   }
   await open('/shatekki/', 'rules-v1');
   await start();
@@ -65,8 +65,7 @@ try {
   if (mode !== 'withdraw') {
     const fixturePage = await browser.newPage({ viewport: { width: 402, height: 700 } });
     await fixturePage.goto(origin + legacyPath);
-    await fixturePage.getByTestId('home-start').click();
-    await expect(fixturePage.getByTestId('controls')).toHaveAttribute('data-mode', 'position');
+    await start(fixturePage);
     const raw = await fixturePage.evaluate(key => localStorage.getItem(key), legacyKey);
     assert.equal(JSON.parse(raw).checkpoint.state.rulesVersion, 'rules-v2-proposed-r003');
     await writeFile(join(candidate, 'r003-fixture.json'), raw);
