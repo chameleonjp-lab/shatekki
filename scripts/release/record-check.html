@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>旧記録の照合</title>
+<style>body{font:1rem system-ui;max-width:40rem;margin:auto;padding:1rem}button,a{display:block;margin:1rem 0;padding:.65rem}output{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<h1>旧記録の照合</h1>
+<p id="version"></p>
+<p>専用のSafariプロファイルで、先に正式版で比較用の回を始めてください。このページは同じタブで使います。</p>
+<a href="../../">9枠の正式版</a>
+<button id="prepare">比較用のr003記録を用意し、旧記録を控える</button>
+<a href="./">36枠の候補で遊ぶ</a>
+<button id="compare">旧記録を照合する</button>
+<output aria-live="polite"></output>
+<script type="module">
+const version = await fetch('./version.json').then(r => r.json());
+document.querySelector('#version').textContent = version.rulesVersion + ' ／ ' + version.commit;
+const baselineKey = 'preview-check:' + version.commit;
+const runKey = 'shatekki.run.rules-v2-proposed-r003';
+const output = document.querySelector('output');
+// Compare the protected keys, including keys that were absent when we started.
+const keys = ['shatekki.run.v1', runKey, 'shatekki.profile.v1', 'shatekki.profile.v2',
+  'shatekki.settings.v1', 'shatekki.player-name.v1', 'shatekki.ranking-pending.v1',
+  'shatekki.quarantine.v1', 'shatekki.ranking-done.v1', 'shatekki.ranking-pending-quarantine.v1'];
+async function snapshot() {
+  const records = {};
+  for (const key of keys) {
+    const raw = localStorage.getItem(key);
+    const hash = raw === null ? null : await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    records[key] = hash && Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return records;
+}
+document.querySelector('#prepare').onclick = async () => {
+  try {
+    if (sessionStorage.getItem(baselineKey) !== null) throw Error('この版の控えは作成済みです。照合へ進んでください。');
+    if (!localStorage.getItem('shatekki.run.v1')) throw Error('先に9枠の正式版で回を始めてください。');
+    const response = await fetch('./r003-fixture.json');
+    if (!response.ok) throw Error('比較用の記録を取得できません。');
+    const raw = await response.text();
+    const env = JSON.parse(raw);
+    if (env.checkpoint?.state?.rulesVersion !== 'rules-v2-proposed-r003') throw Error('比較用の記録の版が一致しません。');
+    if (localStorage.getItem(runKey) !== null) throw Error('r003の記録がすでにあります。別の新しい専用プロファイルを使ってください。');
+    localStorage.setItem(runKey, raw);
+    sessionStorage.setItem(baselineKey, JSON.stringify(await snapshot()));
+    output.textContent = '控えを作成しました。候補で遊んだ後、同じタブで照合してください。';
+  } catch (e) { output.textContent = String(e.message || e); }
+};
+document.querySelector('#compare').onclick = async () => {
+  try {
+    const baseline = JSON.parse(sessionStorage.getItem(baselineKey));
+    if (!baseline) throw Error('このタブに比較前の控えがありません。');
+    const now = await snapshot();
+    output.textContent = keys.map(k => (baseline[k] === now[k] ? '一致　' : '差異　') + k).join('\n');
+  } catch (e) { output.textContent = String(e.message || e); }
+};
+</script></html>
