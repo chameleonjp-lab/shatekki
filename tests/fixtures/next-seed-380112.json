@@ -1,0 +1,18 @@
+[
+  {"tick": 0, "cmd": {"type": "SET_POSITION", "x": 2.35}},
+  {"tick": 0, "cmd": {"type": "CONFIRM_POSITION"}},
+  {"tick": 75, "cmd": {"type": "STOP_LOAD"}},
+  {"tick": 75, "cmd": {"type": "AIM", "yaw": 0.23437601207160239, "pitch": -0.00429758160098459}},
+  {"tick": 135, "cmd": {"type": "FIRE"}},
+  {"tick": 263, "cmd": {"type": "ANSWER_SHOPKEEPER", "shotId": "s01", "questionId": "Q100", "choice": "B"}},
+  {"tick": 305, "cmd": {"type": "SET_POSITION", "x": -1.0896613373886794}},
+  {"tick": 305, "cmd": {"type": "CONFIRM_POSITION"}},
+  {"tick": 373, "cmd": {"type": "STOP_LOAD"}},
+  {"tick": 373, "cmd": {"type": "AIM", "yaw": 0.022154852344733342, "pitch": 0.2754875346451352}},
+  {"tick": 433, "cmd": {"type": "FIRE"}},
+  {"tick": 549, "cmd": {"type": "SET_POSITION", "x": -0.542862247582525}},
+  {"tick": 549, "cmd": {"type": "CONFIRM_POSITION"}},
+  {"tick": 618, "cmd": {"type": "STOP_LOAD"}},
+  {"tick": 618, "cmd": {"type": "AIM", "yaw": -0.04864190911648097, "pitch": 0.28875490025992023}},
+  {"tick": 678, "cmd": {"type": "FIRE"}}
+]

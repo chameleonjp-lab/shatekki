@@ -33,7 +33,7 @@ class FakeNode {
     this.connected.push(n);
     return n;
   }
-  disconnect() {}
+  disconnect() { this.connected.length = 0; }
   start() {
     this.started = true;
   }
@@ -182,6 +182,17 @@ describe('silence (AC36)', () => {
     const before = ctx.sources.length;
     engine.handle({ type: 'ui', cue: 'select' }, ON);
     expect(ctx.sources.length).toBeGreaterThan(before);
+  });
+
+  it('releases every per-cue node after 60 load and settlement scenes', async () => {
+    const { engine, ctx } = await ready();
+    for (let scene = 0; scene < 60; scene++) {
+      ctx.currentTime++;
+      engine.handle({ type: 'ui', cue: 'critLatch' }, ON);
+      engine.handle({ type: 'ui', cue: 'takeTier', count: 4 }, ON);
+      for (const voice of ctx.sources) voice.onended?.();
+      expect(ctx.nodes.slice(1).every(n => n.connected.length === 0)).toBe(true);
+    }
   });
 
   it('is safe before unlock and when called twice', async () => {

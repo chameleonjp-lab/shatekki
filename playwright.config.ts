@@ -47,6 +47,18 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:placement-trial' : 'npm run build:placement-trial && npm run preview:placement-trial',
+      url: 'http://127.0.0.1:4177',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:next' : 'npm run build:next && npm run preview:next',
+      url: 'http://127.0.0.1:4178',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
   ],
   projects: [
     {
@@ -61,7 +73,20 @@ export default defineConfig({
       },
     },
     {
+      name: 'compact-portrait-chromium',
+      testMatch: ['**/next-long-text.spec.ts', '**/reward-motions.spec.ts'],
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 402, height: 700 },
+        deviceScaleFactor: 1,
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
       name: 'short-portrait-chromium',
+      // This suite measures the same confirmed card in all three sizes itself.
+      testIgnore: '**/confirmed-set-cards.spec.ts',
       use: {
         browserName: 'chromium',
         viewport: { width: 375, height: 600 },

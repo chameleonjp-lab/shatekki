@@ -101,7 +101,7 @@ export type UiCue =
         // Rewards (plan P1/P3): prizes won in one shot (count), and continuing from the last cork.
         | 'takeTier' | 'lastShotContinue'
         // P5: a metal latch at the same moment as the perfect-load sound.
-        | 'critLatch';
+        | 'critLatch' | 'windChime';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */

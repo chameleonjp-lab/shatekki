@@ -113,13 +113,27 @@ jobs:
           path: dist-save-trial/
           if-no-files-found: error
           retention-days: 7
+      - run: npm run build:placement-trial
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-placement-trial-dist
+          path: dist-placement-trial/
+          if-no-files-found: error
+          retention-days: 7
+      - run: npm run build:next
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-next-dist
+          path: dist-next/
+          if-no-files-found: error
+          retention-days: 7
 
   browser:
     needs: [plan, build]
     if: needs.plan.outputs.browser == 'true'
     runs-on: ubuntu-latest
     # Setup and tests have their own step limits below; this only bounds the whole job.
-    timeout-minutes: 20
+    timeout-minutes: 25
     # Browser, system libraries and fonts come prebuilt in the image of the lockfile's exact
     # Playwright version (checked by tests/ci/browser-env.test.mjs). Downloading them at run
     # time once took 9 min 7 s on a slow apt mirror and cancelled the tests (run 42260041719).
@@ -128,7 +142,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # Full runs cover 220 tests across three portrait sizes; narrow selections keep two shards.
+        shard: ${{ fromJSON(fromJSON(needs.plan.outputs.plan).scope == 'full' && '[1,2,3,4]' || '[1,2]') }}
     env:
       CI: 'true'
       CI_PREBUILT: 'true'
@@ -157,6 +172,14 @@ jobs:
         with:
           name: internal-save-trial-dist
           path: dist-save-trial/
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-placement-trial-dist
+          path: dist-placement-trial/
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-next-dist
+          path: dist-next/
       - name: Check the browser version and the fonts for Japanese, Chinese and Thai text
         timeout-minutes: 2
         run: |
@@ -164,8 +187,9 @@ jobs:
           test "$(npx playwright --version)" = "Version $(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
           dpkg-query -W fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf
       - name: Run selected browser tests
-        timeout-minutes: 12
-        run: node scripts/ci/run-tests.mjs e2e --shard=${{ matrix.shard }}/2
+        # Full candidate coverage includes complete games for both last-cork target rings.
+        timeout-minutes: 18
+        run: node scripts/ci/run-tests.mjs e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

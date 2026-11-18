@@ -82,6 +82,7 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
   // ---------------------------------------------------------------- labels
   const pool: HTMLElement[] = [];
   const shown: string[] = [];
+  const turned = new Set<string>();
   for (let i = 0; i < LABEL_POOL; i++) {
     const e = doc.createElement('div');
     e.style.cssText =
@@ -93,14 +94,31 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
 
   const place = (e: HTMLElement, i: number, l: ScreenLabel, dy: string) => {
     const style = TONE_STYLE[l.tone] ?? TONE_STYLE.info!;
-    const key = `${l.text}|${l.tone}|${l.color ?? ''}|${Math.round(l.x)}|${Math.round(l.y)}|${dy}`;
+    const key = `${l.id}|${l.turn ?? ''}|${l.accessibleName ?? ''}|${l.text}|${l.tone}|${l.color ?? ''}|${Math.round(l.x)}|${Math.round(l.y)}|${dy}`;
     if (shown[i] === key) return;
     shown[i] = key;
     e.style.cssText =
       `position:absolute;left:0;top:0;display:block;box-sizing:border-box;padding:1px 6px;border-radius:999px;font:700 11px/1.25 system-ui,sans-serif;text-align:center;max-width:128px;white-space:normal;box-shadow:0 1px 4px rgba(0,0,0,.45);${style};` +
       (l.color ? `background:${l.color};color:${l.tone === 'badge' ? readableTextColor(l.color) : '#1b1209'};` : '') +
       `transform:translate(calc(${Math.round(l.x)}px - 50%), calc(${Math.round(l.y)}px + ${dy}))`;
+    if (l.accessibleName) {
+      e.setAttribute('role', 'img');
+      e.setAttribute('aria-label', l.accessibleName);
+    } else {
+      e.removeAttribute('role');
+      e.removeAttribute('aria-label');
+    }
+    if (e.dataset.labelId !== l.id) {
+      for (const a of e.getAnimations?.() ?? []) a.cancel();
+      e.dataset.labelId = l.id;
+    }
     e.textContent = l.text;
+    if (l.turn && !turned.has(l.turn)) {
+      turned.add(l.turn);
+      if (!doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        e.animate?.([{ rotate: 'x -72deg' }, { rotate: 'x 0deg' }], { duration: 225, easing: 'ease-out' });
+      }
+    }
   };
 
   return {

@@ -31,8 +31,15 @@ function qmul(a: Quat, b: Quat): Quat {
  * from the top; the lowest corner is lifted so it does not dip into the shelf).
  */
 export function mountedPose(base: Pose, config: PrizeRuntimeConfig, motionSec: number): Pose {
-  const m = config.motion;
-  const shape: CollisionShape = config.shape;
+  return periodicPose(base, config.motion, config.shape, motionSec, false);
+}
+
+/** Re-use the original motion and phase with the current kind's dimensions. */
+export function mountedPoseForShape(base: Pose, motion: PrizeRuntimeConfig['motion'], shape: CollisionShape, motionSec: number): Pose {
+  return periodicPose(base, motion, shape, motionSec, true);
+}
+
+function periodicPose(base: Pose, m: PrizeRuntimeConfig['motion'], shape: CollisionShape, motionSec: number, keepBottom: boolean): Pose {
   switch (m.type) {
     case 'none':
       return base;
@@ -54,7 +61,9 @@ export function mountedPose(base: Pose, config: PrizeRuntimeConfig, motionSec: n
       const hw = shapeLocalHalfExtents(shape).x;
       // pendulum hanging from the top-center of the prize
       const dx = hh * Math.sin(theta);
-      const dy = hh * (1 - Math.cos(theta)) + hw * Math.abs(Math.sin(theta));
+      const dy = keepBottom
+        ? hh * (Math.abs(Math.cos(theta)) - 1) + hw * Math.abs(Math.sin(theta))
+        : hh * (1 - Math.cos(theta)) + hw * Math.abs(Math.sin(theta));
       return {
         position: { x: base.position.x + dx, y: base.position.y + dy, z: base.position.z },
         rotation: qmul(quatFromAxisAngle(0, 0, 1, theta), base.rotation),

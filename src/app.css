@@ -94,3 +94,19 @@ button, a { touch-action: manipulation; }
   overflow-wrap: anywhere;
 }
 .app-notice[hidden] { display: none; }
+
+.save-dialog {
+  position: fixed;
+  z-index: 950;
+  inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--bg);
+  text-align: center;
+}
+.save-dialog[hidden] { display: none; }
+.save-dialog p { margin: 0; }

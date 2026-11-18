@@ -37,8 +37,11 @@ export interface QuestionPanelContent {
 }
 
 export interface QuestionPanelDeps {
+  readonly scrollable?: boolean;
   /** Return false when the command was rejected (the panel then re-enables). */
-  onAnswer(command: AnswerShopkeeperCommand): boolean | void;
+  onAnswer(command: AnswerShopkeeperCommand): boolean | void | Promise<boolean>;
+  /** Explicitly resume after returning from landscape or another app. */
+  onResume?(): void;
   /** UI strings (shopq.*). */
   t(key: string, params?: Readonly<Record<string, string | number>>): string;
 }
@@ -47,7 +50,7 @@ export interface QuestionPanelHandle {
   show(content: QuestionPanelContent): void;
   hide(): void;
   /** Dims the panel and shows the paused note. Never lifts the pause itself. */
-  setPaused(paused: boolean): void;
+  setPaused(paused: boolean, canResume?: boolean): void;
   /** True while the panel is visible. */
   isShown(): boolean;
   /** True once an answer was accepted for the shown question. */
@@ -85,7 +88,7 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     return e;
   };
 
-  const overlay = mk('div', 'shopq');
+  const overlay = mk('div', deps.scrollable ? 'shopq shopq-scroll' : 'shopq');
   overlay.dataset.testid = 'shopkeeper-question';
   overlay.hidden = true;
   const card = mk('div', 'shopq-card');
@@ -128,6 +131,14 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     ranges[c] = range;
   }
   card.append(titleEl, body, choicesEl);
+  const resume = mk('button', 'btn btn-primary');
+  resume.type = 'button';
+  resume.dataset.testid = 'shopq-resume';
+  resume.hidden = true;
+  if (deps.onResume) {
+    card.appendChild(resume);
+    resume.onclick = deps.onResume;
+  }
   overlay.appendChild(card);
   root.appendChild(overlay);
 
@@ -162,16 +173,19 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     answeredKey = keyOf(content);
     refresh(); // both buttons are disabled before the command leaves
     const cmd: AnswerShopkeeperCommand = { type: 'ANSWER_SHOPKEEPER', shotId: content.shotId, questionId: content.questionId, choice };
-    let result: boolean | void;
+    let result: boolean | void | Promise<boolean>;
     try {
       result = deps.onAnswer(cmd);
     } catch {
       result = false;
     }
-    if (result === false) {
+    const reject = () => {
+      if (answeredKey !== keyOf(content)) return;
       answeredKey = null; // rejected: let the player answer again
       refresh();
-    }
+    };
+    if (result instanceof Promise) void result.then(ok => { if (!ok) reject(); }, reject);
+    else if (result === false) reject();
   };
 
   const listeners: Array<() => void> = [];
@@ -207,7 +221,10 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     });
   }
   // The backdrop swallows touches so nothing underneath (fire, home, resume) can react to a stray tap.
-  on<Event>(overlay, 'touchmove', (e) => e.preventDefault());
+  on<Event>(overlay, 'touchmove', (e) => {
+    if (deps.scrollable) e.stopPropagation();
+    else e.preventDefault();
+  });
 
   const render = (c: QuestionPanelContent) => {
     titleEl.textContent = deps.t('shopq.title');
@@ -251,7 +268,11 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
       overlay.hidden = true;
       refresh();
     },
-    setPaused(p) {
+    setPaused(p, canResume = false) {
+      if (deps.onResume) {
+        resume.hidden = !p || !canResume;
+        if (!resume.hidden) resume.textContent = deps.t('btn.resume');
+      }
       if (paused === p) return;
       paused = p;
       downOn = null;

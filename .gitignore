@@ -10,3 +10,5 @@ playwright-report/
 .claude/worktrees/
 dist-rewards/
 dist-save-trial/
+dist-placement-trial/
+dist-next/

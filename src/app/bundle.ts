@@ -30,7 +30,7 @@ export interface BuildSetup {
 /** The bundle (and, for the internal prototype, its UI pieces) chosen when this build was made. */
 export async function loadBuildSetup(): Promise<BuildSetup> {
   const key = import.meta.env.VITE_SHATEKKI_BUNDLE;
-  if (key === 'expanded-proposed' || key === 'expanded-trial' || key === 'expanded-full' || key === 'expanded-save-trial') {
+  if (key === 'expanded-proposed' || key === 'expanded-trial' || key === 'expanded-full' || key === 'expanded-save-trial' || key === 'expanded-placement-trial' || key === 'expanded-next') {
     const [{ getGameplayBundle }, expandedUi] = await Promise.all([import('../catalog/gameplay-config'), import('./expanded-ui')]);
     return { bundle: getGameplayBundle(key), expandedUi };
   }

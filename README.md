@@ -1,5 +1,11 @@
 # shatekki — 屋台の射的ゲーム
 
+## 36枠の内部候補を遊ぶ
+
+Node 22 以上で `npm ci`、`npm run build:next`、`npm run preview:next` を順に実行し、http://localhost:4178/ を開きます。ホームの識別子は `rules-v2-proposed-r006` です。公開用9枠と内部候補は独立した回として保存します。
+
+[通常画面と音の比較](docs/qa/visual/README.md) ／ [受入項目ごとの実測結果](docs/qa/post-pr23-evidence.md) ／ [7版の比較](docs/qa/post-pr23-balance.md) ／ [iPhone Safariの確認手順](docs/qa/post-pr23-iphone.md)
+
 ## 36枠版の要件と作業順（2026年11月18日）
 
 仕様・保存・ゲーム処理から屋台と景品の見た目、操作画面、演出、音、翻訳、試験までChatGPTが担当します。公開用の9枠と内部試作の36枠を確認し、残る10項目と実装・確認の順序をまとめました。
@@ -60,3 +66,23 @@ ChatGPTがゲームと見た目を一緒に実装し、共有コードの統合�
 ## 36枠内部版の起動
 
 保存試験版 r004 は `npm run build:save-trial && npm run preview:save-trial` で起動します（4176番）。ホームに対象のルール番号を表示します。
+
+### S01・S02　r004 の記録
+
+r004 の開始・発射・精算は端末内の IndexedDB で確定します。エラー後の「再試行」は同じ操作を使います。「この画面だけで遊ぶ」は記録しない新しい回を開始します。
+
+### S03　r005 の品替え
+
+r005 は build:placement-trial / preview:placement-trial（4177番）で起動します。棚に接した景品の底と元の揺れを保持します。
+
+### S04　景品札・補給装置・音
+
+内部候補のセット札は、成立した組の種類番号から100景品の静止画集を引きます。比較画像は docs/qa/visual にあります。
+
+### S05・S06　r006 の統合プレイ
+
+r006 を試すには build:next / preview:next（4178番）を使います。ゲーム内の固定刻みで今日の屋台を進め、発射と精算の確定通知を画面と音に反映します。
+
+### S07・S08　内部候補の比較
+
+実機用の手順は docs/qa/post-pr23-iphone.md、15言語の画面試験は docs/qa/post-pr23-locales.md にあります。7版×24条件の結果を docs/qa/post-pr23-balance.md で比較できます。

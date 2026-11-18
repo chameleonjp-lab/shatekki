@@ -157,6 +157,7 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
   box.append(title, body);
   root.appendChild(box);
 
+  let previous: MapModel | null = null;
   let cols = 0;
   let tiles: HTMLElement[] = [];
   let interactive = false;
@@ -192,10 +193,16 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
       if (cols !== model.columns) build(model);
       interactive = input.interactive === true;
       box.classList.toggle('booth-map-live', interactive && !!deps.onJump);
-      title.textContent = deps.t('map.title');
+      const mapTitle = deps.t('map.title');
+      // The app remounts the map on a locale change. Updating all 36 tiles
+      // every frame otherwise replaces their text nodes even for identical text.
+      if (title.textContent !== mapTitle) title.textContent = mapTitle;
       const label = deps.t('map.label', { from: model.view.fromColumn, to: model.view.toColumn });
-      box.setAttribute('aria-label', `${label} ${deps.t('map.prize')}: ${model.prizeCount}. ${deps.t('cell.used')}: ${model.usedCount}.`);
+      const description = `${label} ${deps.t('map.prize')}: ${model.prizeCount}. ${deps.t('cell.used')}: ${model.usedCount}.`;
+      if (box.getAttribute('aria-label') !== description) box.setAttribute('aria-label', description);
       model.cells.forEach((c, i) => {
+        const old = previous?.columns === model.columns ? previous.cells[i] : null;
+        if (old && old.hasPrize === c.hasPrize && old.cellState === c.cellState && old.outlined === c.outlined) return;
         const tile = tiles[i]!;
         tile.dataset.prize = c.hasPrize ? '1' : '0';
         tile.dataset.cell = c.cellState ?? 'none';
@@ -208,8 +215,9 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
           .filter(Boolean)
           .join(' / ');
       });
-      frame.style.left = `${(model.view.left * 100).toFixed(2)}%`;
-      frame.style.width = `${(model.view.width * 100).toFixed(2)}%`;
+      if (previous?.view.left !== model.view.left) frame.style.left = `${(model.view.left * 100).toFixed(2)}%`;
+      if (previous?.view.width !== model.view.width) frame.style.width = `${(model.view.width * 100).toFixed(2)}%`;
+      previous = model;
       return model;
     },
     destroy() {

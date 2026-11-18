@@ -14,6 +14,7 @@
  */
 import type { RewardId, RewardOutcome, RewardViewState, SetId } from '../contracts';
 import './expanded.css';
+import { prizePortrait } from '../view/prize-portrait';
 
 type Params = Readonly<Record<string, string | number>>;
 export type RewardText = (key: string, params?: Params) => string;
@@ -84,7 +85,7 @@ export interface RewardCardModel {
   readonly headline: string;
   readonly big: ShotMomentKind | null;
   /** P2: set names, the first-time ones marked. */
-  readonly sets: ReadonlyArray<{ readonly name: string; readonly fresh: boolean }>;
+  readonly sets: ReadonlyArray<{ readonly setId: SetId; readonly name: string; readonly fresh: boolean; readonly members: readonly string[] }>;
   readonly lines: readonly RewardLine[];
   /** Calm reason when the last cork could not be refilled. */
   readonly calm: string | null;
@@ -92,11 +93,17 @@ export interface RewardCardModel {
 }
 
 export interface RewardCardInput extends ShotMomentInput {
+  readonly setMembers?: (id: SetId) => readonly string[];
+  readonly staticCard?: boolean;
   readonly setName: (id: SetId) => string;
 }
 
-export function rewardLine(o: RewardOutcome, t: RewardText): RewardLine {
-  const name = t(`reward.name.${o.id}`);
+export function rewardLine(o: RewardOutcome, t: RewardText, showTargetRing = false): RewardLine {
+  let name = t(`reward.name.${o.id}`);
+  if (showTargetRing && o.id === 'A5' && (o.key === 'target:center' || o.key === 'target:outer')) {
+    const hit = t(o.key === 'target:center' ? 'reward.target.hitCenter' : 'reward.target.hitOuter');
+    name = `${name} · ${hit}`;
+  }
   let text: string;
   if (o.granted <= 0) text = t('reward.capped');
   else if (o.granted < o.offered) text = t('reward.partial', { n: o.granted, req: o.offered });
@@ -111,8 +118,8 @@ export function rewardCardModel(i: RewardCardInput, t: RewardText): RewardCardMo
   if (m.big === 'setFirst') headline = i.completedSets.length > 1 ? t('reward.set.many', { n: i.completedSets.length }) : t('reward.set.first');
   else if (m.big === 'continue') headline = t('reward.continue', { n: i.ammoAfter });
   else if (m.big === 'multiTake') headline = t('reward.take.many', { n: i.collected });
-  const sets = i.completedSets.map((id) => ({ name: i.setName(id), fresh: fresh.has(id) }));
-  const lines = i.rewards.map((o) => rewardLine(o, t));
+  const sets = i.completedSets.map((id) => ({ setId: id, name: i.setName(id), fresh: fresh.has(id), members: i.setMembers?.(id) ?? [] }));
+  const lines = i.rewards.map(o => rewardLine(o, t, Boolean(i.setMembers)));
   const calm = m.capped ? t('reward.continue.none') : null;
   return { title: t('reward.card.title'), headline, big: m.big, sets, lines, calm, any: headline !== '' || lines.length > 0 || sets.length > 0 || calm !== null };
 }
@@ -162,7 +169,7 @@ export interface RewardPanelDeps {
   readonly t: RewardText;
   readonly prizeName: (typeId: string) => string;
   /** Goes through the controller; returns true when the rules accepted it. */
-  readonly onOrder: (accept: boolean) => boolean;
+  readonly onOrder: (accept: boolean) => boolean | Promise<boolean>;
   readonly setTimeout?: (fn: () => void, ms: number) => unknown;
   readonly clearTimeout?: (id: unknown) => void;
 }
@@ -228,7 +235,10 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
   const answer = (yes: boolean) => (e: Event) => {
     e.stopPropagation();
     if (answered) return; // one answer per game, even for a double tap
-    if (deps.onOrder(yes)) answered = true;
+    answered = true;
+    const result = deps.onOrder(yes);
+    if (result instanceof Promise) void result.then(ok => { answered = ok; }, () => { answered = false; });
+    else answered = result;
   };
   accept.addEventListener('click', answer(true));
   decline.addEventListener('click', answer(false));
@@ -260,6 +270,7 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
       strip.hidden = sm.chips.length === 0;
     },
     showShot(input) {
+      card.dataset.static = String(input.staticCard === true);
       const m = rewardCardModel(input, deps.t);
       if (!m.any) {
         hideCard();
@@ -276,7 +287,19 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
       }
       for (const s of m.sets) {
         const row = mk('div', s.fresh ? 'rwd-set rwd-set-fresh' : 'rwd-set');
+        row.dataset.set = s.setId;
         row.textContent = s.name;
+        if (s.members.length) {
+          const members = mk('div', 'rwd-members');
+          for (const id of s.members) {
+            const tile = mk('span', 'rwd-member');
+            const name = mk('span', 'rwd-prize-name');
+            name.textContent = deps.prizeName(id);
+            tile.append(prizePortrait(doc, id), name);
+            members.appendChild(tile);
+          }
+          row.appendChild(members);
+        }
         if (s.fresh) {
           const seal = mk('span', 'rwd-seal');
           seal.textContent = deps.t('reward.set.seal');
@@ -299,10 +322,19 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
         c.textContent = m.calm;
         parts.push(c);
       }
+      if (input.setMembers && m.sets.length > 0) {
+        const close = mk('button', 'rwd-close');
+        close.type = 'button';
+        close.textContent = deps.t('settings.close');
+        close.dataset.testid = 'reward-close';
+        parts.push(close);
+      }
       card.replaceChildren(...parts);
       card.hidden = false;
       if (timer !== null) clearT(timer);
-      timer = setT(hideCard, REWARD_CARD_SHOW_MS);
+      // The first-discovery slip can contain several illustrated sets and long
+      // translated names. The next shot or the close button dismisses it.
+      timer = input.setMembers && m.sets.length ? null : setT(hideCard, REWARD_CARD_SHOW_MS);
     },
     hideCard,
     destroy() {

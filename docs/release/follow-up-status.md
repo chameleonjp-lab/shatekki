@@ -1,5 +1,11 @@
 # シャテッキの後続対応状況
 
+## PR #25 後の実装
+
+基準 main は `f70b01b`。提出順は [#26](https://github.com/chameleonjp-lab/shatekki/pull/26)（版の固定）、[#27](https://github.com/chameleonjp-lab/shatekki/pull/27)（保存）、[#28](https://github.com/chameleonjp-lab/shatekki/pull/28)（品替え）、[#29](https://github.com/chameleonjp-lab/shatekki/pull/29)（美術・音）、[#30](https://github.com/chameleonjp-lab/shatekki/pull/30)（日替わり・統合）、[#31](https://github.com/chameleonjp-lab/shatekki/pull/31)（翻訳検証・確認ページ準備・比較）。
+
+[Issue #1](https://github.com/chameleonjp-lab/shatekki/issues/1) と [Issue #2](https://github.com/chameleonjp-lab/shatekki/issues/2) の初期要件・26決定・景品と組の案は [要件](../requirements.md)、[決定履歴](../decision-log.md)、[景品100種](../prize-candidates.md)、[セット100組](../set-candidates.md) に収録した。36枠で追加した組と要件は [D34〜D37の修正書](../changes/2026-11-06-expanded-gameplay-requirements.md) を参照。
+
 ## 2026年11月18日の確認
 
 基準mainは `01ab59242c6ec627e0e5fcb72706c563e6a39c2c`。[PR #24](https://github.com/chameleonjp-lab/shatekki/pull/24)で前回の計画と関連文書4件を取り込んだ。[mainの自動確認](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522405736)は文書対象で成功し、[配信処理](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522454447)はゲームを再配信していない。公開用の設定は9枠、36枠は内部試作である。
@@ -106,3 +112,23 @@ DB登録案はプロジェクト `mlpnjgezrnhdxsxolyzj` の `public.games` に�
 ## 内部版の起動確認
 
 S00（07c7a13）で正式版と r001〜r004 のカタログを照合。402×874・375×600 の Chromium で正式版9枠と r004 の36枠を確認した。
+
+### S01・S02　r004 の記録
+
+f8fd8d8 の一括保存試験で、Node 4件と Chromium 2寸法の計6件が成功。書込みを取り消した後のデータ、応答消失後の再読、2タブの所有者と棚の競合を検査した。 実際の Safari の容量不足・アプリ切替後の再開は実機計測に残る。
+
+### S03　r005 の品替え
+
+11c3269 で単体24件、統合16件が成功。異なる幅・支持面・復帰時の軌道とシリーズ外の残存景品による補充延期を照合した。 r005 と r006 の品替え後の視認性と両端の操作は iPhone で観察する。
+
+### S04　景品札・補給装置・音
+
+単体43件が成功（8ac5798 を含む S04 統合版）。r003 のホーム・位置選び・質問・結果を3寸法で撮影。 r006 の実際の装填と精算に接続する S06 と、実機での音切れ・狙いやすさの観察は別途確認する。
+
+### S05・S06　r006 の統合プレイ
+
+45666ce の日替わり再現・新しい通し試験3件が成功。決定01〜37・R01〜R22と受入89行の状況は docs/qa/post-pr23-evidence.md を参照。 端末性能、音、15言語の実読と正式値の採用状況は対象候補ごとに確認する。
+
+### S07・S08　内部候補の比較
+
+7版・168ゲームで弾数式と終了を確認。r006 は合計368射・109個獲得。15言語の結果と実機観察は別に記録する。 C01〜C05 は docs/release/expanded-adoption.md にある候補。iPhone の発熱・重い2場面の性能、人による試遊、値と公開の判断は未了。

@@ -12,11 +12,13 @@ import type { BoothLayout, CollisionShape, ImpactTarget, PrizeTypeId, Simulation
 import { aimDirection, computeReticle, muzzlePosition, type ReticleResult } from './aim';
 import { Kit, ROT_X, mergeParts } from './assets/kit';
 import { C } from './assets/prize-recipes';
+import { createRewardPickTargets } from './reward-props';
 import { buildBooth, type BoothBuild } from './booth';
 import { createBackgroundCells, type BackgroundCellsView } from './background-cells';
 import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec } from './prizes';
 
 export interface SceneGraphDeps {
+  readonly illustratedRewards?: boolean;
   readonly layout: BoothLayout;
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
   /**
@@ -78,6 +80,7 @@ interface GraphInternals {
   readonly resolvePrize: SceneGraphDeps['resolvePrize'];
   readonly proxyLayer: THREE.Group;
   readonly proxyMaterial: THREE.Material;
+  readonly rewardPick: ReturnType<typeof createRewardPickTargets> | null;
   /** Current cork radius used to grow pick proxies (expanded rules can change it per shot). */
   pickInflate: number;
   /** The radius the graph was built with (restored when the view state carries none). */
@@ -179,7 +182,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1d1424); // dusk indigo; the stall fills the view
   const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
-  const booth = buildBooth(layout, pickInflate);
+  const booth = buildBooth(layout, pickInflate, deps.illustratedRewards);
   scene.add(booth.group, booth.proxies);
   const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
   if (cells) scene.add(cells.group);
@@ -199,10 +202,12 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   proxyLayer.name = 'prize-pick-proxies';
   scene.add(proxyLayer);
 
+  const proxyMaterial = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
   const internals: GraphInternals = {
     resolvePrize: deps.resolvePrize,
     proxyLayer,
-    proxyMaterial: new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
+    proxyMaterial,
+    rewardPick: deps.illustratedRewards ? createRewardPickTargets(proxyMaterial) : null,
     pickInflate,
     basePickInflate: pickInflate,
     factory: createPrizeVisualFactory(),
@@ -235,6 +240,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     pickTargets() {
       const out: THREE.Object3D[] = [...booth.proxies.children];
       for (const n of prizes.values()) if (n.mesh.visible) out.push(n.proxy);
+      for (const mesh of internals.rewardPick?.meshes ?? []) if (mesh.visible) out.push(mesh);
       return out;
     },
     stats() {
@@ -256,6 +262,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
       booth.dispose();
       cells?.dispose();
       for (const n of prizes.values()) n.proxy.geometry.dispose();
+      internals.rewardPick?.dispose();
       internals.proxyMaterial.dispose();
       internals.factory.dispose();
       internals.corkGeo.dispose();
@@ -451,9 +458,10 @@ export function setPickInflate(graph: SceneGraph, radius: number): void {
 const GUN_PHASES = new Set(['position', 'loading', 'aiming']);
 
 /** Place the gun and the 3D reticle for the effective aim. Returns the reticle ray result. */
-export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic'>>): ReticleResult {
+export function updateAim(graph: SceneGraph, view: Pick<ViewState, 'phase' | 'standX' | 'effectiveAim'> & Partial<Pick<ViewState, 'ballistic' | 'expansion'>>): ReticleResult {
   const { layout } = graph;
   setPickInflate(graph, view.ballistic?.corkRadius ?? graph.internals.basePickInflate);
+  graph.internals.rewardPick?.update(view.expansion?.rewards, graph.internals.pickInflate);
   graph.prizeLayer.updateMatrixWorld(true);
   graph.booth.proxies.updateMatrixWorld(true);
   const r = computeReticle(layout, view.standX, view.effectiveAim, graph.pickTargets(), 6, view.ballistic);

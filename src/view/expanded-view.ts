@@ -10,7 +10,7 @@
  * rules-v1 (no `view.expansion`) draws nothing here.
  */
 import * as THREE from 'three';
-import type { BoothLayout, ExpansionCatalog, HintKind, MotionSpec, PrizeFrame, PrizeTypeId, RuntimeCatalog, SimulationFrame, Vec3, ViewState } from '../contracts';
+import type { AppliedTransform, BoothLayout, ExpansionCatalog, HintKind, MotionSpec, PrizeFrame, PrizeTypeId, RuntimeCatalog, SimulationFrame, Vec3, ViewState } from '../contracts';
 import type { SceneGraph } from './scene';
 import { angleReadout, computeHintLabels, signedDeg, TrajectoryRecorder, type AngleReadout, type HintLabel, type HintTone } from './gameplay-hints';
 import { createHint3D, CORK_COLORS, type Hint3D } from './hint-3d';
@@ -20,6 +20,7 @@ import { createRewardProps } from './reward-props';
 export type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 export interface ExpandedViewDeps {
+  readonly illustratedRewards?: boolean;
   readonly graph: SceneGraph;
   readonly layout: BoothLayout;
   readonly catalog: RuntimeCatalog;
@@ -35,6 +36,9 @@ export interface ScreenLabel {
   readonly x: number;
   readonly y: number;
   readonly text: string;
+  readonly accessibleName?: string;
+  /** Confirmed transform request, used once to turn this price tag. */
+  readonly turn?: string;
   readonly tone: HintTone | 'badge' | 'guide' | 'cork';
   /** "#RRGGBB" for series badges and cork numbers. */
   readonly color?: string;
@@ -69,6 +73,7 @@ export interface ExpandedViewModel {
 
 export interface ExpandedView {
   update(frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }): ExpandedViewModel | null;
+  showConfirmedTransforms(transforms: readonly AppliedTransform[], animate?: boolean): void;
   lastModel(): ExpandedViewModel | null;
   dispose(): void;
 }
@@ -92,11 +97,13 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   const hint3d: Hint3D = createHint3D();
   graph.scene.add(hint3d.group);
   const recorder = new TrajectoryRecorder();
-  const rewardProps = createRewardProps();
+  const rewardProps = createRewardProps(deps.illustratedRewards);
   graph.scene.add(rewardProps.group);
   /** P4: price tags on prizes whose kind really changed, for a few seconds of simulation time. */
-  const changed = new Map<string, { readonly toTypeId: PrizeTypeId; readonly untilSec: number }>();
+  const changed = new Map<string, { readonly toTypeId: PrizeTypeId; readonly untilSec: number; readonly turn?: string }>();
   const TAG_SEC = 3;
+  let confirmed: readonly AppliedTransform[] = [];
+  let turnTags = true;
   /** First kind each individual was seen as: the mount keeps running that kind's motion after a transform. */
   const firstKind = new Map<string, PrizeTypeId>();
   let last: ExpandedViewModel | null = null;
@@ -207,24 +214,56 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
     const rewardLabels: ScreenLabel[] = [];
     if (placed.bag && ex.rewards) {
       const s = projectToScreen(camera, placed.bag, size.width, size.height);
-      if (s) rewardLabels.push({ id: 'reward:bag', x: s.x, y: s.y, text: ui('reward.bag.label', { n: ex.rewards.bagOffer }), tone: 'badge', color: '#d9a441' });
+      if (s) {
+        const text = ui('reward.bag.label', { n: ex.rewards.bagOffer });
+        const accessibleName = deps.illustratedRewards ? `${ui('reward.name.A1')} · ${text}` : undefined;
+        rewardLabels.push({ id: 'reward:bag', ...s, text, accessibleName, tone: 'badge', color: '#d9a441' });
+      }
     }
     if (ex.rewards) {
-      for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
+      if (deps.illustratedRewards) {
+        const r = ex.rewards;
+        const count = `${r.piggyDeposits}/${expansion.profile.rewards!.piggyBank.deposits}`;
+        const devices = [
+          { id: 'A2', box: r.devices.chime, spent: r.chimeUsed, icon: '♪', color: '#9fd3e6' },
+          { id: 'A3', box: r.devices.seesawTray, spent: r.seesawUsed, icon: '▱', color: '#e2be92' },
+          { id: 'A4', box: r.devices.piggySlot, spent: r.piggyDone, icon: count, color: '#f2a7b8' },
+        ];
+        for (const d of devices) {
+          if (!d.box) continue;
+          const s = projectToScreen(camera, d.box.center, size.width, size.height);
+          if (!s) continue;
+          const status = d.spent ? ui('reward.device.spent') : '';
+          const accessibleName = [ui(`reward.name.${d.id}`), d.id === 'A4' ? count : '', status].filter(Boolean).join(' · ');
+          const text = d.spent ? (d.id === 'A4' ? `${count} ✓` : '✓') : d.icon;
+          rewardLabels.push({ id: `reward:device:${d.id}`, ...s, text, accessibleName, tone: 'badge', color: d.color });
+        }
+        for (const t of confirmed) {
+          changed.set(t.instanceId, {
+            toTypeId: t.toTypeId, untilSec: frame.simTimeSec + TAG_SEC,
+            turn: turnTags ? `${t.requestId}:${t.instanceId}` : undefined,
+          });
+        }
+        confirmed = [];
+      } else for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
       for (const [id, c] of [...changed]) {
         const p = byId.get(id);
-        if (!p || frame.simTimeSec > c.untilSec) {
+        if (!p || (deps.illustratedRewards && (p.collected || p.typeId !== c.toTypeId)) || frame.simTimeSec > c.untilSec) {
           if (frame.simTimeSec > c.untilSec) changed.delete(id);
           continue;
         }
         const s = projectToScreen(camera, p.position, size.width, size.height);
-        if (s) rewardLabels.push({ id: `reward:tag:${id}`, x: s.x, y: s.y, text: ui('reward.tag.changed', { name: deps.prizeName(c.toTypeId) }), tone: 'badge', color: '#ffe9a8' });
+        if (s) rewardLabels.push({ id: `reward:tag:${id}`, x: s.x, y: s.y, text: ui('reward.tag.changed', { name: deps.prizeName(c.toTypeId) }), turn: c.turn, tone: 'badge', color: '#ffe9a8' });
       }
     }
     if (placed.target && ex.rewards?.target) {
       const s = projectToScreen(camera, placed.target, size.width, size.height);
       const o = ex.rewards.target.offered;
-      if (s) rewardLabels.push({ id: `reward:target:${placed.targetMode}`, x: s.x, y: s.y, text: ui('reward.target.label', { center: o.center, outer: o.outer }), tone: 'badge', color: '#c8372d' });
+      if (s) {
+        const text = ui('reward.target.label', { center: o.center, outer: o.outer });
+        const accessibleName = deps.illustratedRewards ? `${ui('reward.name.A5')} · ${text}` : undefined;
+        rewardLabels.push({ id: `reward:target:${placed.targetMode}`, ...s, text, accessibleName, tone: 'badge', color: '#c8372d' });
+      }
     }
 
     hint3d.faceCamera(camera);
@@ -254,6 +293,10 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
         hint3d.setTracks(null);
       }
       return last;
+    },
+    showConfirmedTransforms(transforms, animate = true) {
+      confirmed = transforms;
+      turnTags = animate;
     },
     lastModel: () => last,
     dispose() {

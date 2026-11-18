@@ -46,6 +46,7 @@ export interface ThreeRendererDeps {
  * renderer behaves exactly as rules-v1 (it ignores `view.expansion`).
  */
 export interface ExpandedRendererDeps {
+  readonly illustratedRewards?: boolean;
   /** The bundle's catalog (prize motions, sets for the "one more kind" hint). */
   readonly catalog: RuntimeCatalog;
   readonly expansion: ExpansionCatalog;
@@ -73,7 +74,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   webgl.shadowMap.enabled = false;
   webgl.outputColorSpace = THREE.SRGBColorSpace;
 
-  const graph = createSceneGraph({ layout, resolvePrize: deps.resolvePrize, ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}) });
+  const graph = createSceneGraph({ layout, illustratedRewards: deps.expanded?.illustratedRewards, resolvePrize: deps.resolvePrize, ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}) });
   const camera = new THREE.PerspectiveCamera(60, 0.5, 0.05, 30);
   let width = Math.max(1, canvas.clientWidth || 402);
   let height = Math.max(1, canvas.clientHeight || 874);
@@ -96,7 +97,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   });
 
   const expandedView: ExpandedView | null = deps.expanded
-    ? createExpandedView({ graph, layout, catalog: deps.expanded.catalog, expansion: deps.expanded.expansion, translate: deps.expanded.translate, prizeName: deps.expanded.prizeName })
+    ? createExpandedView({ graph, illustratedRewards: deps.expanded.illustratedRewards, layout, catalog: deps.expanded.catalog, expansion: deps.expanded.expansion, translate: deps.expanded.translate, prizeName: deps.expanded.prizeName })
     : null;
   const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
 
@@ -114,6 +115,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     },
     present(summary: ShotSummary, options: PresentOptions): Promise<void> {
       // Settle effects. Skipping is presentation-only: it never changes what happened.
+      if (deps.expanded?.illustratedRewards) expandedView?.showConfirmedTransforms(summary.appliedTransforms ?? [], !options.skip);
       return fx.present(summary, options);
     },
     resize(w: number, h: number): void {

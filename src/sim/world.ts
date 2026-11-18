@@ -60,10 +60,11 @@ import type {
   SimulationStep,
   SlotGeometry,
   SurfaceMaterial,
+  TransformPolicy,
   TuningConfig,
   Vec3,
 } from '../contracts';
-import { ballisticForModifiers, mintId } from '../contracts';
+import { REWARD_TARGET_HALF_THICKNESS, ballisticForModifiers, mintId } from '../contracts';
 import { MAX_POWER_MULTIPLIER, nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
@@ -79,7 +80,7 @@ import {
   reflectVelocity,
   scale,
 } from './collisions';
-import { mountBasePose, mountedPose } from './motion';
+import { mountBasePose, mountedPose, mountedPoseForShape } from './motion';
 import { createPrizeBody } from './prize';
 import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, splitChildMarks, type Projectile, type ProjectileExpanded } from './shot';
 import { planTransforms } from './transform-plan';
@@ -181,10 +182,10 @@ const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y,
 export const REWARD_TARGET_SURFACE_ID = 'reward-target';
 export const REWARD_CHIME_SURFACE_ID = 'reward-chime';
 export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
-const REWARD_TARGET_HALF_THICKNESS = 0.006;
 
 /** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
 export interface ShotWorldOptions {
+  readonly transformPolicy?: TransformPolicy;
   readonly limits?: Pick<ExpansionLimits, 'reflections' | 'maxPowerMultiplier'>;
   /** Rules versions with A2-A4 (r003): the chime, the piggy-bank slot and the seesaw tray. */
   readonly rewardDevices?: RewardDeviceLayout;
@@ -196,6 +197,8 @@ type KindChangeInfo = Omit<PrizeTransformedEvent, 'type' | 'eventId' | 'shotId'>
 export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatalog, tuning: TuningConfig, options: ShotWorldOptions = {}): Promise<ShotWorld> {
   await initRapier();
   const xLimits = options.limits ?? DEFAULT_EXPANDED_SHOT_LIMITS;
+  const supportedBottom = options.transformPolicy === 'preserve-supported-bottom';
+  const shelves = layout.surfaces.filter((s) => s.id.startsWith('shelf-'));
   const fixedDt = tuning.limits.fixedStepSec;
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = fixedDt;
@@ -336,6 +339,10 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     world.step(); // Rapier updates its scene-query structures during step()
   };
 
+  function mountPose(base: Pose, motionCfg: PrizeRuntimeConfig, cfg: PrizeRuntimeConfig, anchored: boolean, time: number): Pose {
+    return anchored ? mountedPoseForShape(base, motionCfg.motion, cfg.shape, time) : mountedPose(base, motionCfg, time);
+  }
+
   const syncShelf = (shelf: ShelfState, motionSec: number): void => {
     if (active) throw new Error('syncShelf while a shot is in progress');
     clearPrizes();
@@ -347,8 +354,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       const slot = slotById.get(src.homeSlot);
       const motionCfg = (src.motionTypeId !== undefined ? catalog.prizes.get(src.motionTypeId) : undefined) ?? cfg;
       const mounted = src.mounted && motionCfg.motion.type !== 'none' && slot !== undefined;
-      const base = mounted ? mountBasePose(slot!, motionCfg) : null;
-      const pose = mounted ? mountedPose(base!, motionCfg, motionSec) : src.pose;
+      const anchor = supportedBottom ? src.motionAnchor : undefined;
+      const base = mounted ? anchor?.base ?? mountBasePose(slot!, motionCfg) : null;
+      const pose = base ? mountPose(base, motionCfg, cfg, !!anchor, motionSec) : src.pose;
       const { body, collider } = createPrizeBody(world, cfg, pose, mounted);
       targets.set(collider.handle, { t: 'prize', id: src.instanceId });
       const lp: LivePrize = {
@@ -389,7 +397,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   const updateMounted = (): void => {
     for (const p of live.values()) {
       if (!p.mounted || !p.base) continue;
-      const pose = mountedPose(p.base, p.motionCfg, motionClock);
+      const pose = mountPose(p.base, p.motionCfg, p.cfg, supportedBottom && !!p.src.motionAnchor, motionClock);
       p.body.setNextKinematicTranslation(pose.position);
       p.body.setNextKinematicRotation(pose.rotation);
     }
@@ -892,19 +900,17 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     barrierToReturn = barrier;
   };
 
-  /** Change the kind of a live prize: pose (Y included), velocities, mount state and motion phase stay. */
-  const retype = (lp: LivePrize, newCfg: PrizeRuntimeConfig): KindChangeInfo => {
+  /** Rebuild at the accepted pose, retaining velocities, mount and original phase. */
+  const retype = (lp: LivePrize, newCfg: PrizeRuntimeConfig, pose: Pose, mountBase?: Pose): KindChangeInfo => {
     const fromTypeId = lp.src.typeId;
     const hpBefore = lp.hp;
     const maxHpBefore = lp.src.maxHp;
     const hpAfter = transformedHp(hpBefore, maxHpBefore, newCfg.maxHp);
-    const t = lp.body.translation();
-    const r = lp.body.rotation();
     const lin = lp.body.linvel();
     const ang = lp.body.angvel();
     targets.delete(lp.collider.handle);
     world.removeRigidBody(lp.body);
-    const { body, collider } = createPrizeBody(world, newCfg, { position: vec(t), rotation: { x: r.x, y: r.y, z: r.z, w: r.w } }, lp.mounted);
+    const { body, collider } = createPrizeBody(world, newCfg, pose, lp.mounted);
     if (!lp.mounted) {
       body.setLinvel(lin, true);
       body.setAngvel(ang, true);
@@ -913,7 +919,15 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     lp.body = body;
     lp.collider = collider;
     lp.cfg = newCfg;
-    lp.src = { ...lp.src, typeId: newCfg.typeId, maxHp: newCfg.maxHp, motionTypeId: lp.src.motionTypeId ?? lp.src.drawnTypeId };
+    const motionTypeId = lp.motionCfg.typeId;
+    if (mountBase) lp.base = mountBase;
+    lp.src = {
+      ...lp.src,
+      typeId: newCfg.typeId,
+      maxHp: newCfg.maxHp,
+      motionTypeId,
+      ...(mountBase ? { motionAnchor: { base: mountBase, motionTypeId } } : {}),
+    };
     lp.hp = hpAfter;
     lp.baseFriction = newCfg.friction;
     lp.hpZeroApplied = false;
@@ -927,7 +941,15 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (!a || !b || plan.complete !== true || plan.barrierId !== b.barrierId || plan.shotId !== b.shotId || a.shotId !== b.shotId) return false;
     frozen = null;
     const result = planTransforms({
-      prizes: [...live.values()].map((p) => ({ instanceId: p.src.instanceId, homeSlot: p.src.homeSlot, typeId: p.src.typeId, pose: shelfStateOf(p).pose })),
+      policy: options.transformPolicy,
+      shelves,
+      prizes: [...live.values()].map((p) => ({
+        ...shelfStateOf(p),
+        falling: !p.mounted && p.body.linvel().y < -FALL_SPEED,
+        mount: supportedBottom && p.mounted && p.base ? {
+          base: p.base, motion: p.motionCfg.motion, motionTypeId: p.motionCfg.typeId, motionSec: motionClock, anchored: !!p.src.motionAnchor,
+        } : undefined,
+      })),
       intents: plan.transforms,
       shapeOf: (typeId) => catalog.prizes.get(typeId)?.shape,
       obstacles: layout.surfaces.map((s) => s.box),
@@ -936,7 +958,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       const lp = live.get(ch.instanceId);
       const newCfg = catalog.prizes.get(ch.toTypeId);
       if (!lp || !newCfg) continue;
-      const info = retype(lp, newCfg);
+      const info = retype(lp, newCfg, ch.poseAfter, ch.mountBaseAfter);
       a.applied.push({ instanceId: ch.instanceId, requestId: ch.requestId, fromTypeId: ch.fromTypeId, toTypeId: ch.toTypeId });
       emit((eventId, shotId) => {
         const ev: PrizeTransformedEvent = { type: 'prizeTransformed', eventId, shotId, ...info };
