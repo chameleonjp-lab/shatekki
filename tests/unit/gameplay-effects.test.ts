@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { seedRng } from '../../src/catalog/rng';
 import { EMPTY_RESERVATION, applyOperation, inapplicableReason, mergeModifiers, realAmmoAdd, realAmmoRemove, type EffectEnv, type EffectWork } from '../../src/core/gameplay-effects';
 import { outlineTargets, refillCandidates, seriesOfType, sortPrizesByBoardOrder } from '../../src/core/series';
@@ -21,14 +22,16 @@ function envOf(over: Partial<EffectEnv> = {}): EffectEnv {
 }
 const ops = (id: string): EffectOperation => EXP.effects.get(id as never)!.operation;
 
-describe('every one of the 100 effects has a handler (table driven)', () => {
-  const all = [...EXP.effects.values()];
+describe.each(['expanded-proposed', 'expanded-next'] as const)('%s: each of the 100 effects has a handler', key => {
+  const target = getGameplayBundle(key);
+  const expansion = target.expansion!;
+  const all = [...expansion.effects.values()];
   it('covers all 100 effects', () => expect(all).toHaveLength(100));
 
   for (const def of all) {
     it(`${def.effectId} (${def.operation.kind}) applies and does what its operation says`, () => {
       const work = workOf();
-      const env = envOf();
+      const env = envOf({ expansion, tuning: target.tuning });
       const r = applyOperation(def.operation, REQ, work, env);
       const op = def.operation;
       expect(r.outcome, `${def.effectId} ${r.reason}`).toBe('applied');
@@ -63,7 +66,7 @@ describe('every one of the 100 effects has a handler (table driven)', () => {
         case 'seriesAssortment': {
           expect(r.work.assortmentSeries).toBe(op.seriesId);
           expect(r.work.outlineSeries).toBeNull();
-          const members = [...EXP.series.get(op.seriesId)!.typeIds].sort();
+          const members = [...expansion.series.get(op.seriesId)!.typeIds].sort();
           expect(r.work.transforms.length).toBeGreaterThan(0);
           for (const t of r.work.transforms) expect([...t.candidateTypeIds].sort()).toEqual(members);
           break;
