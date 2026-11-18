@@ -1,8 +1,9 @@
 // Prepare an artifact locally; the workflow owns the separate publication decision.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
@@ -10,7 +11,7 @@ import { build, preview } from 'vite';
 const output = process.argv[2];
 const mode = process.argv[3] ?? 'prepare';
 if (!output || !['prepare', 'withdraw'].includes(mode)) throw Error('Usage: node scripts/release/prepare-next-preview.mjs NEW_DIRECTORY [prepare|withdraw]');
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const commit = (await promisify(execFile)('git', ['rev-parse', 'HEAD'])).stdout.trim();
 const rulesVersion = 'rules-v2-proposed-r006';
 const candidatePath = '/shatekki/preview/' + rulesVersion + '/';
 const temporary = await mkdtemp(join(tmpdir(), 'shatekki-preview-'));
