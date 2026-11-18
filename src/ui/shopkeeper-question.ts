@@ -38,7 +38,7 @@ export interface QuestionPanelContent {
 
 export interface QuestionPanelDeps {
   /** Return false when the command was rejected (the panel then re-enables). */
-  onAnswer(command: AnswerShopkeeperCommand): boolean | void;
+  onAnswer(command: AnswerShopkeeperCommand): boolean | void | Promise<boolean>;
   /** UI strings (shopq.*). */
   t(key: string, params?: Readonly<Record<string, string | number>>): string;
 }
@@ -162,16 +162,19 @@ export function createShopkeeperQuestionPanel(root: HTMLElement, deps: QuestionP
     answeredKey = keyOf(content);
     refresh(); // both buttons are disabled before the command leaves
     const cmd: AnswerShopkeeperCommand = { type: 'ANSWER_SHOPKEEPER', shotId: content.shotId, questionId: content.questionId, choice };
-    let result: boolean | void;
+    let result: boolean | void | Promise<boolean>;
     try {
       result = deps.onAnswer(cmd);
     } catch {
       result = false;
     }
-    if (result === false) {
+    const reject = () => {
+      if (answeredKey !== keyOf(content)) return;
       answeredKey = null; // rejected: let the player answer again
       refresh();
-    }
+    };
+    if (result instanceof Promise) void result.then(ok => { if (!ok) reject(); }, reject);
+    else if (result === false) reject();
   };
 
   const listeners: Array<() => void> = [];

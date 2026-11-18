@@ -12,7 +12,7 @@ import { HOLD_DELAY_MS, WIDE_STAND_SPEED, nextStandX, type StandRange } from './
 import './controls.css';
 
 export interface PanelDeps {
-  dispatch(command: unknown): boolean;
+  dispatch(command: unknown): boolean | Promise<boolean>;
   /** The requested aim currently held by the rules (to continue relative drags). */
   currentAim(): AimAngles;
   /** Stand position currently held by the rules. */
@@ -24,6 +24,7 @@ export interface PanelDeps {
 }
 
 export interface PanelHandle {
+  cancelGestures(): void;
   update(model: ControlsModel): void;
   dispose(): void;
 }
@@ -255,6 +256,7 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   };
 
   return {
+    cancelGestures() { firePressArmed = false; endHold(); dragId = null; },
     update(m) {
       if (m.mode !== mode) {
         // Leaving aiming disarms a half-pressed fire; leaving position stops holds.

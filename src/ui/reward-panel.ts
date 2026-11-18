@@ -162,7 +162,7 @@ export interface RewardPanelDeps {
   readonly t: RewardText;
   readonly prizeName: (typeId: string) => string;
   /** Goes through the controller; returns true when the rules accepted it. */
-  readonly onOrder: (accept: boolean) => boolean;
+  readonly onOrder: (accept: boolean) => boolean | Promise<boolean>;
   readonly setTimeout?: (fn: () => void, ms: number) => unknown;
   readonly clearTimeout?: (id: unknown) => void;
 }
@@ -228,7 +228,10 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
   const answer = (yes: boolean) => (e: Event) => {
     e.stopPropagation();
     if (answered) return; // one answer per game, even for a double tap
-    if (deps.onOrder(yes)) answered = true;
+    answered = true;
+    const result = deps.onOrder(yes);
+    if (result instanceof Promise) void result.then(ok => { answered = ok; }, () => { answered = false; });
+    else answered = result;
   };
   accept.addEventListener('click', answer(true));
   decline.addEventListener('click', answer(false));
