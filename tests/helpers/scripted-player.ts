@@ -44,16 +44,6 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
       return CORE_RULES.resolveShot(state, record, catalog, tuning);
     },
     resolveExpandedShot: (s, rec, ctx) => {
-      const r = s.expansion?.rewards;
-      if (r && rewardConfig) {
-        const eligible: Record<RewardId, boolean> = {
-          A1: !!r.bag && !r.bag.used, A2: !r.chimeUsed, A3: !r.seesawUsed,
-          A4: !r.piggyDone, A5: r.target?.forShot === s.shotsFired,
-          A6: r.stampsReached.length < rewardConfig.stamps.milestones.length,
-          A7: true, A8: true, A9: r.order?.status === 'accepted', A10: !r.lanternsDone,
-        };
-        for (const id of rewardConfig.enabled) if (eligible[id]) attempts[id] = (attempts[id] ?? 0) + 1;
-      }
       if (s.inFlight?.plan) stats.plans.push(s.inFlight.plan);
       stats.records.push(rec);
       return CORE_RULES.resolveExpandedShot!(s, rec, ctx);
@@ -108,6 +98,20 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
     const beforeFire = c.current;
     const gameTick = c.gameTick;
     if (!c.dispatch({ type: 'FIRE' })) throw new Error(`FIRE rejected in ${s1.phase}`);
+    // Count an opportunity at an accepted FIRE, using the offer visible
+    // before the shot. A missed target still contributes to its denominator.
+    const r = s1.expansion?.rewards;
+    if (r && rewardConfig) {
+      const eligible: Record<RewardId, boolean> = {
+        A1: !!r.bag && !r.bag.used, A2: !r.chimeUsed, A3: !r.seesawUsed,
+        A4: !r.piggyDone, A5: r.target?.forShot === s1.shotsFired + 1,
+        A6: r.stampsReached.length < rewardConfig.stamps.milestones.length,
+        A7: true, A8: true, A9: r.order?.status === 'accepted', A10: !r.lanternsDone,
+      };
+      for (const id of rewardConfig.enabled) {
+        if (eligible[id]) attempts[id] = (attempts[id] ?? 0) + 1;
+      }
+    }
     for (let i = 0; i < 6000 && c.current.phase === 'resolving'; i++) {
       if (c.awaitingAnswer) {
         const f = c.current.inFlight!;

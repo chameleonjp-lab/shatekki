@@ -16,6 +16,23 @@ describe('24-seed comparison of each actual build policy', () => {
         expect(run.shotSeconds).toBeGreaterThan(0);
         expect(run.gameSeconds).toBeGreaterThanOrEqual(run.shotSeconds);
         expect(run.maxCorks).toBeLessThanOrEqual(bundle.tuning.limits.maxSimultaneousCorks);
+        for (const id of bundle.expansion?.profile.rewards?.enabled ?? []) {
+          const eligible = run.attempts[id] ?? 0;
+          const outcomes = run.rewards.filter(reward => reward.id === id);
+          const triggerShots = new Set(outcomes.map(reward => reward.shotNumber));
+          expect(eligible, `${key}/${seed}/${id}`).toBeGreaterThanOrEqual(triggerShots.size);
+          expect(eligible).toBeLessThanOrEqual(run.shots);
+          // Once-per-game sources are available up to and including their
+          // triggering shot. A5 is only offered on one eligible last cork.
+          if (['A1', 'A2', 'A3', 'A4', 'A10'].includes(id)) expect(eligible).toBe(outcomes[0]?.shotNumber ?? run.shots);
+          if (id === 'A5') expect(eligible).toBeLessThanOrEqual(1);
+          if (id === 'A7' || id === 'A8') expect(eligible).toBe(run.shots);
+          if (id === 'A9') expect(eligible).toBe(0); // This policy skips the optional order.
+          for (const outcome of outcomes) {
+            expect(outcome.granted).toBeGreaterThanOrEqual(0);
+            expect(outcome.granted).toBeLessThanOrEqual(outcome.offered);
+          }
+        }
         runs.push(run);
       }
       const sources = Object.fromEntries(REWARD_IDS.map(id => {
