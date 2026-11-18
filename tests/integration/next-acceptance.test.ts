@@ -5,7 +5,7 @@ import { GameController } from '../../src/app/controller';
 import { PersistedSession } from '../../src/app/persisted-session';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
-import { mintId, isAmmoBalanced, type ShotSummary, type ShotStage, type ExpandedRunState } from '../../src/contracts';
+import { mintId, isAmmoBalanced, isLedgerEntryConsistent, type ShotSummary, type ShotStage, type ExpandedRunState } from '../../src/contracts';
 import type { ConfirmedPresentation } from '../../src/contracts/persistence';
 import { buildLedgerEntry } from '../../src/core/scoring';
 import { validateRunState } from '../../src/core/session';
@@ -60,7 +60,11 @@ it('plays a saved r006 game through first hits, last-cork rescue and depletion, 
       expect(isAmmoBalanced(c.current, 10)).toBe(true);
       const saved = await repo.read(scope);
       expect(saved?.state).toEqual(c.current);
-      expect(saved?.lastSummary).toEqual(settled.at(-1));
+      const summary = settled.at(-1)!;
+      expect(saved?.lastSummary).toEqual(summary);
+      expect(isLedgerEntryConsistent(summary.ledger)).toBe(true);
+      expect(summary.ledger.scoreAfter).toBe(c.current.score);
+      expect(summary.ledger.scoreBefore).toBe(shot === 0 ? 0 : settled[shot - 1]!.ledger.scoreAfter);
       if (target) {
         expect(settled.at(-1)!.rewards?.some(r => r.id === 'A5' && r.granted > 0)).toBe(true);
         expect(c.current.phase).toBe('position');
@@ -70,6 +74,10 @@ it('plays a saved r006 game through first hits, last-cork rescue and depletion, 
     expect(rescued).toBe(true);
     const first = settled[0]!;
     const repeat = settled[1]!;
+    const answers = [first, repeat].map(s => s.effects?.flatMap(e =>
+      e.source.kind === 'answer' ? [e.source.questionId] : []));
+    expect(answers).toEqual([['Q033'], ['Q022']]);
+    expect(c.current.expansion?.questionCursor).toBe(2);
     expect(first.collected).toHaveLength(0);
     expect(first.ledger.firstHitPoints).toBeGreaterThan(0);
     expect(repeat.touchedFirstHitTargets).toEqual(first.touchedFirstHitTargets);

@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { GameController } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
-import { isAmmoBalanced, type EffectId, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
+import { BASE_SHOT_MODIFIERS, isAmmoBalanced, isLedgerEntryConsistent, type EffectId, type QuestionId, type ShotStage, type ShotSummary } from '../../src/contracts';
 import { rewardDevicesFor } from '../../src/core/rewards';
 import { createShotWorld } from '../../src/sim/world';
 import { aimAt } from '../helpers/aim-at';
@@ -48,6 +48,8 @@ async function composite(skip: boolean, capped = false) {
     expect(c.dispatch({type:'STOP_LOAD'})).toBe(true);
     c.dispatch({type:'AIM',yaw,pitch});
     expect(c.dispatch({type:'FIRE'})).toBe(true);
+    expect(c.current.expansion!.active).toEqual(start.expansion.next);
+    expect(c.current.expansion!.next.modifiers).toEqual(BASE_SHOT_MODIFIERS);
     for(let i=0;i<3000 && !c.awaitingAnswer;i++) c.frame(1/60);
     const flight=c.current.inFlight!;
     expect(flight.stage).toBe('question');
@@ -72,6 +74,10 @@ async function composite(skip: boolean, capped = false) {
     for(let i=0;i<4000 && c.current.phase==='resolving';i++) c.frame(1/60);
     expect(confirmed).toHaveLength(1);
     expect(c.current.ledger).toHaveLength(1);
+    const ledger = confirmed[0]!.ledger;
+    expect(isLedgerEntryConsistent(ledger)).toBe(true);
+    expect(ledger.scoreAfter).toBe(c.current.score);
+    expect(c.current.expansion!.active).toBeNull();
     expect(isAmmoBalanced(c.current,10)).toBe(true);
     expect(stages.filter(stage => stage === 'grace').length).toBeLessThanOrEqual(1);
     return {summary: confirmed[0]!, state: c.current, gameTick: c.gameTick};
@@ -101,6 +107,10 @@ it('r006 confirms two- and three-prize sets after the last cork, several cells, 
   expect(effects.at(-1)!.source.kind).toBe('answer');
   expect(effects.filter(e => e.source.kind === 'answer')).toHaveLength(1);
   expect(state.expansion!.questionCursor).toBe(1);
+  const ammoCell = effects.find(e => e.effectId === 'FX001');
+  expect(ammoCell).toMatchObject({ source: { kind: 'cell' }, ammoDelta: 1 });
+  expect(effects.at(-1)!.ammoDelta).toBe(0);
+  expect(state.expansion!.next.modifiers).toEqual({ ...BASE_SHOT_MODIFIERS, pushMult: 1.5 });
   expect(state.shotsFired).toBe(10);
   expect(summary.ammoAfter).toBeGreaterThan(0);
   expect(state.phase).toBe('position');
@@ -114,6 +124,7 @@ it('r006 ends once after the same final shot when all ten bonus corks have alrea
   }));
   expect(summary.effects?.at(-1)?.source.kind).toBe('answer');
   expect(summary.collected.length).toBeGreaterThan(0);
+  expect(state.expansion!.next.modifiers).toEqual(BASE_SHOT_MODIFIERS);
   expect(state.phase).toBe('ended');
   expect(state.ammo).toBe(0);
   expect(summary.runEnded).toBe(true);
