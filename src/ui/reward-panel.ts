@@ -325,10 +325,19 @@ export function mountRewardPanel(root: HTMLElement, deps: RewardPanelDeps): Rewa
         c.textContent = m.calm;
         parts.push(c);
       }
+      if (input.setMembers && m.sets.length > 0) {
+        const close = mk('button', 'rwd-close');
+        close.type = 'button';
+        close.textContent = deps.t('settings.close');
+        close.dataset.testid = 'reward-close';
+        parts.push(close);
+      }
       card.replaceChildren(...parts);
       card.hidden = false;
       if (timer !== null) clearT(timer);
-      timer = setT(hideCard, REWARD_CARD_SHOW_MS);
+      // The first-discovery slip can contain several illustrated sets and long
+      // translated names. The next shot or the close button dismisses it.
+      timer = input.setMembers && m.sets.length ? null : setT(hideCard, REWARD_CARD_SHOW_MS);
     },
     hideCard,
     destroy() {
