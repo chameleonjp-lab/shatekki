@@ -143,6 +143,10 @@ test('enlarged choices scroll by touch before the final answer is tapped', async
 });
 
 async function startDeviceGame(page: Page, standX = -2.35) {
+  // A slow renderer must not change how long the player aimed. Only the
+  // game clock is stepped; all commands still go through the play controls.
+  await page.clock.install({ time: new Date('2026-11-18T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-18T12:01:00Z'));
   await page.addInitScript(() => {
     const random = Crypto.prototype.getRandomValues;
     Crypto.prototype.getRandomValues = function (this: Crypto, values) {
@@ -157,15 +161,28 @@ async function startDeviceGame(page: Page, standX = -2.35) {
   await expect(page.locator('[data-rules-version]')).toHaveAttribute('data-rules-version', 'rules-v2-proposed-r006');
   await page.getByTestId('home-start').click();
   await page.getByTestId('order-decline').click();
-  await page.getByTestId('stand-slider').fill(String(standX));
+  await expect(page.getByTestId('reward-order')).toBeHidden();
+  const stand = page.getByTestId('stand-slider');
+  await stand.fill(String(standX));
+  await page.clock.runFor(32); // render the camera at the requested stand
+  await expect(stand).toHaveValue(String(standX));
 }
 
 // The aim pad takes relative drags. The left stand has a clear line to both
 // devices. A shallower turn towards the chime sends the cork to the wall first.
 async function deviceShot(page: Page, yawDelta: number, pitchDelta: number) {
   await page.getByTestId('btn-confirm-position').click();
-  await stopOnPerfect(page);
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
+  const controls = page.getByTestId('controls');
+  await expect(controls).toHaveAttribute('data-mode', 'loading');
+  const marker = page.locator('.load-marker');
+  await page.clock.runFor(512); // approach the sweet spot on the rising meter
+  await expect.poll(async () => {
+    await page.clock.runFor(32);
+    const percent = await marker.evaluate(el => parseFloat((el as HTMLElement).style.left));
+    return percent >= 81 && percent <= 89;
+  }, { timeout: 30000, intervals: [0] }).toBe(true);
+  await page.getByTestId('btn-load').dispatchEvent('pointerdown', { isPrimary: true });
+  await expect(controls).toHaveAttribute('data-mode', 'aiming');
   const pad = (await page.getByTestId('aim-pad').boundingBox())!;
   const x = pad.x + pad.width / 2;
   const y = pad.y + pad.height / 2;
@@ -174,7 +191,14 @@ async function deviceShot(page: Page, yawDelta: number, pitchDelta: number) {
   await page.mouse.move(x + yawDelta / 0.0022, y - pitchDelta / 0.0022);
   await page.mouse.up();
   await page.getByTestId('btn-fire').tap();
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 45000 });
+  await expect(controls).toHaveAttribute('data-mode', 'resolving');
+  await expect.poll(async () => {
+    await page.clock.runFor(128);
+    const question = page.getByTestId('shopkeeper-question');
+    if (await question.isVisible()) await page.getByTestId('shopq-choice-A').click();
+    return controls.getAttribute('data-mode');
+  }, { timeout: 45000, intervals: [0] }).toBe('position');
+  await page.clock.runFor(16); // render the just-adopted saved state
 }
 
 test('wind chime marks and sounds only after a reflected cork', async ({ page }) => {
@@ -222,7 +246,8 @@ test('the bag leaves with the original prize and pays the advertised two corks',
   await startDeviceGame(page, 0.21);
   const bag = page.getByRole('img', {name: 'おまけ袋 · おまけ+2'});
   await expect(bag).toBeVisible();
-  await deviceShot(page, 0, -0.201);
+  // P077 slides to the right during the first load and the cork flight.
+  await deviceShot(page, 0.04, -0.201);
   await expect(bag).toHaveCount(0);
   await expect(page.locator('[data-reward=A1]')).toHaveText('おまけ袋: 弾+2');
 });
