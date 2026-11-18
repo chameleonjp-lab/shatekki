@@ -4,6 +4,8 @@
  * as a test failure. Placeholders use {name}. Logic must never branch on text.
  */
 export const JA = {
+  "save.legacyDailyBest": "日付不明の旧記録：{score}点",
+  "save.quota": "空き容量が不足しています。",
   "save.pending": "保存しています…",
   "save.failure": "保存できませんでした。",
   "save.blocked": "別のタブを閉じてから再試行してください。",

@@ -33,10 +33,25 @@ export type SaveReply =
   | { ok: false; reason: SaveFailure };
 
 export type ConfirmedPresentation =
-  | { kind: 'shot'; runId: string; shotId: string; summary: ShotSummary; freshSets: readonly SetId[];
-      ammoBeforeShot: number; replayed: boolean; reducedMotion: boolean }
-  | { kind: 'perfectLoad'; runId: string; shotNumber: number; operationId: string;
-      load: LoadResult; replayed: boolean; reducedMotion: boolean };
+  | {
+      kind: 'shot';
+      runId: string;
+      shotId: string;
+      summary: ShotSummary;
+      freshSets: readonly SetId[];
+      ammoBeforeShot: number;
+      replayed: boolean;
+      reducedMotion: boolean;
+    }
+  | {
+      kind: 'perfectLoad';
+      runId: string;
+      shotNumber: number;
+      operationId: string;
+      load: LoadResult;
+      replayed: boolean;
+      reducedMotion: boolean;
+    };
 
 export interface SavedProfile {
   bestScore: number | null;
@@ -48,7 +63,12 @@ export interface RevisionedShelf extends SouvenirShelf {
 }
 export interface SharedSouvenirRepository {
   readShelf(): Promise<RevisionedShelf>;
-  place(input: { runId: string; typeId: PrizeTypeId; slot?: number; expectedRevision: number }): Promise<
+  place(input: {
+    runId: string;
+    typeId: PrizeTypeId;
+    slot?: number;
+    expectedRevision: number;
+  }): Promise<
     | { ok: true; shelf: RevisionedShelf; changed: boolean }
     | Extract<PlaceResult, { ok: false }>
     | { ok: false; reason: 'conflict'; current: RevisionedShelf }
@@ -68,10 +88,15 @@ export interface ShotWrite {
   gameTick: number;
 }
 export interface RunRepository extends SharedSouvenirRepository {
+  close(): void;
   read(scope: RunScope): Promise<PersistedRecord | null>;
   readProfile(scope: RunScope): Promise<SavedProfile>;
   readActiveScope(rulesVersion: string): Promise<RunScope | null>;
-  importLegacy(scope: RunScope, storage: Pick<KeyValueStorage,'getItem'>, knownSets: ReadonlySet<SetId>): Promise<{unreadable: readonly string[]}>;
+  importLegacy(
+    scope: RunScope,
+    storage: Pick<KeyValueStorage, 'getItem'>,
+    knownSets: ReadonlySet<SetId>,
+  ): Promise<{ unreadable: readonly string[] }>;
   start(scope: RunScope, initial: RunState, expected: SaveToken | null): Promise<SaveReply>;
   claim(scope: RunScope, expected: SaveToken, resolution: 'resumeStable' | 'abandonInFlight'): Promise<SaveReply>;
   saveCommand(input: CommandWrite): Promise<SaveReply>;

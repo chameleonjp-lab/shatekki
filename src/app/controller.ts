@@ -122,6 +122,7 @@ export class GameController {
     initial: RunState,
   ) {
     this.state = initial;
+    this.lastSummary = deps.session?.record.lastSummary ?? null;
     this.ctx = { tuning: deps.tuning, catalog: deps.catalog, layout: deps.layout, expansion: deps.expansion ?? null, transformPolicy: deps.transformPolicy };
     deps.world.syncShelf(initial.shelf, initial.clocks.motionSec);
     this.lastFrame = deps.world.frame();
@@ -195,8 +196,9 @@ export class GameController {
       return this.applyLocal(cmd) ? 'applied' : 'rejected';
     }
     const before = this.state;
+    if (cmd.type === 'ANSWER_SHOPKEEPER' && before.pauseReasons.length) return 'rejected';
     const after = cmd.type === 'ANSWER_SHOPKEEPER'
-      ? before.pauseReasons.length ? before : this.deps.rules.answerShopkeeper?.(before, cmd, this.ctx) ?? before
+      ? this.deps.rules.answerShopkeeper?.(before, cmd, this.ctx) ?? before
       : this.deps.rules.reduceGame(before, cmd, this.ctx);
     if (after === before) return 'rejected';
     const operationId = cmd.type === 'FIRE' ? `${after.runId}/${after.shotsFired}/fire`

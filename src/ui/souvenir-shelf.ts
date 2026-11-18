@@ -43,7 +43,12 @@ export interface SouvenirShelfHandle {
   dispose(): void;
 }
 
-export function mountSouvenirShelf(host: HTMLElement, deps: { readonly store: Pick<SouvenirStore, 'load'> & {place(input: Parameters<SouvenirStore['place']>[0]): PlaceResult | Promise<PlaceResult>}; readonly t: Text; readonly name: (typeId: string) => string; readonly onSaved?: () => void }, input: SouvenirInput): SouvenirShelfHandle {
+type ShelfStore = {
+  load(): SouvenirShelf;
+  place(input: Parameters<SouvenirStore['place']>[0]): PlaceResult | Promise<PlaceResult>;
+};
+
+export function mountSouvenirShelf(host: HTMLElement, deps: { readonly store: ShelfStore; readonly t: Text; readonly name: (typeId: string) => string; readonly onSaved?: () => void }, input: SouvenirInput): SouvenirShelfHandle {
   const doc = host.ownerDocument;
   const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = ''): HTMLElementTagNameMap[K] => {
     const e = doc.createElement(tag);
@@ -106,12 +111,12 @@ export function mountSouvenirShelf(host: HTMLElement, deps: { readonly store: Pi
     if (saving) return;
     const result = deps.store.place({ runId: input.runId, wonTypeIds: input.wonTypeIds, typeId: typeId as PrizeTypeId, ...(slot !== undefined ? { slot } : {}) });
     const finish = (r: PlaceResult) => {
-    saving = false;
-    sec.inert = false;
-    replacing = null;
-    status = r.ok ? (r.changed ? deps.t('souvenir.saved') : '') : r.reason === 'saveFailed' ? deps.t('souvenir.saveFailed') : '';
-    if (r.ok && r.changed) deps.onSaved?.();
-    render();
+      saving = false;
+      sec.inert = false;
+      replacing = null;
+      status = r.ok ? (r.changed ? deps.t('souvenir.saved') : '') : r.reason === 'saveFailed' ? deps.t('souvenir.saveFailed') : '';
+      if (r.ok && r.changed) deps.onSaved?.();
+      render();
     };
     if (result instanceof Promise) {
       saving = true;
