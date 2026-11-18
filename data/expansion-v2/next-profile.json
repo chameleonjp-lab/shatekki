@@ -5,5 +5,12 @@
     "transformPolicy": "preserve-center",
     "clock": "frame",
     "presentation": "confirmed-static"
+  },
+  "expanded-placement-trial": {
+    "rulesVersion": "rules-v2-proposed-r005",
+    "persistence": "atomic",
+    "transformPolicy": "preserve-supported-bottom",
+    "clock": "frame",
+    "presentation": "confirmed-static"
   }
 }

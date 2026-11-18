@@ -21,12 +21,12 @@ import type { RewardConfig, RewardRunState } from './rewards';
 // ------------------------------------------------------------------ bundle
 
 /** Selection name of a rule bundle. Not a save/rules version: saves use catalog.rulesVersion. */
-export type GameplayBundleKey = 'official-v1' | 'expanded-proposed' | 'expanded-trial' | 'expanded-full' | 'expanded-save-trial';
+export type GameplayBundleKey = 'official-v1' | 'expanded-proposed' | 'expanded-trial' | 'expanded-full' | 'expanded-save-trial' | 'expanded-placement-trial';
 /**
  * expanded-proposed = rules-v2-proposed-r001 (kept for comparison), expanded-trial = r002 (first
  * playable rewards: A1, A5), expanded-full = r003 (all ten). Internal builds only.
  */
-export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial'];
+export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial'];
 /** The bundle every public entry point uses unless a build-time switch for internal testing says otherwise. */
 export const DEFAULT_GAMEPLAY_BUNDLE_KEY: GameplayBundleKey = 'official-v1';
 
