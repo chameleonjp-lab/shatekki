@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const TR: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Önceki rekor (tarih bilinmiyor): {score} puan",
+  "save.quota": "Yeterli depolama alanı yok.",
   "save.pending": "Kaydediliyor…",
   "save.failure": "Oyun kaydedilemedi.",
   "save.blocked": "Diğer sekmeyi kapatıp yeniden dene.",

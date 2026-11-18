@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const KO: Record<UiKey, string> = {
+  "save.legacyDailyBest": "이전 기록(날짜 미상): {score}점",
+  "save.quota": "저장 공간이 부족합니다.",
   "save.pending": "저장 중…",
   "save.failure": "게임을 저장하지 못했습니다.",
   "save.blocked": "다른 탭을 닫고 다시 시도하세요.",

@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const ID: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Rekor lama (tanggal tidak diketahui): {score} poin",
+  "save.quota": "Ruang penyimpanan tidak cukup.",
   "save.pending": "Sedang menyimpan…",
   "save.failure": "Permainan gagal disimpan.",
   "save.blocked": "Tutup tab lain, lalu coba lagi.",

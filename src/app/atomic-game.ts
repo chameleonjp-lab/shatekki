@@ -1,4 +1,4 @@
-import type { KeyValueStorage, RunState, SetId } from '../contracts';
+import type { GameplayBundle, KeyValueStorage, RunState } from '../contracts';
 import type { PersistedRecord, RevisionedShelf, RunRepository, RunScope, SaveReply, SavedProfile } from '../contracts/persistence';
 import { createIndexedRunRepository, createMemoryRunRepository } from '../persistence/indexed-run-repository';
 import { jstDateOf } from '../core/daily';
@@ -20,7 +20,10 @@ export class AtomicGame {
   private readonly source = (scope: RunScope) => scope.mode === 'daily' ? scope.startedDateJst : 'normal';
 
   constructor(private readonly factory: () => IDBFactory, private readonly writer: string,
-    private readonly rulesVersion: string, private readonly storage: KeyValueStorage, private readonly knownSets: ReadonlySet<SetId>) {}
+    private readonly bundle: GameplayBundle, private readonly storage: KeyValueStorage,
+    private readonly onVersionChange: () => void) {}
+
+  private get rulesVersion(): string { return this.bundle.catalog.rulesVersion; }
 
   scope(mode: 'normal'|'daily', date = jstDateOf(Date.now())): RunScope {
     return mode === 'normal' ? {mode, rulesVersion:this.rulesVersion} : {mode, rulesVersion:this.rulesVersion, startedDateJst:date};
@@ -40,7 +43,8 @@ export class AtomicGame {
     this.unreadable = false;
     this.records.clear();
     this.profiles.clear();
-    this.repo = await createIndexedRunRepository(this.factory(), this.writer);
+    this.repo?.close();
+    this.repo = await createIndexedRunRepository(this.factory(), this.writer, this.bundle, this.onVersionChange);
     const today = this.scope('daily');
     const active = await this.repo.readActiveScope(this.rulesVersion);
     const scopes = [this.scope('normal'), today];
@@ -63,13 +67,14 @@ export class AtomicGame {
     this.records.clear();
     this.profiles.clear();
     this.shelf = {slotRevision:0, slots:[null,null,null]};
-    this.repo = createMemoryRunRepository(this.writer);
+    this.repo?.close();
+    this.repo = createMemoryRunRepository(this.writer, this.bundle);
   }
 
   async start(scope: RunScope, initial: RunState): Promise<void> {
     const expected = this.records.get(this.source(scope))?.token ?? null;
     if (!this.memory) {
-      const result = await this.repo.importLegacy(scope, this.storage, this.knownSets);
+      const result = await this.repo.importLegacy(scope, this.storage, new Set(this.bundle.catalog.sets.keys()));
       this.unreadable = result.unreadable.length > 0;
       this.profiles.set(this.source(scope), await this.repo.readProfile(scope));
       this.shelf = await this.repo.readShelf();
