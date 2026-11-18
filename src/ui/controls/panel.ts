@@ -261,7 +261,7 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   };
 
   return {
-    cancelGestures() { firePressArmed = false; endHold(); dragId = null; },
+    cancelGestures() { firePointerId = null; endHold(); dragId = null; },
     update(m) {
       if (m.mode !== mode) {
         // Leaving aiming disarms a half-pressed fire; leaving position stops holds.
