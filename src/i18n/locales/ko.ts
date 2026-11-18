@@ -12,6 +12,8 @@ export const KO: Record<UiKey, string> = {
   "save.unreadable": "일부 이전 기록을 읽을 수 없습니다.",
   "save.reload": "최신 기록 불러오기",
   "save.memoryNotice": "이번 게임은 이 기기에 저장되지 않습니다.",
+  "reward.target.hitCenter": "중앙 명중",
+  "reward.target.hitOuter": "바깥 고리 명중",
   "app.restore.abandoned": "이전 게임은 발사 도중 중단되어 기록되지 않습니다.",
   "app.restore.ended": "이전 게임이 끝났습니다.",
   "app.restore.quarantined": "저장된 게임을 읽을 수 없습니다. 새 게임을 시작해 주세요.",

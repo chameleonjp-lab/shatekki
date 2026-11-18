@@ -12,6 +12,8 @@ export const PT_BR: Record<UiKey, string> = {
   "save.unreadable": "Não foi possível ler alguns registros antigos.",
   "save.reload": "Carregar o registro mais recente",
   "save.memoryNotice": "Esta partida não será salva neste aparelho.",
+  "reward.target.hitCenter": "Acertou o centro",
+  "reward.target.hitOuter": "Acertou o anel externo",
   "app.restore.abandoned": "A partida anterior foi interrompida durante um tiro e não será registrada.",
   "app.restore.ended": "A partida anterior terminou.",
   "app.restore.quarantined": "Não foi possível ler a partida salva. Comece uma nova.",

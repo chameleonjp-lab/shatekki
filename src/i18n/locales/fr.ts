@@ -12,6 +12,8 @@ export const FR: Record<UiKey, string> = {
   "save.unreadable": "Certains anciens enregistrements sont illisibles.",
   "save.reload": "Charger la dernière sauvegarde",
   "save.memoryNotice": "Cette partie ne sera pas enregistrée sur cet appareil.",
+  "reward.target.hitCenter": "Centre touché",
+  "reward.target.hitOuter": "Anneau extérieur touché",
   "app.restore.abandoned": "La partie précédente a été interrompue pendant un tir et ne sera pas enregistrée.",
   "app.restore.ended": "La partie précédente est terminée.",
   "app.restore.quarantined": "La partie sauvegardée est illisible. Commencez une nouvelle partie.",
