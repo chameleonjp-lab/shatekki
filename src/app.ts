@@ -637,6 +637,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           ...event, reducedMotion: event.reducedMotion || (event.kind === 'shot' && controller?.skipRequested === true),
         }),
         ...(session ? {session, onReplayed: showSavedRecord, reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false} : {}),
+        clockPolicy: bundle.behavior?.clock,
+        initialGameTick: session?.record.gameTick,
         transformPolicy: bundle.behavior?.transformPolicy,
         onChange,
         onSimEvents: (events) => {
