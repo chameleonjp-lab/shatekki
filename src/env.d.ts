@@ -12,8 +12,8 @@ interface ImportMetaEnv {
 
 interface Window {
   /** Only the separate, opt-in device measurement build emits these counters. */
-  shatekkiMeasureFrame?: (sample: {
+  shatekkiMeasureFrame?: (time: number, sample: {
     run: string; shot: number; corks: number; prizes: number; cells: number;
-    paused: boolean; stage: string | null; chain: number;
-  }) => void;
+  } | null) => void;
+  shatekkiMeasureSettlement?: (time: number, run: string, shot: number, collected: number, ended: boolean) => void;
 }

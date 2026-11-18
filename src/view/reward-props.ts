@@ -99,13 +99,20 @@ export function createRewardProps(illustrated = false): RewardProps {
   const chimeStripMat = deviceMat(0xf4f0e6);
   const chime = new THREE.Group();
   chime.name = 'reward-chime';
-  const bell = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), chimeMat);
+  const bell = new THREE.Mesh(illustrated
+    ? new THREE.BoxGeometry(2, 2, 2)
+    : new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), chimeMat);
+  bell.name = 'chime-bell';
   const strip = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.08), chimeStripMat);
+  strip.name = 'chime-paper';
   chime.add(bell, strip);
   chime.visible = false;
   const piggyMat = deviceMat(0xf2a7b8);
-  const piggy = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), piggyMat);
+  const piggy = new THREE.Group();
   piggy.name = 'reward-piggy';
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), piggyMat);
+  body.name = 'piggy-body';
+  piggy.add(body);
   piggy.visible = false;
   const seesawMat = deviceMat(0xb98a55);
   const seesaw = new THREE.Group();
@@ -117,29 +124,52 @@ export function createRewardProps(illustrated = false): RewardProps {
   group.add(chime, piggy, seesaw);
   const spent = (m: THREE.MeshStandardMaterial, base: number, used: boolean) => m.color.setHex(used ? 0x6b625c : base);
 
-  // In the candidate, the slit and the tray lip sit inside the physics boxes.
-  // The two inlaid coins are a count of distinct paid shots, not of split corks.
   const ink = deviceMat(0x392b38);
   const brass = deviceMat(0xf9ce67);
   const coins: THREE.Mesh[] = [];
   let tick: THREE.Mesh | undefined;
+  let cord: THREE.Mesh | undefined;
   if (illustrated) {
-    const slot = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.23, 0.04), ink);
+    // The whole box receives corks, including its sides. Drawing the inside
+    // faces gives the mouth real depth without placing a lid in front of it.
+    const lining = deviceMat(0x55334a);
+    lining.side = THREE.BackSide;
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), lining);
     slot.name = 'deposit-opening';
-    slot.position.set(0, 0.18, 0.96);
     piggy.add(slot);
-    for (const x of [-0.27, 0.27]) {
+    const rim = new THREE.Shape().moveTo(-1.11, -1.13).lineTo(-1.11, 1.13).lineTo(1.11, 1.13).lineTo(1.11, -1.13).closePath();
+    rim.holes.push(new THREE.Path().moveTo(-1, -1).lineTo(1, -1).lineTo(1, 1).lineTo(-1, 1).closePath());
+    const rimMesh = new THREE.Mesh(new THREE.ShapeGeometry(rim), brass);
+    rimMesh.position.z = 1;
+    piggy.add(rimMesh);
+    // A cork aimed at a cheek or ear must clear the collecting mouth.
+    body.position.set(0, -2.7, -0.25);
+    body.scale.set(1.45, 1.02, 0.98);
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), deviceMat(0xde829c));
+    snout.scale.set(0.36, 0.32, 0.28);
+    snout.position.set(0, 0.02, 0.94);
+    body.add(snout);
+    const earShape = new THREE.ConeGeometry(0.24, 0.48, 4);
+    for (const side of [-1, 1]) {
+      const ear = new THREE.Mesh(earShape, piggyMat);
+      ear.position.set(side * 0.52, 0.85, 0.05);
+      ear.rotation.z = side * -0.22;
+      body.add(ear);
+      const nostril = new THREE.Mesh(new THREE.CircleGeometry(0.13, 8), ink);
+      nostril.position.set(side * 0.32, 0.1, 0.97);
+      snout.add(nostril);
       const coin = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), brass);
-      coin.position.set(x, -0.34, 0.94);
+      coin.position.set(side * 0.52, 0.29, 0.84);
       coins.push(coin);
-      piggy.add(coin);
+      body.add(coin);
     }
     const lip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.015, 0.02), brass);
     lip.position.set(0, 0.018, 0.47);
     trayMesh.add(lip);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.06, 5, 20), brass);
-    rim.rotation.x = Math.PI / 2;
-    bell.add(rim);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(bell.geometry), new THREE.LineBasicMaterial({ color: 0xf9ce67 }));
+    bell.add(edges);
+    cord = new THREE.Mesh(new THREE.CylinderGeometry(0.0015, 0.0015, 1, 6), brass);
+    chime.add(cord);
     tick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.009, 0.002), ink);
     tick.rotation.z = -0.55;
     chime.add(tick);
@@ -191,16 +221,21 @@ export function createRewardProps(illustrated = false): RewardProps {
         strip.scale.set(b.halfExtents.x * 0.8, b.halfExtents.y * 1.1, 1);
         strip.position.y = -b.halfExtents.y * 0.5;
         if (illustrated) {
-          strip.scale.y = b.halfExtents.y * 1.05;
-          strip.position.y = -b.halfExtents.y * 0.43;
-          strip.scale.z = b.halfExtents.z * 2;
+          bell.scale.copy(b.halfExtents);
+          bell.position.y = 0;
+          strip.scale.set(b.halfExtents.x, b.halfExtents.y * 1.05, b.halfExtents.z);
+          strip.position.y = -b.halfExtents.y * 2.1;
+          if (cord) {
+            cord.scale.y = b.halfExtents.y * 0.6;
+            cord.position.y = -b.halfExtents.y * 1.28;
+          }
           if (tick) {
             tick.visible = Boolean(rewards?.chimeUsed);
-            tick.position.set(0, b.halfExtents.y * 0.35, b.halfExtents.z - 0.0015);
+            tick.position.set(0, b.halfExtents.y * 0.35, b.halfExtents.z + 0.0015);
           }
         }
         // the paper strip turns over once the chime has paid
-        strip.rotation.y = rewards?.chimeUsed ? Math.PI / 2 : 0;
+        strip.rotation.y = rewards?.chimeUsed ? (illustrated ? 0.55 : Math.PI / 2) : 0;
         spent(chimeMat, 0x9fd3e6, rewards?.chimeUsed ?? false);
       }
       piggy.visible = Boolean(d?.piggySlot);
@@ -211,7 +246,7 @@ export function createRewardProps(illustrated = false): RewardProps {
         if (illustrated) {
           piggy.position.copy(b.center);
           piggy.scale.copy(b.halfExtents);
-          coins.forEach((coin, i) => { coin.visible = i < (rewards?.piggyDeposits ?? 0); });
+          coins.forEach((coin, i) => { coin.material = i < (rewards?.piggyDeposits ?? 0) ? brass : ink; });
         }
         spent(piggyMat, 0xf2a7b8, rewards?.piggyDone ?? false);
       }

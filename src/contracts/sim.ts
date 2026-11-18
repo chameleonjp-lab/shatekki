@@ -124,7 +124,7 @@ export interface ShotWorld {
    * FX098: read-only first-contact estimate with the current scene and the
    * given modifiers (≤ maxFlightSec). Must not change bodies, RNG, requests or score.
    */
-  previewFirstContact(request: ShotRequest, modifiers: ShotModifiers): AimPreview;
+  previewFirstContact(request: ShotRequest, modifiers: ShotModifiers, target?: RewardTargetGeometry): AimPreview;
   readonly shotInProgress: boolean;
   dispose(): void;
 }

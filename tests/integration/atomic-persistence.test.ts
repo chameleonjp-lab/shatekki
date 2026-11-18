@@ -5,7 +5,7 @@ import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { createExpandedRun } from '../../src/core/expanded-run';
 import { abandonRun } from '../../src/core/session';
 import { createMemoryRunRepository } from '../../src/persistence/indexed-run-repository';
-import { collectLegacyProfile } from '../../src/persistence/legacy-import';
+import { collectLegacyProfile, readLegacyShelf } from '../../src/persistence/legacy-import';
 import { FakeStorage } from './fake-storage';
 
 const bundle = getGameplayBundle('expanded-save-trial');
@@ -72,7 +72,7 @@ it('reads only raw legacy keys, preserving broken records and separating the two
   const known = new Set(bundle.catalog.sets.keys());
   const before = [...storage.data];
   const normal = collectLegacyProfile(scope, storage, known);
-  expect(normal.unreadable).toEqual(['shatekki.profile.v1']);
+  expect(normal.unreadable).toEqual(['shatekki.profile.v1', 'shatekki.profile.v2']);
   expect(normal.discoveredSets).toEqual(['S001', 'PAIR001']);
   const daily = collectLegacyProfile({ ...scope, mode: 'daily', startedDateJst: '2026-11-18' }, storage, known);
   expect(daily.discoveredSets).toEqual(['S002']);
@@ -104,4 +104,38 @@ it('reports a partly unreadable old profile while retaining valid discoveries an
   expect(snapshot.discoveredSets).toEqual(['S001']);
   expect(snapshot.legacyBestScore).toBeNull();
   expect([...storage.data]).toEqual([['shatekki.profile.v2', raw]]);
+});
+
+it('accepts the same discovery across old versions and warns when one version contains duplicate or unsupported entries', () => {
+  const storage = new FakeStorage();
+  const normal = JSON.stringify({ schemaVersion: 1, bestScore: 70, discoveredSets: ['S001'] });
+  const expanded = JSON.stringify({ schemaVersion: 2, bestScores: {}, legacyBestScore: 70, discoveredSets: ['S001', 'PAIR001'] });
+  storage.setItem('shatekki.profile.v1', normal);
+  storage.setItem('shatekki.profile.v2', expanded);
+  const known = new Set(bundle.catalog.sets.keys());
+  expect(collectLegacyProfile(scope, storage, known).unreadable).toEqual([]);
+  const damaged = JSON.stringify({ schemaVersion: 1, bestScore: 70, discoveredSets: ['S001', 'S001', 'PAIR001'] });
+  storage.setItem('shatekki.profile.v1', damaged);
+  expect(collectLegacyProfile(scope, storage, known)).toEqual({
+    unreadable: ['shatekki.profile.v1'], discoveredSets: ['S001', 'PAIR001'], legacyBestScore: 70,
+  });
+  expect([...storage.data]).toEqual([['shatekki.profile.v1', damaged], ['shatekki.profile.v2', expanded]]);
+});
+
+it('retains each valid souvenir in its original position even when another slot has a broken shape', () => {
+  const first = { typeId: 'P001', runId: 'first win' };
+  const last = { typeId: 'P003', runId: 'later win' };
+  const storage = new FakeStorage();
+  for (const [slots, expected, damaged] of [
+    [[first, null, last], [first, null, last], false],
+    [[first, { typeId: 'P003', runId: '' }, last], [first, null, last], true],
+    [[false, last], [null, last, null], true],
+    [[null, null, null, first], [null, null, null], true],
+  ] as const) {
+    const key = 'shatekki.souvenirs.v1';
+    const raw = JSON.stringify({ slots });
+    storage.setItem(key, raw);
+    expect(readLegacyShelf(storage, bundle.catalog.prizes)).toEqual({ slots: expected, damaged });
+    expect([...storage.data]).toEqual([[key, raw]]);
+  }
 });

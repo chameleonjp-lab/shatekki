@@ -1,8 +1,8 @@
-import type { KeyValueStorage, SetId } from '../contracts';
+import type { KeyValueStorage, PrizeTypeId, RuntimeCatalog, SetId } from '../contracts';
 import { isPrizeTypeId, isSetId } from '../contracts';
 import type { RunScope } from '../contracts/persistence';
 import { STORAGE_KEYS } from './keys';
-import { SOUVENIR_KEY, SOUVENIR_SLOTS, type SouvenirShelf } from './souvenirs';
+import { SOUVENIR_KEY, SOUVENIR_SLOTS, type SouvenirSlot } from './souvenirs';
 
 const score = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -28,9 +28,14 @@ export function collectLegacyProfile(
       const p = JSON.parse(raw);
       if (p?.schemaVersion !== version) throw Error('unsupported profile');
       let damaged = !Array.isArray(p.discoveredSets);
+      const inThisProfile = new Set<SetId>();
       for (const id of Array.isArray(p.discoveredSets) ? p.discoveredSets : []) {
-        if (!isSetId(id)) damaged = true;
-        else if (knownSets.has(id) && (version === 2 || id.startsWith('S'))) discovered.add(id);
+        if (!isSetId(id) || !knownSets.has(id) || (version === 1 && !id.startsWith('S')) || inThisProfile.has(id)) {
+          damaged = true;
+          continue;
+        }
+        inThisProfile.add(id);
+        discovered.add(id);
       }
       const oldScores: unknown[] = [];
       const best = version === 1 ? p.bestScore : p.legacyBestScore;
@@ -51,19 +56,34 @@ export function collectLegacyProfile(
   return { discoveredSets: [...discovered], legacyBestScore, unreadable };
 }
 
-export function readLegacyShelf(storage: Pick<KeyValueStorage, 'getItem'>): SouvenirShelf | null {
+type KnownPrizes = Pick<RuntimeCatalog['prizes'], 'has'>;
+
+/** Keep the first valid occurrence in its original slot. Never move another prize to fill a gap. */
+export function checkSouvenirSlots(source: unknown, knownPrizes: KnownPrizes) {
+  const entries: unknown[] = Array.isArray(source) ? source : [];
+  const seen = new Set<PrizeTypeId>();
+  let damaged = entries.length !== SOUVENIR_SLOTS;
+  const slots = Array.from({ length: SOUVENIR_SLOTS }, (_, index): SouvenirSlot | null => {
+    const entry = entries[index];
+    if (entry === null) return null;
+    if (
+      !entry || typeof entry !== 'object' ||
+      !('typeId' in entry) || !isPrizeTypeId(entry.typeId) || !knownPrizes.has(entry.typeId) || seen.has(entry.typeId) ||
+      !('runId' in entry) || typeof entry.runId !== 'string' || !entry.runId.trim()
+    ) {
+      damaged = true;
+      return null;
+    }
+    seen.add(entry.typeId);
+    return { typeId: entry.typeId, runId: entry.runId };
+  });
+  return { slots, damaged };
+}
+
+export function readLegacyShelf(storage: Pick<KeyValueStorage, 'getItem'>, knownPrizes: KnownPrizes) {
   const raw = storage.getItem(SOUVENIR_KEY);
   if (raw === null) return null;
   const value = JSON.parse(raw);
-  if (
-    !Array.isArray(value?.slots) ||
-    value.slots.length !== SOUVENIR_SLOTS ||
-    !value.slots.every(
-      (s: { typeId?: unknown; runId?: unknown } | null) =>
-        s === null || (isPrizeTypeId(s?.typeId) && typeof s.runId === 'string' && s.runId.length > 0),
-    )
-  ) {
-    throw Error('invalid souvenir shelf');
-  }
-  return { slots: value.slots };
+  if (!Array.isArray(value?.slots)) throw Error('invalid souvenir shelf');
+  return checkSouvenirSlots(value.slots, knownPrizes);
 }

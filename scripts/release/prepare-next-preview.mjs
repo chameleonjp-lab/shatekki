@@ -5,13 +5,16 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
+import { recordStressSettlement } from './record-stress-settlement.mjs';
 
 const output = process.argv[2];
 const mode = process.argv[3] ?? 'prepare';
 if (!output || !['prepare', 'withdraw'].includes(mode)) throw Error('Usage: node scripts/release/prepare-next-preview.mjs NEW_DIRECTORY [prepare|withdraw]');
 const commit = (await promisify(execFile)('git', ['rev-parse', 'HEAD'])).stdout.trim();
+const workingTreeModified = (await promisify(execFile)('git', ['status', '--porcelain'])).stdout.length > 0;
 const rulesVersion = 'rules-v2-proposed-r006';
 const candidatePath = '/shatekki/preview/' + rulesVersion + '/';
 const temporary = await mkdtemp(join(tmpdir(), 'shatekki-preview-'));
@@ -32,12 +35,22 @@ try {
   if (mode !== 'withdraw') {
     await bundle('expanded-next', candidatePath, candidate);
     await bundle('expanded-full', legacyPath, join(temporary, legacyPath.slice(1)));
-    await writeFile(join(candidate, 'version.json'), JSON.stringify({ rulesVersion, bundle: 'expanded-next', commit }));
+    const stressRoot = fileURLToPath(new URL('./stress/', import.meta.url));
+    // Separate entry and bundle. The game builds above always use the normal muzzle pattern.
+    await build({ configFile: false, root: stressRoot, base: candidatePath + 'stress/',
+      resolve: { alias: [{ find: /^\.\/launch-angles$/, replacement: join(stressRoot, 'launch-angles.js') }] },
+      define: { __PREVIEW_COMMIT__: JSON.stringify(commit), __PREVIEW_MODIFIED__: JSON.stringify(workingTreeModified) },
+      build: { target: 'es2022', chunkSizeWarningLimit: 4096, outDir: join(candidate, 'stress'), emptyOutDir: false } });
+    await writeFile(join(candidate, 'stress', 'confirmed-shot.json'), JSON.stringify(await recordStressSettlement()));
+    await writeFile(join(candidate, 'version.json'), JSON.stringify({ rulesVersion, bundle: 'expanded-next', commit, workingTreeModified }));
     const index = join(candidate, 'index.html');
-    await cp(new URL('./preview-frame-meter.js', import.meta.url), join(candidate, 'preview-frame-meter.js'));
+    for (const file of ['preview-intervals.js', 'preview-frame-meter.js']) {
+      await cp(new URL(file, import.meta.url), join(candidate, file));
+    }
     const html = await readFile(index, 'utf8');
     assert.ok(html.includes('</body>'));
-    await writeFile(index, html.replace('</head>', `<meta name="preview-commit" content="${commit}"></head>`).replace('</body>', '<script type="module" src="./preview-frame-meter.js"></script></body>'));
+    const source = `<meta name="preview-commit" content="${commit}"><meta name="preview-modified" content="${workingTreeModified}">`;
+    await writeFile(index, html.replace('</head>', source + '</head>').replace('</body>', '<script type="module" src="./preview-frame-meter.js"></script></body>'));
     await cp(new URL('./record-check.html', import.meta.url), join(candidate, 'record-check.html'));
   }
 
@@ -59,7 +72,8 @@ try {
     await target.getByTestId('home-start').click();
     await expect(target.getByTestId('controls')).toHaveAttribute('data-mode', 'position', { timeout: 20_000 });
   }
-  await open('/shatekki/', 'rules-v1');
+  await open('/shatekki/?measure=1', 'rules-v1');
+  await expect(page.getByRole('button', { name: '計測結果' })).toHaveCount(0);
   await start();
   await expect(page.getByTestId('booth-map')).toHaveCount(0);
   if (mode !== 'withdraw') {
@@ -78,7 +92,13 @@ try {
     await page.getByRole('button', { name: '計測結果' }).click();
     const report = JSON.parse(await page.getByRole('dialog').locator('textarea').inputValue());
     assert.equal(report.commit, commit);
+    assert.equal(report.workingTreeModified, workingTreeModified);
     assert.equal(report.rules, rulesVersion);
+    assert.equal(report.mode, '通常プレイ');
+    const stress = page.getByRole('link', { name: 'コルク8個の負荷試験を別タブで開く' });
+    assert.equal(await stress.getAttribute('target'), '_blank');
+    const stressUrl = await stress.evaluate(link => link.href);
+    const settlementUrl = await page.getByRole('link', { name: '精算直後の再現試験を別タブで開く' }).evaluate(link => link.href);
     await page.getByRole('dialog').getByRole('button', { name: '閉じる' }).click();
     await start();
     await expect(page.locator('.bm-tile')).toHaveCount(36);
@@ -99,6 +119,36 @@ try {
       await page.getByTestId('btn-resume-run').click();
       await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'paused');
     }
+    const savedBeforeStress = await page.context().storageState({ indexedDB: true });
+    async function measureFixture(url) {
+      await page.goto(url);
+      await page.reload();
+      await page.getByRole('button', { name: '計測を開始' }).click({ timeout: 30_000 });
+      await expect(page.locator('#status')).toHaveText(/計測中　[1-9]\d*\./, { timeout: 60_000 });
+      await page.getByRole('button', { name: '停止して結果を見る' }).click();
+      const result = JSON.parse(await page.locator('#report').inputValue());
+      assert.equal(result.commit, commit);
+      assert.equal(result.workingTreeModified, workingTreeModified);
+      assert.equal(result.rules, rulesVersion);
+      assert.ok(Object.values(result.scenes).some(scene => scene.seconds >= 1 && scene.frames >= 2));
+      return result;
+    }
+    const stressReport = await measureFixture(stressUrl);
+    assert.equal(stressReport.mode, '独立した8個の負荷試験');
+    const { physicsCorks, renderedCorks, prizes, cells, outlined, maxTrailSegments } = stressReport.observed;
+    assert.deepEqual([physicsCorks, renderedCorks, prizes, cells], [8, 8, 36, 36]);
+    assert.ok(outlined > 0 && maxTrailSegments >= 8);
+    const mapMark = page.locator('.bm-tile[data-outlined="1"]').first();
+    await expect(mapMark.locator('.bm-pip')).toHaveText('◆');
+    const legendColor = await page.getByTestId('exp-outline').locator('span').first().evaluate(el => getComputedStyle(el).backgroundColor);
+    assert.ok((await mapMark.evaluate(el => getComputedStyle(el).boxShadow)).includes(legendColor));
+    const replay = await measureFixture(settlementUrl);
+    assert.equal(replay.mode, '確定した精算の演出再現');
+    assert.ok(replay.repetitions >= 2);
+    assert.equal(replay.observed.collected, 2);
+    assert.deepEqual(replay.observed.freshSets, ['PAIR081', 'PAIR134']);
+    assert.ok(replay.observed.cardRows >= 2);
+    assert.deepEqual(await page.context().storageState({ indexedDB: true }), savedBeforeStress);
   }
   assert.deepEqual(failedAssets, []);
   // Only the verified site subtree is packaged; the legacy build never ships.

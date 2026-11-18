@@ -123,6 +123,7 @@
 .bm-tile[data-cell='unused'] { background: #f1e2bd; color: #6b3a22; }
 .bm-tile[data-cell='used'] { background: #3d322c; color: #d9e6b4; }
 .bm-tile[data-cell='none'] { background: #5a3d2b; color: #fff7ec; }
+.bm-tile[data-outlined='1'] { box-shadow: inset 0 0 0 1px var(--bm-outline); }
 .bm-pip { font-size: 6px; }
 .bm-mark { font-size: 8px; font-weight: 800; }
 .booth-map-view {
@@ -217,12 +218,18 @@
   max-height: min(38dvh, calc(100dvh - 355px));
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 .rwd-members { display: grid; grid-template-columns: repeat(auto-fit,minmax(40px,1fr)); gap: 3px; margin: 4px 0 6px; }
 .rwd-member { min-width: 0; display: grid; justify-items: center; align-content: start; padding: 2px; border-radius: 4px; background: #f8e8c5; color: #42261e; }
 .rwd-prize-name { font-size: 10px; line-height: 1.2; text-align: center; }
 .rwd-portrait { display: block; width: 32px; height: 32px; background-image: url('../view/assets/prize-atlas.webp'); background-size: 1000% 1000%; background-repeat: no-repeat; }
 .rwd-card[data-static='true'] .rwd-headline { animation: none; }
+.last-shot-sets { display: grid; gap: 8px; }
+.last-shot-sets:empty { display: none; }
+.last-shot-sets .rwd-set { min-width: 0; padding: 8px; border: 1px solid #7a5a45; border-radius: 8px; background: #2b1a12; overflow-wrap: anywhere; }
+.last-shot-sets .rwd-members { margin-bottom: 0; gap: 6px; }
+.last-shot-sets .rwd-prize-name { font-size: .8rem; }
 .ui-layer > .rwd-motion-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
 .rwd-motion {
   position: absolute; left: 14px; bottom: clamp(146px, 25dvh, 225px);
@@ -250,7 +257,7 @@
 @keyframes reward-drop { from { transform: translate(calc(34px + var(--spread)), -34px) rotate(15deg); opacity: 0; } 20% { opacity: 1; } to { transform: translate(0,12px) rotate(-4deg) scale(.6); opacity: 0; } }
 @keyframes reward-seal { from { transform: scale(1.7) rotate(-20deg); } to { transform: scale(1) rotate(-6deg); } }
 @media (prefers-reduced-motion: reduce) { .rwd-motion { display: none; } }
-.rwd-close { width: 100%; min-height: 36px; margin-top: 4px; border: 1px solid #bb9566; border-radius: 6px; background: #4d3329; color: #fff5e1; font: inherit; }
+.rwd-close { width: 100%; min-height: 44px; margin-top: 4px; border: 1px solid #bb9566; border-radius: 6px; background: #4d3329; color: #fff5e1; font: inherit; }
 .shopq-scroll, .shopq-scroll .shopq-choice { touch-action: pan-y; }
 .shopq-scroll .shopq-choice { flex: 0 0 auto; }
 .shopq-scroll .shopq-choices, .shopq-scroll .shopq-body { overscroll-behavior: contain; }

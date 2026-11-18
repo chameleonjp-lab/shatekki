@@ -14,6 +14,7 @@ import {
   type RunState,
   type ShotSummary,
   type GameplayBundle,
+  type PrizeTypeId,
   type ShotRecord,
   type Vec3,
 } from '../../src/contracts';
@@ -28,11 +29,12 @@ interface ShotStats {
 
 export interface ProbeShot {
   beforeFire: RunState;
+  afterShot: RunState;
   gameTick: number;
   summary: ShotSummary;
 }
 
-export async function playRun(b: GameplayBundle, seed: number, observeShot?: (shot: ProbeShot) => void) {
+export async function playRun(b: GameplayBundle, seed: number, observeShot?: (shot: ProbeShot) => void, targetKinds: readonly PrizeTypeId[] = []) {
   const rewardConfig = rewardConfigOf(b.expansion);
   const world = await createShotWorld(b.layout, b.catalog, b.tuning, { rewardDevices: rewardDevicesFor(rewardConfig), transformPolicy: b.behavior?.transformPolicy });
   const stats: ShotStats = { plans: [], records: [] };
@@ -67,7 +69,11 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
     let target: Vec3;
     let standX: number;
     const cells = b.layout.backgroundCells ?? [];
-    if (b.expansion && roll < 0.1) {
+    const wanted = s0.shelf.prizes.find(p => targetKinds.includes(p.typeId) && !s0.collectedTypeIds.includes(p.typeId));
+    if (wanted) {
+      target = wanted.pose.position;
+      standX = Math.min(cam.standMaxX, Math.max(cam.standMinX, target.x + (rand() - 0.5) * 0.3));
+    } else if (b.expansion && roll < 0.1) {
       const body = b.layout.shopkeeper.find((p) => p.part === 'body')!.box.center;
       standX = cam.standMaxX;
       target = { x: body.x, y: 1.1, z: body.z + 0.1 };
@@ -123,7 +129,7 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
       maxCorks = Math.max(maxCorks, world.frame().projectiles.length);
     }
     if (c.current.phase === 'resolving') throw new Error('a shot never settled');
-    if (observeShot) observeShot({ beforeFire, gameTick, summary: c.snapshot().lastSummary! });
+    if (observeShot) observeShot({ beforeFire, afterShot: c.current, gameTick, summary: c.snapshot().lastSummary! });
   }
   const end = c.current;
   if (end.phase !== 'ended') throw new Error(`incomplete run: ${b.key}/${seed}`);

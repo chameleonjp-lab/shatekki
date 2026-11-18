@@ -46,6 +46,7 @@ export interface MapInput {
   readonly cells?: ExpansionViewState['cells'];
   /** Instance ids to mark as series-outlined. */
   readonly outlined?: ReadonlySet<string>;
+  readonly outlineColor?: string;
 }
 
 /** The v2 slot whose board position a prize stands on, or null when it is off the boards (fallen). */
@@ -158,6 +159,7 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
   root.appendChild(box);
 
   let previous: MapModel | null = null;
+  let outlineColor: string | undefined;
   let cols = 0;
   let tiles: HTMLElement[] = [];
   let interactive = false;
@@ -193,6 +195,10 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
       if (cols !== model.columns) build(model);
       interactive = input.interactive === true;
       box.classList.toggle('booth-map-live', interactive && !!deps.onJump);
+      if (outlineColor !== input.outlineColor) {
+        outlineColor = input.outlineColor;
+        grid.style.setProperty('--bm-outline', outlineColor ?? '');
+      }
       const mapTitle = deps.t('map.title');
       // The app remounts the map on a locale change. Updating all 36 tiles
       // every frame otherwise replaces their text nodes even for identical text.

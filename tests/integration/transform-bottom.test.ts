@@ -1,3 +1,4 @@
+import type RAPIER from '@dimforge/rapier3d-compat';
 import { describe, expect, it } from 'vitest';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import { createExpandedRun } from '../../src/core/expanded-run';
@@ -15,7 +16,7 @@ import { mountBasePose, mountedPoseForShape } from '../../src/sim/motion';
 import { prizeAabb } from '../../src/core/shapes';
 import { createShotWorld } from '../../src/sim/world';
 import { CAT, T } from '../unit/helpers';
-import { expandedCtx, harmlessRequest, planFor, runExpanded, straightAt } from './expanded-helpers';
+import { expandedCtx, harmlessRequest, inspectRapierWorld, planFor, runExpanded, straightAt } from './expanded-helpers';
 
 const box = (x: number, y: number): CollisionShape => ({ kind: 'box', halfExtents: { x, y, z: 0.06 } });
 const oldId = asPrizeTypeId('P001');
@@ -229,5 +230,55 @@ it('r006 defers overlapping travel paths, retries the same types after the block
       instanceId: slider.instanceId, toTypeId: retry.candidateTypeIds[0], hpBefore: 1, maxHpBefore: 2, hpAfter: 3, maxHpAfter: 5,
     })]);
     expect(shot.state.shelf.prizes.some(p => p.instanceId === blocker.instanceId)).toBe(false);
+  } finally { world.dispose(); }
+});
+
+it('r006 changes a moving prize directly to the final type with one HP rounding and preserved physical velocities', async () => {
+  // Read the actual body at the barrier, before another timestep applies gravity or friction.
+  const { world, rapier } = await inspectRapierWorld(() =>
+    createShotWorld(candidate.layout, candidate.catalog, candidate.tuning, candidateOptions));
+  try {
+    const source = { ...spawnPrize(candidate.catalog, asPrizeTypeId('P017'), candidate.layout.slots[4]!, 1, 0), hp: 2 };
+    const middle = asPrizeTypeId('P078'), final = asPrizeTypeId('P001');
+    const request: ShotRequest = {
+      shotId: mintId.shot(1), origin: { x: -0.542862247582525, y: 1.25, z: -0.3 },
+      direction: { x: -0.044602102293905946, y: 0.2517893506265385, z: -0.9667537304722593 },
+      bulletType: 'standard', load: { barValue: 0.85, tier: 'perfect', damageMultiplier: 1.5, pushMultiplier: 1.35 },
+    };
+    world.syncShelf(shelf([source]), 0);
+    world.fire(request, expandedCtx());
+    const dt = candidate.tuning.limits.fixedStepSec;
+    let tick = world.step(dt);
+    for (let i = 0; i < 600 && !tick.barrier; i++) tick = world.step(dt);
+    const before = tick.barrier!.prizes[0]!;
+    const motion = tick.barrier!.motion[0]!;
+    expect(Math.hypot(motion.linvel.x, motion.linvel.y, motion.linvel.z)).toBeGreaterThan(0.2);
+    expect(Math.hypot(motion.angvel.x, motion.angvel.y, motion.angvel.z)).toBeGreaterThan(2);
+    const firstId = mintId.effectRequest(request.shotId, 0);
+    const lastId = mintId.effectRequest(request.shotId, 1);
+    expect(world.resumeAfterEffects(planFor(tick.barrier!, [
+      { instanceId: source.instanceId, requestId: firstId, candidateTypeIds: [middle] },
+      { instanceId: source.instanceId, requestId: lastId, candidateTypeIds: [final] },
+    ]))).toBe(true);
+    const physical = world.frame().prizes[0]!;
+    expect(physical).toMatchObject({ instanceId: source.instanceId, typeId: final, mounted: false, hp: 1 });
+    expect(physical.position.x).toBeCloseTo(before.pose.position.x, 6);
+    expect(physical.position.z).toBeCloseTo(before.pose.position.z, 6);
+    expect(physical.rotation).toEqual(before.pose.rotation);
+    const dynamic: RAPIER.RigidBody[] = [];
+    rapier.forEachRigidBody(body => { if (body.isDynamic()) dynamic.push(body); });
+    expect(dynamic).toHaveLength(1);
+    expect(dynamic[0]!.linvel()).toMatchObject(motion.linvel);
+    expect(dynamic[0]!.angvel()).toMatchObject(motion.angvel);
+
+    for (let i = 0; i < 1500 && !tick.record; i++) tick = world.step(dt);
+    const record = tick.record!;
+    expect(record.appliedTransforms).toEqual([{ instanceId: source.instanceId, requestId: lastId, fromTypeId: source.typeId, toTypeId: final }]);
+    expect(record.transforms).toHaveLength(1);
+    const middleHp = candidate.catalog.prizes.get(middle)!.maxHp;
+    expect(Math.round(before.hp / before.maxHp * middleHp)).toBe(0);
+    expect(Math.round(before.hp / before.maxHp * physical.maxHp)).toBe(1);
+    expect(record.collected).toHaveLength(0);
+    expect(record.remainingPrizes[0]).toMatchObject({ homeSlot: source.homeSlot, mounted: false, typeId: final, hp: 1 });
   } finally { world.dispose(); }
 });

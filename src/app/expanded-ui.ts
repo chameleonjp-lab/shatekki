@@ -7,8 +7,9 @@
 export { createExpansionTranslator } from '../i18n/expansion-text';
 export { createShopkeeperQuestionPanel, questionContentFor } from '../ui/shopkeeper-question';
 export { mountBoothMap } from '../ui/booth-map';
+export { seriesOutlineTargets } from '../view/series-outline';
 export { expandedLine } from '../i18n/expanded-content';
 export { mountEffectResults, effectResultsModel } from '../ui/effect-results';
-export { mountRewardPanel, momentCue, shotMoment, rewardLine } from '../ui/reward-panel';
+export { mountRewardPanel, momentCue, shotMoment, rewardLine, renderRewardSet } from '../ui/reward-panel';
 export { bestShotOf } from '../core/rewards';
 export { mountRewardMotions } from '../view/reward-motions';

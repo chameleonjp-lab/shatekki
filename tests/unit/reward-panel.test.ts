@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { LOCALES, translate, type UiKey } from '../../src/i18n';
+import { prizeName } from '../../src/i18n/content';
 import { momentCue, orderCardModel, rewardCardModel, rewardLine, rewardStripModel, shotMoment, mountRewardPanel, type ShotMomentInput } from '../../src/ui/reward-panel';
-import type { RewardOutcome, RewardViewState, SetId } from '../../src/contracts';
+import { asPrizeTypeId, mintId, type RewardOutcome, type RewardViewState, type SetId } from '../../src/contracts';
 import { fakeRoot } from './fake-dom';
 
 const t = (k: string, p?: Readonly<Record<string, string | number>>) => translate('ja', k as UiKey, p);
@@ -37,6 +38,32 @@ describe('one big moment per shot (P1-P3 priority)', () => {
 });
 
 describe('reward lines and cards', () => {
+  it('names the individual that earned the seesaw grant among other collections in every locale, including a capped or replayed receipt', () => {
+    const collectedPrizes = [
+      { instanceId: mintId.instance(4), typeId: asPrizeTypeId('P011'), shotId: mintId.shot(2) },
+      { instanceId: mintId.instance(9), typeId: asPrizeTypeId('P041'), shotId: mintId.shot(2) },
+    ];
+    const trigger = collectedPrizes[1]!;
+    const receipt = out({ id: 'A3', key: 'seesaw:' + trigger.instanceId, shotNumber: 2 });
+    for (const locale of LOCALES) {
+      const tx = (key: string, p?: Readonly<Record<string, string | number>>) => translate(locale, key as UiKey, p);
+      const name = (id: string) => prizeName(locale, id);
+      for (const granted of [0, 2]) {
+        const card = rewardCardModel({
+          ...base, collected: 2, rewards: [{ ...receipt, granted }], collectedPrizes, setMembers: () => [], setName: String,
+        }, tx, name);
+        expect(card.lines[0]?.name).toBe(tx('reward.name.A3') + ' · ' + name(trigger.typeId));
+        expect(name(trigger.typeId)).not.toBe(trigger.typeId);
+        expect(card.lines[0]?.text).toBe(granted ? tx('reward.granted', { n: granted }) : tx('reward.capped'));
+      }
+      // An absent or unrelated collection cannot silently name the first prize.
+      const missing = rewardLine(receipt, tx, { collected: [collectedPrizes[0]!], prizeName: name });
+      expect(missing.name).toBe(tx('reward.name.A3'));
+      const earlier = rewardLine(receipt, tx, { collected: [{ ...trigger, shotId: mintId.shot(1) }], prizeName: name });
+      expect(earlier.name).toBe(tx('reward.name.A3'));
+    }
+  });
+
   it('reads the real amount: full, partial with the cap, and nothing at the cap', () => {
     expect(rewardLine(out({}), t).text).toBe(t('reward.granted', { n: 2 }));
     expect(rewardLine(out({ offered: 3, granted: 1 }), t).text).toBe(t('reward.partial', { n: 1, req: 3 }));
@@ -113,6 +140,23 @@ describe('strip and order card', () => {
     accept.dispatch('click');
     accept.dispatch('click');
     expect(calls).toBe(1);
+    panel.destroy();
+  });
+
+  it('keeps an illustrated set open when a member is touched and closes it with its button', () => {
+    const root = fakeRoot();
+    const panel = mountRewardPanel(root as never, { t, prizeName: String, onOrder: () => true, setTimeout: () => 0, clearTimeout: () => undefined });
+    const sets = ['PAIR001'] as SetId[];
+    const shot = { ...base, completedSets: sets, freshSets: sets, setName: () => 'Set' };
+    const card = root.byTestId('reward-card');
+    panel.showShot({ ...shot, setMembers: () => ['P001', 'P002'] });
+    card.find(node => node.className === 'rwd-prize-name')!.dispatch('click');
+    expect(card.hidden).toBe(false);
+    root.byTestId('reward-close').dispatch('click');
+    expect(card.hidden).toBe(true);
+    panel.showShot(shot);
+    card.dispatch('click');
+    expect(card.hidden).toBe(true);
     panel.destroy();
   });
 });

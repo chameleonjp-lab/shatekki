@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>コルク8個の負荷試験</title>
+  <style>
+    * { box-sizing: border-box }
+    #controls { position:fixed; bottom:max(8px,env(safe-area-inset-bottom)); left:8px; right:8px; margin:auto; max-width:32rem;
+      padding:10px 14px; border-radius:12px; background:#26170fee; z-index:8; color:#fff7ec; }
+    #controls p { margin:4px 0 8px }
+    #controls button { min-height:44px; padding:4px 16px; font:inherit }
+    #report { display:block; width:100%; max-height:28dvh; font-size:14px }
+    #report[hidden] { display:none }
+    #status { display:block; font-variant-numeric:tabular-nums }
+  </style>
+</head>
+<body>
+  <main id="scene"><canvas class="stage" aria-label="射的台"></canvas><div class="ui-layer"></div></main>
+  <section id="controls" aria-label="負荷試験">
+    <strong>コルク8個の負荷試験</strong>
+    <p>試験用に8個を同時に発射します。縦向きで同じ寸法の飛行が合計60秒になるまで繰り返します。通常プレイの成績には入りません。</p>
+    <output id="status">準備中</output>
+    <button id="toggle" disabled>計測を開始</button>
+    <textarea id="report" rows="7" readonly hidden aria-label="負荷試験の計測記録"></textarea>
+  </section>
+  <script type="module" src="./scene.js"></script>
+</body>
+</html>

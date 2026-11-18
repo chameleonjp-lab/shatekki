@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { prizeName } from '../../src/i18n/content';
 import { readRecordedRun } from '../helpers/read-recorded-run';
 
 test.use({ baseURL: 'http://127.0.0.1:4178' });
@@ -143,21 +144,21 @@ test('enlarged choices scroll by touch before the final answer is tapped', async
   await cdp.detach();
 });
 
-async function startDeviceGame(page: Page, standX = -2.35) {
+async function startDeviceGame(page: Page, standX = -2.35, seed = 7919) {
   // A slow renderer must not change how long the player aimed. Only the
   // game clock is stepped; all commands still go through the play controls.
   await page.clock.install({ time: new Date('2026-11-18T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-11-18T12:01:00Z'));
-  await page.addInitScript(() => {
+  await page.addInitScript(seed => {
     const random = Crypto.prototype.getRandomValues;
     Crypto.prototype.getRandomValues = function (this: Crypto, values) {
       if (values instanceof Uint32Array && values.length === 1) {
-        values[0] = 7919;
+        values[0] = seed;
         return values;
       }
       return random.call(this, values);
     } as typeof random;
-  });
+  }, seed);
   await page.goto('/?e2e=1');
   await expect(page.locator('[data-rules-version]')).toHaveAttribute('data-rules-version', 'rules-v2-proposed-r006');
   await page.getByTestId('home-start').click();
@@ -249,17 +250,23 @@ test('wind chime marks and sounds only after a reflected cork', async ({ page })
 });
 
 test('piggy-bank marks two separate deposits and the real grant', async ({ page }) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   await startDeviceGame(page);
   const mark = page.getByRole('img', {name: /コルク貯金箱/});
   await expect(mark).toHaveText('0/2');
-  await deviceShot(page, -0.271, -0.070);
+  // The ceramic body sits below the brass-rimmed opening.
+  await deviceShot(page, -0.271, -0.160);
+  await deviceShot(page, 0, 0);
+  await expect(mark).toHaveText('0/2');
+  expect((await readRecordedRun(page)).state.expansion!.rewards!.piggyDeposits).toEqual([]);
+  await deviceShot(page, 0, 0.090);
   await expect(mark).toHaveText('1/2');
   await expect(page.locator('[data-reward=A4]')).toHaveCount(0);
   await deviceShot(page, 0, 0);
   await expect(mark).toHaveAccessibleName('コルク貯金箱 · 2/2 · 使用済み');
   await expect(mark).toHaveText('2/2 ✓');
   await expect(page.locator('[data-reward=A4]')).toContainText('4');
+  expect((await readRecordedRun(page)).state.expansion!.rewards!.piggyDeposits).toEqual([3, 4]);
 });
 
 test('the bag leaves with the original prize and pays the advertised two corks', async ({ page }) => {
@@ -278,13 +285,24 @@ test('the bag leaves with the original prize and pays the advertised two corks',
 });
 
 test('a prize falling into the seesaw tray marks the tray and grants two corks', async ({ page }) => {
-  test.setTimeout(90000);
-  await startDeviceGame(page, -1.47);
+  test.setTimeout(120000);
+  await startDeviceGame(page, -2.35, 153);
+  // The left background cell gives the next shot two corks. They knock two
+  // different prizes off the bottom board. Only the second passes the tray.
+  await deviceShot(page, 0.088, -0.045);
+  expect((await readRecordedRun(page)).state.expansion!.next.modifiers.launch.count).toBe(2);
+  await page.getByTestId('stand-slider').fill('-0.84');
+  await page.clock.runFor(32);
   await expect(page.getByRole('img', {name: 'コルクのシーソー', exact: true})).toBeVisible();
-  await deviceShot(page, 0, -0.169);
+  await deviceShot(page, -0.088, -0.139 - (-0.045));
   await expect(page.getByRole('img', {name: 'コルクのシーソー · 使用済み'})).toHaveText('✓');
-  await expect(page.locator('[data-reward=A3]')).toHaveText('コルクのシーソー: 弾+2');
-  await expect(page.getByTestId('reward-strip')).toContainText('袋 1個');
+  const { lastSummary } = await readRecordedRun(page);
+  expect(lastSummary!.collected.map(p => p.typeId)).toEqual(['P013', 'P094']);
+  const reward = lastSummary!.rewards!.find(o => o.id === 'A3')!;
+  const caught = lastSummary!.collected[1]!;
+  expect(reward.key).toBe(`seesaw:${caught.instanceId}`);
+  await expect(page.locator('[data-reward=A3]')).toHaveText(`コルクのシーソー · ${prizeName('ja', caught.typeId)}: 弾+2`);
+  await expect(page.getByTestId('reward-strip')).toContainText('袋 2個');
 });
 
 for (const [yaw, ring, grant] of [[0.17, '中心命中', 3], [0.24, '外周命中', 1]] as const) {

@@ -67,8 +67,10 @@ test('normal and daily games can coexist; choosing yesterday’s stall does not 
   test.setTimeout(240_000);
   const normal = await context.newPage();
   const beforeMidnight = new Date('2026-11-18T23:59:00+09:00');
+  // Both pages share one clock. Only the calendar and explicit inputs advance in this ownership test.
+  await page.clock.install({ time: new Date('2026-11-18T23:58:00+09:00') });
+  await page.clock.pauseAt(beforeMidnight);
   for (const tab of [page, normal]) {
-    await tab.clock.setFixedTime(beforeMidnight);
     await tab.goto('/?e2e=1');
     await expect(tab.getByTestId('home-start')).toBeVisible();
   }
@@ -76,7 +78,7 @@ test('normal and daily games can coexist; choosing yesterday’s stall does not 
   await expect(normal.getByTestId('controls')).toHaveAttribute('data-mode','position',{timeout:30000});
   await page.getByTestId('home-daily-start').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode','position',{timeout:30000});
-  await page.clock.setFixedTime(new Date('2026-11-19T00:01:00+09:00'));
+  await page.clock.setSystemTime(new Date('2026-11-19T00:01:00+09:00'));
   await page.reload();
   await expect(page.getByTestId('choose-normal')).toBeVisible();
   const choice = page.getByTestId('choose-daily');

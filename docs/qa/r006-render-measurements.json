@@ -1,0 +1,67 @@
+[
+  {
+    "mode": "独立した8個の負荷試験",
+    "rules": "rules-v2-proposed-r006",
+    "commit": "f8ab9949636b46f3bbea3c82b83bc83806f45364",
+    "workingTreeModified": false,
+    "seed": 5,
+    "start": "2026-11-18T16:50:14.555Z",
+    "end": "2026-11-18T16:51:27.949Z",
+    "url": "http://127.0.0.1:44573/shatekki/preview/rules-v2-proposed-r006/stress/?scene=flight",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.0 Safari/537.36",
+    "pixelRatio": 1,
+    "reducedMotion": false,
+    "repetitions": 105,
+    "observed": {
+      "physicsCorks": 8,
+      "renderedCorks": 8,
+      "prizes": 36,
+      "cells": 36,
+      "outlined": 4,
+      "maxTrailSegments": 232
+    },
+    "scenes": {
+      "試験飛行 景品36 マス36 コルク8 (402×700)": {
+        "frames": 2013,
+        "seconds": 60.01458199999998,
+        "fps": 33.541848212822686,
+        "p95Ms": 50,
+        "worstMs": 366.5999999999999,
+        "intervalsOver33ms": 553
+      }
+    }
+  },
+  {
+    "mode": "確定した精算の演出再現",
+    "rules": "rules-v2-proposed-r006",
+    "commit": "f8ab9949636b46f3bbea3c82b83bc83806f45364",
+    "workingTreeModified": false,
+    "seed": 197975,
+    "start": "2026-11-18T16:51:28.666Z",
+    "end": "2026-11-18T16:52:36.765Z",
+    "url": "http://127.0.0.1:44573/shatekki/preview/rules-v2-proposed-r006/stress/?scene=settlement",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.0 Safari/537.36",
+    "pixelRatio": 1,
+    "reducedMotion": false,
+    "repetitions": 70,
+    "observed": {
+      "shot": 18,
+      "collected": 2,
+      "freshSets": [
+        "PAIR081",
+        "PAIR134"
+      ],
+      "cardRows": 4
+    },
+    "scenes": {
+      "再現精算 多獲得・初発見・複数札 (402×700)": {
+        "frames": 2475,
+        "seconds": 60.014199999999995,
+        "fps": 41.24023980991166,
+        "p95Ms": 49.89999999999418,
+        "worstMs": 250,
+        "intervalsOver33ms": 435
+      }
+    }
+  }
+]

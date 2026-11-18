@@ -18,6 +18,7 @@ import {
   isExpandedRunState,
   parseCommand,
   type AimPreview,
+  type BallisticSpec,
   type AnswerShopkeeperCommand,
   type ExpansionViewState,
   type FlightBarrier,
@@ -26,6 +27,7 @@ import {
   type GameCommand,
   type PauseReason,
   type Renderer,
+  type RewardTargetGeometry,
   type RunConfig,
   type RunState,
   type RuntimeCatalog,
@@ -43,7 +45,7 @@ import {
 import type { ConfirmedPresentation, PersistedRecord, SaveReply } from '../contracts/persistence';
 import type { DispatchResult, PersistedSession } from './persisted-session';
 import { FixedGameClock } from '../core/game-clock';
-import { rewardConfigOf, rewardViewState } from '../core/rewards';
+import { aimNearReward, rewardConfigOf, rewardViewState } from '../core/rewards';
 
 export interface RulesApi {
   createRun(config: RunConfig, catalog: RuntimeCatalog): RunState;
@@ -79,6 +81,7 @@ export interface ControllerSnapshot {
 }
 
 export interface ControllerDeps {
+  readonly preciseRewardAim?: boolean;
   readonly clockPolicy?: 'frame' | 'fixed';
   readonly initialGameTick?: number;
   readonly rules: RulesApi;
@@ -136,10 +139,6 @@ export class GameController {
     return this.state;
   }
 
-  get skipRequested(): boolean {
-    return this.presentationSkipped;
-  }
-
   snapshot(): ControllerSnapshot {
     return { state: this.state, view: this.viewState(), lastSummary: this.lastSummary, frame: this.lastFrame };
   }
@@ -159,30 +158,39 @@ export class GameController {
     const e = s.expansion;
     // Before FIRE the reservation applies to the shot being prepared; during the shot, its own settings.
     const reservation = s.phase === 'resolving' && e.active ? e.active : e.next;
+    const ballistic = ballisticForModifiers(this.deps.tuning, s.bulletType, reservation.modifiers);
+    const rewards = rewardViewState(s, rewardConfigOf(this.deps.expansion), this.deps.layout, this.deps.tuning);
+    const nearDevice = this.deps.preciseRewardAim && s.phase === 'aiming' && rewards &&
+      aimNearReward(rewards, this.deps.layout, s.standX, effectiveAim, ballistic);
+    const guide = s.phase === 'aiming' && reservation.hint === 'aimPreview';
+    const preview = (nearDevice || guide) ? this.aimPreview(s, effectiveAim, ballistic, this.deps.preciseRewardAim ? rewards?.target?.geometry : undefined) : null;
     const question = s.inFlight?.stage === 'question' ? (s.inFlight.plan?.question ?? null) : null;
+    // The archived shot keeps both series. Their live outlines and refill labels end with play.
+    const seriesExpired = s.phase === 'ended' || s.phase === 'abandoned';
     const expansion: ExpansionViewState = {
       cells: e.cells.map((c) => ({ cellId: c.cellId, used: c.used, effectId: c.used ? c.effectId : null })),
-      outlineSeries: e.outlineSeries,
-      assortmentSeries: e.assortmentSeries,
+      outlineSeries: seriesExpired ? null : e.outlineSeries,
+      assortmentSeries: seriesExpired ? null : e.assortmentSeries,
       collectedTypeIds: s.collectedTypeIds,
       completedSets: s.completedSets,
       hint: reservation.hint,
-      aimPreview: s.phase === 'aiming' && reservation.hint === 'aimPreview' ? this.aimPreview(s, effectiveAim) : null,
+      aimPreview: guide ? preview : null,
+      ...(rewards ? { rewards } : {}),
       question: question && s.inFlight ? { shotId: s.inFlight.shotId, questionId: question.questionId, answer: question.answer } : null,
     };
-    const rewards = rewardViewState(s, rewardConfigOf(this.deps.expansion), this.deps.layout, this.deps.tuning);
-    if (rewards) (expansion as { rewards?: typeof rewards }).rewards = rewards;
-    return { ...base, ballistic: ballisticForModifiers(this.deps.tuning, s.bulletType, reservation.modifiers), expansion };
+    return { ...base, ballistic, expansion, ...(nearDevice && preview ? { rewardAim: preview } : {}) };
   }
 
-  /** FX098 estimate, recomputed only when the aim or stand position changes (read-only for the world). */
-  private aimPreview(s: RunState, aim: AimAngles): AimPreview | null {
+  /** Share the same read-only query between the reticle and the optional trajectory guide. */
+  private aimPreview(s: RunState, aim: AimAngles, flight: BallisticSpec, target?: RewardTargetGeometry): AimPreview | null {
     if (!isExpandedRunState(s) || !s.load) return null;
-    const key = `${s.shotsFired}|${s.standX}|${aim.yaw}|${aim.pitch}`;
+    const pose = this.deps.preciseRewardAim ? s.clocks.motionSec : 0;
+    const key = [s.shotsFired, s.standX, aim.yaw, aim.pitch, pose, flight.speed, flight.gravity, flight.corkRadius, target?.outerRadius].join('|');
     if (key === this.previewKey) return this.preview;
     const probe = this.deps.rules.reduceGame(s, { type: 'FIRE' }, this.ctx);
     const request = probe !== s ? probe.inFlight?.request : undefined;
-    this.preview = request ? this.deps.world.previewFirstContact(request, s.expansion.next.modifiers) : null;
+    if (!request) return null;
+    this.preview = this.deps.world.previewFirstContact(request, s.expansion.next.modifiers, target);
     this.previewKey = key;
     return this.preview;
   }
@@ -350,30 +358,34 @@ export class GameController {
   frame(rawDtSec: number): void {
     if (this.timeStopped) {
       this.clock?.advance(0, true);
-      this.render();
+      this.render([]);
       return;
     }
+    const events: SimEvent[] = [];
     if (this.clock) {
       const stepSec = this.clock.stepSec;
       this.clock.advance(rawDtSec, false, () => {
-        this.stepGame(stepSec);
+        this.stepGame(stepSec, events);
         return !this.timeStopped;
       });
     } else {
-      this.stepGame(Math.max(0, Math.min(MAX_FRAME_DT, Number.isFinite(rawDtSec) ? rawDtSec : 0)));
+      this.stepGame(Math.max(0, Math.min(MAX_FRAME_DT, Number.isFinite(rawDtSec) ? rawDtSec : 0)), events);
     }
-    this.render();
+    this.render(events);
     this.emit();
   }
 
-  private stepGame(dt: number): void {
+  private stepGame(dt: number, events: SimEvent[]): void {
     if (this.state.phase !== 'resolving') {
       this.state = this.deps.rules.tickRun(this.state, dt, this.deps.tuning);
     }
     // Between shots the world still moves mounted (periodic) prizes; during a shot it runs the shot.
     const step = this.deps.world.step(dt);
     this.lastFrame = step.frame;
-    if (step.frame.events.length > 0) this.deps.onSimEvents?.(step.frame.events);
+    if (step.frame.events.length > 0) {
+      events.push(...step.frame.events);
+      this.deps.onSimEvents?.(step.frame.events);
+    }
     if (step.barrier) this.onBarrier(step.barrier);
     if (step.record) this.settle(step.record);
   }
@@ -407,14 +419,17 @@ export class GameController {
     this.state = state;
     this.lastSummary = summary;
     if (state.phase !== 'ended') this.deps.world.syncShelf(state.shelf, state.clocks.motionSec);
+    const reducedMotion = this.deps.reducedMotion?.() ?? false;
     if (reply) this.deps.onConfirmed?.({kind:'shot', runId:state.runId, shotId:summary.shotId, summary,
       freshSets:reply.freshSets, ammoBeforeShot:reply.record.ammoBeforeShot ?? 0, replayed:false,
-      reducedMotion:this.deps.reducedMotion?.() ?? false});
+      reducedMotion:reducedMotion || this.presentationSkipped});
     this.deps.onShotSettled?.(summary, state);
-    void this.deps.renderer?.present(summary, { skip: this.presentationSkipped });
+    void this.deps.renderer?.present(summary, { skip: this.presentationSkipped, reducedMotion });
   }
 
-  private render(): void {
+  private render(events: readonly SimEvent[]): void {
+    // Draw the latest positions, with every event since the previous draw.
+    if (events.length || this.lastFrame.events.length) this.lastFrame = { ...this.lastFrame, events };
     this.deps.renderer?.render(this.lastFrame, this.viewState());
   }
 

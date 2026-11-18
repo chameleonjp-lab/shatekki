@@ -5,7 +5,7 @@
  * The first portrait screenful holds the total and the retry button; prizes,
  * sets, chain, breakdown and the top 30 follow and scroll.
  */
-import type { DeferredTransform, FinalResult, PlannedEffect, RewardOutcome } from '../contracts';
+import type { DeferredTransform, FinalResult, PlannedEffect, RewardOutcome, SetId } from '../contracts';
 import { formatInteger, translate, type I18n, type Locale, type UiKey } from '../i18n';
 import { prizeName } from '../i18n/content';
 import { setDisplayName, type SetBookExpandedText } from './set-book';
@@ -30,6 +30,8 @@ export interface LastShotInput {
   readonly ammoAfter: number;
   /** Rules versions with rewards: what A1-A10 really gave in that shot. */
   readonly rewards?: readonly RewardOutcome[];
+  /** Illustrated builds keep the discoveries of this specific shot on the result. */
+  readonly sets?: ReadonlyArray<{ setId: SetId; fresh: boolean }>;
 }
 
 /** Lines of the last shot in the current locale (the expanded build passes effectResultsModel with no line limit). */
@@ -44,13 +46,14 @@ export interface ResultTextOptions {
   /** Without it (public build) the last-shot section is not shown. */
   readonly describeEffects?: DescribeEffects;
   /** Rules versions with rewards: one line per reward of the last shot. */
-  readonly describeReward?: (o: RewardOutcome) => { readonly sourceLabel: string; readonly name: string; readonly text: string; readonly note: string | null; readonly applied: boolean };
+  readonly describeReward?: (o: RewardOutcome, collected: FinalResult['collected']) => { readonly sourceLabel: string; readonly name: string; readonly text: string; readonly note: string | null; readonly applied: boolean };
   /** E1: the best shot of the run, from the confirmed ledger and collection (rewards versions only). */
   readonly bestShot?: (result: FinalResult) => { readonly shotNumber: number; readonly prizes: number; readonly points: number; readonly sets: number } | null;
 }
 
 export interface LastShotView {
   readonly title: string;
+  readonly sets: ReadonlyArray<{ setId: SetId; name: string; fresh: boolean }>;
   readonly lines: ReturnType<DescribeEffects>['lines'];
   readonly deferred: string | null;
   /** Shown when the shot had nothing to report. */
@@ -138,13 +141,15 @@ function lastShotView(input: ResultInput, locale: Locale, options: ResultTextOpt
   const t = (k: UiKey, p?: Record<string, string | number>): string => translate(locale, k, p);
   const m = describe({ effects: last.effects, deferredTransforms: last.deferredTransforms });
   const rewards = last.rewards ?? [];
-  const rewardLines = options.describeReward ? rewards.map(options.describeReward) : [];
+  const describeReward = options.describeReward;
+  const rewardLines = describeReward ? rewards.map(o => describeReward(o, input.result.collected)) : [];
   const endReasons: string[] = [];
   if (last.ammoAfter === 0) {
     if (last.effects.some(hitAmmoCap) || rewards.some((r) => r.granted < r.offered)) endReasons.push(t('result.end.capped'));
     endReasons.push(t('result.end.noAmmo'));
   }
-  return { title: t('result.lastShot.title', { n: last.shotNumber }), lines: [...m.lines, ...rewardLines], deferred: m.deferred, emptyText: t('result.lastShot.none'), endReasons };
+  const sets = (last.sets ?? []).map(s => ({ ...s, name: setDisplayName(locale, s.setId, options.expandedText) || t('setbook.undiscovered') }));
+  return { title: t('result.lastShot.title', { n: last.shotNumber }), sets, lines: [...m.lines, ...rewardLines], deferred: m.deferred, emptyText: t('result.lastShot.none'), endReasons };
 }
 
 function bestShotView(input: ResultInput, locale: Locale, options: ResultTextOptions): ResultViewModel['bestShot'] {
@@ -320,6 +325,8 @@ export interface ResultDeps {
   readonly onRetryTop: () => void;
   /** Open the set book (図鑑). The button is shown only when provided. */
   readonly onOpenSetBook?: () => void;
+  /** Loaded with the illustrated build, together with its prize atlas. */
+  readonly renderLastSet?: (set: LastShotView['sets'][number]) => HTMLElement;
   /** Expanded build: pair-set names (same source as the book) and the last-shot lines. */
   readonly text?: ResultTextOptions;
   readonly open?: OpenWindow;
@@ -367,11 +374,12 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   const topList = el('ol', { class: 'top-list' });
   const bookBtn = el('button', { class: 'btn', attrs: { type: 'button' } });
   const lastTitle = h('h3');
+  const lastSets = el('div', { class: 'last-shot-sets' });
   const lastList = el('ul', { class: 'last-shot-list' });
   const lastEmpty = el('p', { class: 'note dim' });
   const lastDeferred = el('p', { class: 'note' });
   const lastReasons = el('div', { class: 'last-shot-reasons' });
-  const lastSec = el('section', { class: 'sec last-shot', attrs: { 'data-testid': 'result-last-shot' } }, [lastTitle, lastList, lastEmpty, lastDeferred, lastReasons]);
+  const lastSec = el('section', { class: 'sec last-shot', attrs: { 'data-testid': 'result-last-shot' } }, [lastTitle, ...(deps.renderLastSet ? [lastSets] : []), lastList, lastEmpty, lastDeferred, lastReasons]);
   const bestTitle = h('h3');
   const bestText = el('p', { class: 'note' });
   const bestSec = el('section', { class: 'sec best-shot', attrs: { 'data-testid': 'result-best-shot' } }, [bestTitle, bestText]);
@@ -451,6 +459,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     const ls = vm.lastShot;
     setHidden(lastSec, ls === null);
     setText(lastTitle, ls?.title ?? '');
+    if (deps.renderLastSet) replaceChildren(lastSets, (ls?.sets ?? []).map(deps.renderLastSet));
     replaceChildren(
       lastList,
       (ls?.lines ?? []).map((l) =>
@@ -461,8 +470,9 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
         ]),
       ),
     );
-    setText(lastEmpty, ls && ls.lines.length === 0 ? ls.emptyText : '');
-    setHidden(lastEmpty, !ls || ls.lines.length > 0);
+    const showEmpty = ls !== null && ls.lines.length === 0 && ls.sets.length === 0;
+    setText(lastEmpty, showEmpty ? ls.emptyText : '');
+    setHidden(lastEmpty, !showEmpty);
     setText(lastDeferred, ls?.deferred ?? '');
     setHidden(lastDeferred, !ls?.deferred);
     replaceChildren(lastReasons, (ls?.endReasons ?? []).map((r) => el('p', { class: 'note', text: r, attrs: { role: 'status' } })));

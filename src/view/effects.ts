@@ -39,6 +39,8 @@ export interface EffectsHud {
 
 export interface EffectsDeps {
   readonly layer: THREE.Group;
+  /** The illustrated card already presents the confirmed collection, sets and chain. */
+  readonly illustratedRewards?: boolean;
   readonly layout: BoothLayout;
   readonly shopkeeperParts: ReadonlyMap<string, THREE.Mesh>;
   /** The current mesh of a prize instance (for the transform pop), if it exists. */
@@ -621,7 +623,7 @@ export function createEffects(deps: EffectsDeps): Effects {
     if (disposed) return Promise.resolve();
     // Classified here, after settlement, from the confirmed summary only (AC27).
     deps.onClassified?.(classifyShot(summary), summary);
-    if (options.skip) return Promise.resolve();
+    if (options.skip || options.reducedMotion || deps.illustratedRewards) return Promise.resolve();
     let end = clock;
     const n = Math.min(summary.collected.length, 8);
     for (let i = 0; i < n; i++) {
