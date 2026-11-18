@@ -18,6 +18,8 @@
     "preview:rewards": "vite preview --outDir dist-rewards --host 0.0.0.0 --port 4175 --strictPort",
     "build:save-trial": "VITE_SHATEKKI_BUNDLE=expanded-save-trial vite build --outDir dist-save-trial --emptyOutDir",
     "preview:save-trial": "vite preview --outDir dist-save-trial --host 0.0.0.0 --port 4176 --strictPort",
+    "build:placement-trial": "VITE_SHATEKKI_BUNDLE=expanded-placement-trial vite build --outDir dist-placement-trial --emptyOutDir",
+    "preview:placement-trial": "vite preview --outDir dist-placement-trial --host 0.0.0.0 --port 4177 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "node scripts/run-vitest.mjs unit",
     "test:integration": "node scripts/run-vitest.mjs integration",

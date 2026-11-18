@@ -113,6 +113,13 @@ jobs:
           path: dist-save-trial/
           if-no-files-found: error
           retention-days: 7
+      - run: npm run build:placement-trial
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-placement-trial-dist
+          path: dist-placement-trial/
+          if-no-files-found: error
+          retention-days: 7
 
   browser:
     needs: [plan, build]
@@ -157,6 +164,10 @@ jobs:
         with:
           name: internal-save-trial-dist
           path: dist-save-trial/
+      - uses: actions/download-artifact@v4
+        with:
+          name: internal-placement-trial-dist
+          path: dist-placement-trial/
       - name: Check the browser version and the fonts for Japanese, Chinese and Thai text
         timeout-minutes: 2
         run: |

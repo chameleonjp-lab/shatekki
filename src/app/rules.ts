@@ -33,5 +33,5 @@ export const CORE_RULES: RulesApi = {
 
 function expandedCtx(ctx: RulesContext): ExpandedPlanContext {
   if (!ctx.expansion) throw new Error('expanded rules need the expansion catalog of the same bundle');
-  return { tuning: ctx.tuning, catalog: ctx.catalog, layout: ctx.layout, expansion: ctx.expansion };
+  return { tuning: ctx.tuning, catalog: ctx.catalog, layout: ctx.layout, expansion: ctx.expansion, transformPolicy: ctx.transformPolicy };
 }

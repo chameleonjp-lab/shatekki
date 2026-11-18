@@ -130,9 +130,14 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     const deferred = [...new Set<SlotId>([...state.shelf.deferredSlots, ...emptied])];
     next = { ...base, phase: 'ended', shelf: { ...state.shelf, prizes: remaining, deferredSlots: deferred } };
   } else {
+    const checkAllShapes = ctx.transformPolicy === 'preserve-supported-bottom';
+    const series = projection.assortmentSeries;
     const r = replenish(
-      { shelf: { ...state.shelf, prizes: remaining }, draw: state.draw, newlyEmptySlots: emptied, motionSec },
-      refillCatalog(ctx, projection.assortmentSeries),
+      {
+        shelf: { ...state.shelf, prizes: remaining }, draw: state.draw, newlyEmptySlots: emptied, motionSec,
+        candidateTypeIds: checkAllShapes && series ? seriesDef(ctx.expansion, series).typeIds : undefined,
+      },
+      checkAllShapes ? catalog : refillCatalog(ctx, series),
       tuning,
       ctx.layout,
     );

@@ -35,6 +35,7 @@ import {
   type SimEvent,
   type SimulationFrame,
   type TransformChooser,
+  type TransformPolicy,
   type TuningConfig,
   type ViewState,
   type ExpansionCatalog,
@@ -65,6 +66,7 @@ export interface RulesContext {
   readonly layout: BoothLayout;
   /** Same four items as GameplayBundle. Absent or null = rules-v1. */
   readonly expansion?: ExpansionCatalog | null;
+  readonly transformPolicy?: TransformPolicy;
 }
 
 export interface ControllerSnapshot {
@@ -84,6 +86,7 @@ export interface ControllerDeps {
   readonly layout: BoothLayout;
   /** Expanded rules catalog of the same GameplayBundle; absent/null = rules-v1. */
   readonly expansion?: ExpansionCatalog | null;
+  readonly transformPolicy?: TransformPolicy;
   /** Called after any state change (command, frame, settlement). */
   readonly session?: PersistedSession;
   readonly onReplayed?: (record: PersistedRecord) => void;
@@ -120,7 +123,7 @@ export class GameController {
   ) {
     this.state = initial;
     this.lastSummary = deps.session?.record.lastSummary ?? null;
-    this.ctx = { tuning: deps.tuning, catalog: deps.catalog, layout: deps.layout, expansion: deps.expansion ?? null };
+    this.ctx = { tuning: deps.tuning, catalog: deps.catalog, layout: deps.layout, expansion: deps.expansion ?? null, transformPolicy: deps.transformPolicy };
     deps.world.syncShelf(initial.shelf, initial.clocks.motionSec);
     this.lastFrame = deps.world.frame();
   }

@@ -188,6 +188,12 @@ export function validateRunState(
     if (!isObj(p) || !isStr(p.instanceId) || !isPrizeTypeId(p.typeId) || !isPrizeTypeId(p.drawnTypeId) || !isSlotId(p.homeSlot)) return 'invalid prize on the shelf';
     if (expanded) {
       if (!layout.slots.some((g) => g.slotId === p.homeSlot)) return 'prize home slot is not in the layout';
+      if (p.motionAnchor !== undefined) {
+        const anchor = p.motionAnchor;
+        if (!isObj(anchor) || !isPrizeTypeId(anchor.motionTypeId) || anchor.motionTypeId !== p.motionTypeId || !isObj(anchor.base) || !isPose(anchor.base)) return 'invalid motion anchor';
+        const q = anchor.base.rotation;
+        if (!isObj(q) || q.x !== 0 || q.y !== 0 || q.z !== 0 || q.w !== 1) return 'invalid mount orientation';
+      }
       if (p.motionTypeId !== undefined && !(isPrizeTypeId(p.motionTypeId) && catalog.prizes.has(p.motionTypeId))) return 'unknown motionTypeId';
     }
     const cfg = catalog.prizes.get(p.typeId);

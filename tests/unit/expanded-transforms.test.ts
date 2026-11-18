@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createShotWorld, type ShotWorldOptions } from '../../src/sim/world';
 import { TRANSFORM_OVERLAP_TOLERANCE_M, compareSubjects, planTransforms, type TransformSubject } from '../../src/sim/transform-plan';
+import { mountedBounds } from '../../src/sim/transform-placement';
+import { mountedPoseForShape } from '../../src/sim/motion';
+import { prizeAabb } from '../../src/core/shapes';
 import { spawnPrize } from '../../src/core/replenish';
 import {
   BASE_SHOT_MODIFIERS,
@@ -8,6 +11,7 @@ import {
   IDENTITY_QUAT,
   asPrizeTypeId,
   mintId,
+  quatFromAxisAngle,
   type Box3,
   type CollisionShape,
   type EffectRequestId,
@@ -67,7 +71,7 @@ describe('planTransforms (pure)', () => {
       obstacles: [floor],
     });
     // P003 (0.3 wide) overlaps the neighbour at x = 0.3, so the next candidate P004 is taken
-    expect(r.applied).toEqual([{ instanceId: id(1), requestId: req(1), fromTypeId: ty('P001'), toTypeId: ty('P004') }]);
+    expect(r.applied).toEqual([{ instanceId: id(1), requestId: req(1), fromTypeId: ty('P001'), toTypeId: ty('P004'), poseAfter: subject(1, 'slot-r3-c01', 0).pose }]);
     expect(r.deferred).toEqual([]);
   });
 
@@ -129,7 +133,7 @@ describe('planTransforms (pure)', () => {
       shapeOf,
       obstacles: [],
     });
-    expect(r.applied).toEqual([{ instanceId: id(1), requestId: req(2), fromTypeId: ty('P001'), toTypeId: ty('P002') }]);
+    expect(r.applied).toEqual([{ instanceId: id(1), requestId: req(2), fromTypeId: ty('P001'), toTypeId: ty('P002'), poseAfter: subject(1, 'slot-r3-c01', 0).pose }]);
     const same = planTransforms({ prizes: [subject(1, 'slot-r3-c01', 0)], intents: [intent(1, 1, 'P001')], shapeOf, obstacles: [] });
     expect(same).toEqual({ applied: [], deferred: [] });
   });
@@ -309,5 +313,51 @@ describe('kind changes applied by the world at the barrier', () => {
     expect(record).not.toBeNull();
     expect(BASE_SHOT_MODIFIERS.launch.count).toBe(1);
     world.dispose();
+  });
+});
+
+describe('supported-bottom policy', () => {
+  const policy = 'preserve-supported-bottom' as const;
+  const board = { id: 'shelf-0', box: floor, material: 'wood' as const, reflective: true as const };
+  const setup = { policy, obstacles: [floor], shelves: [board], shapeOf };
+  it('uses the rotated bottom, checks both horizontal axes and leaves falling or unsupported poses in place', () => {
+    const p = subject(1, 'slot-r3-c01', 0);
+    const tilted = { ...p, pose: { position: { ...p.pose.position, y: 0.90 }, rotation: quatFromAxisAngle(0, 0, 1, Math.PI / 2) } };
+    const intentToWide = [intent(1, 5, 'P003')];
+    const decide = (prize: TransformSubject) => planTransforms({ ...setup, prizes: [prize], intents: intentToWide });
+    expect(decide(tilted).applied[0]!.poseAfter.position.y).toBeCloseTo(1.1);
+    expect(decide(tilted).applied[0]!.poseAfter.rotation).toEqual(tilted.pose.rotation);
+    for (const pos of [{ x: 4 }, { z: 0 }, { y: 1.8 }]) {
+      const air = { ...tilted, pose: { ...tilted.pose, position: { ...tilted.pose.position, ...pos } } };
+      expect(decide(air).applied[0]!.poseAfter).toEqual(air.pose);
+    }
+    expect(decide({ ...tilted, falling: true }).deferred).toHaveLength(1);
+    const over = { ...floor, center: { ...floor.center, y: 1.18 } };
+    expect(planTransforms({ ...setup, prizes: [tilted], intents: intentToWide, obstacles: [floor, over] }).deferred).toHaveLength(1);
+  });
+
+  it('defers when two slides with different periods can overlap, despite a clear instantaneous fit', () => {
+    const sliding = (p: TransformSubject, periodSec: number) => ({
+      ...p, mount: { base: p.pose, motionTypeId: p.typeId, motionSec: 0, motion: { type: 'slide' as const, amplitude: 0.06, periodSec }, anchored: false },
+    });
+    const prizes = [sliding(subject(1, 'slot-r3-c01', 0), 2), sliding(subject(2, 'slot-r3-c02', 0.50), 3)];
+    const reqs = [intent(1, 6, 'P003')];
+    expect(planTransforms({ ...setup, prizes, intents: reqs }).deferred).toEqual(reqs);
+    expect(planTransforms({ ...setup, policy: 'preserve-center', prizes, intents: reqs }).applied).toHaveLength(1);
+  });
+
+  it('covers intermediate swing extrema as well as endpoints over full cycles', () => {
+    const base = subject(1, 'slot-r3-c01', 0).pose;
+    const shape = box(0.36, 0.04, 0.08);
+    const swing = { type: 'swing' as const, amplitudeRad: Math.PI / 2, periodSec: 2.5 };
+    const bound = mountedBounds(base, swing, shape, true);
+    expect(bound.halfExtents.x).toBeCloseTo(Math.hypot(0.36, 0.08), 10);
+    expect(bound.halfExtents.y).toBeCloseTo(Math.hypot(0.36, 0.04), 10);
+    for (let n = 0; n <= 300; n++) {
+      const current = prizeAabb(shape, mountedPoseForShape(base, swing, shape, n / 60));
+      for (const axis of ['x', 'y', 'z'] as const) {
+        expect(Math.abs(current.center[axis] - bound.center[axis]) + current.halfExtents[axis]).toBeLessThanOrEqual(bound.halfExtents[axis] + 1e-8);
+      }
+    }
   });
 });

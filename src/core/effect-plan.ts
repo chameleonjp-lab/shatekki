@@ -32,6 +32,7 @@ import type {
   RunState,
   RuntimeCatalog,
   TransformIntent,
+  TransformPolicy,
   TuningConfig,
 } from '../contracts';
 import { isExpandedRunState, mintId } from '../contracts';
@@ -42,6 +43,7 @@ import { groupForChoice, nextPendingQuestion } from './questions';
 import { sortPrizesByBoardOrder } from './series';
 
 export interface ExpandedPlanContext {
+  readonly transformPolicy?: TransformPolicy;
   readonly tuning: TuningConfig;
   readonly catalog: RuntimeCatalog;
   readonly layout: BoothLayout;
