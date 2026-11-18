@@ -1,6 +1,6 @@
 # 36枠版の採用候補
 
-確認候補は `expanded-next` / `rules-v2-proposed-r006`。コードの比較対象は `d1d170c`、設定は [next-profile.json](../../data/expansion-v2/next-profile.json)。自動試験の24条件を7版で比較した。[各版の実測表](../qa/post-pr23-balance.md)
+確認候補は `expanded-next` / `rules-v2-proposed-r006`。コードの比較対象は `ad9d804`、設定は [next-profile.json](../../data/expansion-v2/next-profile.json)。自動試験の24条件を7版で比較した。[各版の実測表](../qa/post-pr23-balance.md)
 
 | 項目 | 現行の正式版 | r006の候補設定 | 判断材料と残る確認 | 採用 |
 |---|---|---|---|---|
