@@ -1,0 +1,108 @@
+name: next-preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        description: Prepare a test artifact, publish the candidate, or restore the official site
+        options: [prepare, publish, withdraw]
+        default: prepare
+        required: true
+      source_sha:
+        description: Full SHA of the tested main commit
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pages-main
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && inputs.source_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    outputs:
+      ci-run: ${{ steps.check.outputs.run }}
+      ci-attempt: ${{ steps.check.outputs.attempt }}
+    steps:
+      - uses: actions/github-script@v8
+        id: check
+        with:
+          script: |
+            const { data: main } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (main.commit.sha !== context.sha) throw Error('main moved');
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'ci.yml', branch: 'main', head_sha: context.sha,
+            });
+            const run = data.workflow_runs.find(r => r.head_sha === context.sha &&
+              ['push', 'workflow_dispatch'].includes(r.event) &&
+              r.head_repository?.full_name === context.payload.repository.full_name);
+            if (run?.conclusion !== 'success') throw Error('Expected successful main CI');
+            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+              ...context.repo, run_id: run.id, attempt_number: run.run_attempt, per_page: 100
+            });
+            if (!jobs.jobs.some(j => j.name === 'test' && j.conclusion === 'success')) throw Error('CI gate did not pass');
+            core.setOutput('run', run.id);
+            core.setOutput('attempt', run.run_attempt);
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Assemble and test the actual Pages paths
+        env:
+          PREPARE_MODE: ${{ inputs.operation == 'withdraw' && 'withdraw' || 'prepare' }}
+        run: node scripts/release/prepare-next-preview.mjs "$RUNNER_TEMP/preview-site" "$PREPARE_MODE"
+      - uses: actions/upload-artifact@v4
+        if: inputs.operation == 'prepare'
+        with:
+          name: next-preview-test-site
+          path: ${{ runner.temp }}/preview-site/
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-pages-artifact@v3
+        if: inputs.operation != 'prepare'
+        with:
+          path: ${{ runner.temp }}/preview-site
+          retention-days: 1
+
+  deploy:
+    if: inputs.operation != 'prepare'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      pages: write
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: false
+      - name: Recheck main and its successful CI attempt immediately before deployment
+        uses: actions/github-script@v8
+        env:
+          CI_RUN: ${{ needs.prepare.outputs.ci-run }}
+          CI_ATTEMPT: ${{ needs.prepare.outputs.ci-attempt }}
+        with:
+          script: |
+            const { data: main } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: process.env.CI_RUN });
+            if (main.commit.sha !== context.sha || run.head_sha !== context.sha ||
+                run.status !== 'completed' || run.conclusion !== 'success' ||
+                String(run.run_attempt) !== process.env.CI_ATTEMPT) throw Error('Source changed');
+      - id: deploy
+        uses: actions/deploy-pages@v4

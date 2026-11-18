@@ -4,11 +4,11 @@
  * Only words change per locale: ids, numbers, probabilities and the effect a
  * choice leads to never depend on text. Machine-written, not native-reviewed.
  */
-import effectsJa from '../../data/expansion-v2/effects.json';
-import groupsJa from '../../data/expansion-v2/groups.json';
-import pairsJa from '../../data/expansion-v2/pair-sets.json';
-import questionsJa from '../../data/expansion-v2/questions.json';
-import seriesJa from '../../data/expansion-v2/series.json';
+import effectsJa from '../../data/expansion-v2/effects.json' with { type: 'json' };
+import groupsJa from '../../data/expansion-v2/groups.json' with { type: 'json' };
+import pairsJa from '../../data/expansion-v2/pair-sets.json' with { type: 'json' };
+import questionsJa from '../../data/expansion-v2/questions.json' with { type: 'json' };
+import seriesJa from '../../data/expansion-v2/series.json' with { type: 'json' };
 import { DE_CONTENT } from './expanded/de';
 import { EN_CONTENT } from './expanded/en';
 import { ES_CONTENT } from './expanded/es';

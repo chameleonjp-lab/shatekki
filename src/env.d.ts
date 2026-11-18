@@ -9,3 +9,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_SHATEKKI_BUNDLE?: string;
 }
+
+interface Window {
+  /** Only the separate, opt-in device measurement build emits these counters. */
+  shatekkiMeasureFrame?: (sample: {
+    run: string; shot: number; corks: number; prizes: number; cells: number;
+    paused: boolean; stage: string | null; chain: number;
+  }) => void;
+}

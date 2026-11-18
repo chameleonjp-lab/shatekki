@@ -5,7 +5,7 @@
  * content/<locale>.ts. Those translations are machine-produced by Claude and
  * not reviewed by native speakers (O16, see docs/design/translation-notes.md).
  */
-import candidates from '../../data/catalog-candidates.json';
+import candidates from '../../data/catalog-candidates.json' with { type: 'json' };
 import type { Locale } from './locales';
 import { PRIZE_NAMES_EN, SET_NAMES_EN } from './content-en';
 import { SET_HINTS, HINT_IS_PROTOTYPE } from './hints';
