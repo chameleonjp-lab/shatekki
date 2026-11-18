@@ -76,3 +76,7 @@ r005 は build:placement-trial / preview:placement-trial（4177番）で起動�
 ### S05・S06　r006 の統合プレイ
 
 r006 を試すには build:next / preview:next（4178番）を使います。ゲーム内の固定刻みで今日の屋台を進め、発射と精算の確定通知を画面と音に反映します。
+
+### S07・S08　内部候補の比較
+
+実機用の手順は docs/qa/post-pr23-iphone.md、15言語の画面試験は docs/qa/post-pr23-locales.md にあります。7版×24条件の結果を docs/qa/post-pr23-balance.md で比較できます。
