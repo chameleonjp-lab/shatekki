@@ -136,7 +136,7 @@ describe('r006 reward devices and price tags', () => {
           expect(name).not.toMatch(/^reward\.|^$/);
           expect(names.some(n => n?.startsWith(name)), id + ' ' + locale).toBe(true);
         }
-        expect(names).toContain(tx('reward.name.A2') + ' · ' + tx('cell.used'));
+        expect(names).toContain(tx('reward.name.A2') + ' · ' + tx('reward.device.spent'));
       }
       locale = 'ja';
       const shotId = mintId.shot(1);

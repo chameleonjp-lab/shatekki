@@ -17,6 +17,7 @@ export const TH: Record<UiKey, string> = {
   "save.unreadable": "อ่านบันทึกเก่าบางรายการไม่ได้",
   "save.reload": "โหลดบันทึกล่าสุด",
   "save.memoryNotice": "เกมนี้จะไม่ถูกบันทึกลงในอุปกรณ์นี้",
+  "reward.device.spent": "ใช้โบนัสแล้ว",
   "reward.target.hitCenter": "ยิงโดนกลางเป้า",
   "reward.target.hitOuter": "ยิงโดนวงนอก",
   "app.restore.abandoned": "เกมก่อนหน้าถูกขัดจังหวะระหว่างยิง จึงจะไม่บันทึกผล",

@@ -233,7 +233,7 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
           if (!d.box) continue;
           const s = projectToScreen(camera, d.box.center, size.width, size.height);
           if (!s) continue;
-          const status = d.spent ? ui('cell.used') : '';
+          const status = d.spent ? ui('reward.device.spent') : '';
           const accessibleName = [ui(`reward.name.${d.id}`), d.id === 'A4' ? count : '', status].filter(Boolean).join(' · ');
           const text = d.spent ? (d.id === 'A4' ? `${count} ✓` : '✓') : d.icon;
           rewardLabels.push({ id: `reward:device:${d.id}`, ...s, text, accessibleName, tone: 'badge', color: d.color });

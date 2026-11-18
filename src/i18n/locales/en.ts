@@ -17,6 +17,7 @@ export const EN: Record<UiKey, string> = {
   "save.unreadable": "Some older records could not be read.",
   "save.reload": "Load latest record",
   "save.memoryNotice": "This game will not be saved on this device.",
+  "reward.device.spent": "Bonus already used",
   "reward.target.hitCenter": "Center hit",
   "reward.target.hitOuter": "Outer ring hit",
   "app.restore.abandoned": "The previous game was interrupted during a shot and will not be recorded.",

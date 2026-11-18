@@ -17,6 +17,7 @@ export const ZH_HANT: Record<UiKey, string> = {
   "save.unreadable": "無法讀取部分舊紀錄。",
   "save.reload": "讀取最新紀錄",
   "save.memoryNotice": "這局遊戲不會儲存在此裝置上。",
+  "reward.device.spent": "加成已使用",
   "reward.target.hitCenter": "命中靶心",
   "reward.target.hitOuter": "命中外環",
   "app.restore.abandoned": "上一局在射擊過程中中斷，因此不會記錄該局成績。",

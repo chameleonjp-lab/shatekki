@@ -17,6 +17,7 @@ export const TR: Record<UiKey, string> = {
   "save.unreadable": "Bazı eski kayıtlar okunamadı.",
   "save.reload": "Son kaydı yükle",
   "save.memoryNotice": "Bu oyun cihaza kaydedilmeyecek.",
+  "reward.device.spent": "Bonus kullanıldı",
   "reward.target.hitCenter": "Merkez vuruşu",
   "reward.target.hitOuter": "Dış halka vuruşu",
   "app.restore.abandoned": "Önceki oyun atış sırasında kesildiği için kaydedilmeyecek.",

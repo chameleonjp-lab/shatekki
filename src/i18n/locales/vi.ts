@@ -17,6 +17,7 @@ export const VI: Record<UiKey, string> = {
   "save.unreadable": "Không đọc được một số bản ghi cũ.",
   "save.reload": "Tải bản ghi mới nhất",
   "save.memoryNotice": "Ván này sẽ không được lưu trên thiết bị.",
+  "reward.device.spent": "Đã dùng phần thưởng",
   "reward.target.hitCenter": "Trúng tâm",
   "reward.target.hitOuter": "Trúng vòng ngoài",
   "app.restore.abandoned": "Lượt chơi trước bị gián đoạn khi đang bắn nên sẽ không được ghi lại.",

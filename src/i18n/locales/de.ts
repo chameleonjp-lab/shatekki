@@ -17,6 +17,7 @@ export const DE: Record<UiKey, string> = {
   "save.unreadable": "Einige ältere Einträge konnten nicht gelesen werden.",
   "save.reload": "Neuesten Spielstand laden",
   "save.memoryNotice": "Diese Partie wird auf diesem Gerät nicht gespeichert.",
+  "reward.device.spent": "Bonus bereits genutzt",
   "reward.target.hitCenter": "Mitte getroffen",
   "reward.target.hitOuter": "Außenring getroffen",
   "app.restore.abandoned": "Das vorherige Spiel wurde während eines Schusses unterbrochen und wird nicht gewertet.",

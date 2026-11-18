@@ -20,6 +20,7 @@ export const JA = {
   "save.unreadable": "一部の旧記録を読み取れませんでした。",
   "save.reload": "最新の記録を読む",
   "save.memoryNotice": "この回は端末に記録されません。",
+  "reward.device.spent": "使用済み",
   "reward.target.hitCenter": "中心命中",
   "reward.target.hitOuter": "外周命中",
   "app.restore.abandoned": "前回は撃っている途中で中断されたため、そのプレイは記録されません。",
