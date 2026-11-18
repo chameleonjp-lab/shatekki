@@ -288,7 +288,7 @@ function buildHidden(t: HiddenTargetGeometry, mat: THREE.Material): THREE.Mesh {
  * @param pickInflate collision proxies are grown by this much (the cork radius) so a
  *   ray along the cork centre meets them exactly where the swept sphere would.
  */
-export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
+export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = false): BoothBuild {
   const lit = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
@@ -300,6 +300,19 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0): BoothBuild {
   const hasCells = (layout.backgroundCells?.length ?? 0) > 0;
   for (const s of layout.surfaces) paintSurface(sk, s, hasCells);
   paintSlotPads(sk, layout);
+  if (illustrated) {
+    // Sewn hems on the shelf cloths. One, two and three gold stitches identify
+    // the lantern zones even without colour; the static booth still draws once.
+    const fields = [0x88393b, 0x32615f, 0x374d69];
+    for (const slot of layout.slots) {
+      const zone = Math.min(2, Math.floor(slot.column / 4));
+      const { x, y, z } = slot.spawnBase;
+      sk.box(fields[zone]!, 0.3, DECAL, 0.036, [x, y + DECAL * 1.6, z + 0.093]);
+      for (let stitch = 0; stitch <= zone; stitch++) {
+        sk.box(0xffdf92, 0.013, DECAL, 0.023, [x + (stitch - zone / 2) * 0.024, y + DECAL * 2.6, z + 0.093]);
+      }
+    }
+  }
   // bell cord (hair thin, runs to the ceiling)
   const bell = layout.devices.find((d) => d.kind === 'transform');
   if (bell) {

@@ -14,6 +14,8 @@ export const ZH_HANS: Record<UiKey, string> = {
   "save.unreadable": "部分旧记录无法读取。",
   "save.reload": "读取最新记录",
   "save.memoryNotice": "本局游戏不会保存在此设备上。",
+  "reward.target.hitCenter": "命中靶心",
+  "reward.target.hitOuter": "命中外环",
   "app.restore.abandoned": "上一局在射击过程中中断，因此不会记录该局成绩。",
   "app.restore.ended": "上一局已结束。",
   "app.restore.quarantined": "无法读取保存的游戏。请开始新的一局。",

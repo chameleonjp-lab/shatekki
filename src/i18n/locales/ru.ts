@@ -14,6 +14,8 @@ export const RU: Record<UiKey, string> = {
   "save.unreadable": "Не удалось прочитать некоторые старые записи.",
   "save.reload": "Загрузить последнее сохранение",
   "save.memoryNotice": "Эта игра не будет сохранена на устройстве.",
+  "reward.target.hitCenter": "Попадание в центр",
+  "reward.target.hitOuter": "Попадание во внешнее кольцо",
   "app.restore.abandoned": "Предыдущая игра была прервана во время выстрела и не будет записана.",
   "app.restore.ended": "Предыдущая игра завершена.",
   "app.restore.quarantined": "Не удалось прочитать сохранённую игру. Начните новую игру.",

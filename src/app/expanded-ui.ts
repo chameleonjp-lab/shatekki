@@ -11,3 +11,4 @@ export { expandedLine } from '../i18n/expanded-content';
 export { mountEffectResults, effectResultsModel } from '../ui/effect-results';
 export { mountRewardPanel, momentCue, shotMoment, rewardLine } from '../ui/reward-panel';
 export { bestShotOf } from '../core/rewards';
+export { mountRewardMotions } from '../view/reward-motions';

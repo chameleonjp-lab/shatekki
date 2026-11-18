@@ -34,6 +34,7 @@ interface GainLike extends NodeLike {
   gain: ParamLike;
 }
 interface SourceLike extends NodeLike {
+  onended: (() => void) | null;
   start(t?: number): void;
   stop(t?: number): void;
 }
@@ -212,16 +213,15 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     env.gain.setValueAtTime(0.0001, start);
     env.gain.linearRampToValueAtTime(peak, start + Math.min(0.006, v.dur / 3));
     env.gain.exponentialRampToValueAtTime(0.0001, end);
+    let source: SourceLike;
+    let filter: FilterLike | undefined;
     if (v.kind === 'tone') {
       const o = c.createOscillator();
       o.type = v.wave;
       o.frequency.setValueAtTime(v.f0, start);
       if (v.f1 !== undefined) o.frequency.exponentialRampToValueAtTime(v.f1, end);
       o.connect(env);
-      env.connect(bus);
-      o.start(start);
-      o.stop(end + 0.02);
-      out.push(o);
+      source = o;
     } else {
       const src = c.createBufferSource();
       src.buffer = noise;
@@ -231,11 +231,24 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       if (v.q !== undefined) f.Q.setValueAtTime(v.q, start);
       src.connect(f);
       f.connect(env);
-      env.connect(bus);
-      src.start(start);
-      src.stop(end + 0.02);
-      out.push(src);
+      source = src;
+      filter = f;
     }
+    env.connect(bus);
+    out.push(source);
+    source.onended = () => {
+      source.onended = null;
+      source.disconnect();
+      filter?.disconnect();
+      env.disconnect();
+      out.splice(out.indexOf(source), 1);
+      if (out.length === 0) {
+        bus.disconnect();
+        active = active.filter(a => a.bus !== bus);
+      }
+    };
+    source.start(start);
+    source.stop(end + 0.02);
     return end + 0.02;
   }
 
@@ -305,7 +318,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         let reqs: readonly SoundRequest[];
         if (event.type === 'ui') {
           const cue = (event as UiCueExt).cue;
-          if (cue === 'loadStop' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
+          if (cue === 'loadStop' || cue === 'critLatch' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
           reqs = soundsForUiCue(event as UiCueExt);
         } else {
           reqs = soundsForSimEvent(event);

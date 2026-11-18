@@ -17,6 +17,7 @@ import { createBackgroundCells, type BackgroundCellsView } from './background-ce
 import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec } from './prizes';
 
 export interface SceneGraphDeps {
+  readonly illustratedRewards?: boolean;
   readonly layout: BoothLayout;
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
   /**
@@ -179,7 +180,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1d1424); // dusk indigo; the stall fills the view
   const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
-  const booth = buildBooth(layout, pickInflate);
+  const booth = buildBooth(layout, pickInflate, deps.illustratedRewards);
   scene.add(booth.group, booth.proxies);
   const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
   if (cells) scene.add(cells.group);

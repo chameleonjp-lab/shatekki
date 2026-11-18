@@ -14,6 +14,8 @@ export const ID: Record<UiKey, string> = {
   "save.unreadable": "Sebagian catatan lama tidak dapat dibaca.",
   "save.reload": "Muat catatan terbaru",
   "save.memoryNotice": "Permainan ini tidak akan disimpan di perangkat ini.",
+  "reward.target.hitCenter": "Mengenai pusat sasaran",
+  "reward.target.hitOuter": "Mengenai cincin luar",
   "app.restore.abandoned": "Permainan sebelumnya terhenti saat menembak dan tidak akan dicatat.",
   "app.restore.ended": "Permainan sebelumnya telah berakhir.",
   "app.restore.quarantined": "Permainan tersimpan tidak dapat dibaca. Mulai permainan baru.",
