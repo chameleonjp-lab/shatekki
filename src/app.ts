@@ -388,6 +388,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const onChange = (snap: ControllerSnapshot) => {
     panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
+    if (import.meta.env.VITE_SHATEKKI_PREVIEW_METER === '1') {
+      win.shatekkiMeasureFrame?.({
+        run: snap.state.runId, shot: snap.state.shotsFired,
+        corks: snap.frame.projectiles.length, prizes: snap.frame.prizes.length,
+        cells: snap.view.expansion?.cells.length ?? 0, paused: snap.view.paused,
+        stage: snap.frame.stage, chain: snap.lastSummary?.chainCount ?? 0,
+      });
+    }
     if (expansion) updateExpandedUi(snap);
     if (rewardPanel && rewardCfg) rewardPanel.update(snap.view.expansion?.rewards, { shots: rewardCfg.order.shots, amount: rewardCfg.order.amount });
   };
