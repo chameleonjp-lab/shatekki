@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { seedRng } from '../../src/catalog/rng';
 import { shuffleOnce } from '../../src/core/expanded-run';
 import { LOCALES, translate, type Locale } from '../../src/i18n';
+import { prizeName } from '../../src/i18n/content';
 import { choiceText, groupLabel, questionText } from '../../src/i18n/expanded-content';
 import { restoreBeforeShot } from '../helpers/outcome-checkpoint';
 import { shootShopkeeper } from '../helpers/shoot-shopkeeper';
@@ -32,6 +33,47 @@ function longestPanel(locale: Locale) {
 const candidateUrl = process.env.SHATEKKI_NEXT_TEST_ORIGIN ?? 'http://127.0.0.1:4178';
 test.use({ baseURL: candidateUrl });
 
+test('home updates daily records and occupied souvenir slots when the language changes', async ({ page }) => {
+  const date = '2026-11-18';
+  const version = 'rules-v2-proposed-r006';
+  await page.clock.setFixedTime(new Date(date + 'T12:00:00Z'));
+  await page.goto('/');
+  await expect(page.getByTestId('home-daily-start')).toBeVisible();
+  await page.evaluate(({ date, version }) => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('shatekki.checkpoints');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction(['profiles', 'souvenirs'], 'readwrite');
+      const profiles = tx.objectStore('profiles');
+      const scopeKey = JSON.stringify(['daily', version, date]);
+      profiles.put(1234, JSON.stringify(['best', scopeKey]));
+      profiles.put({ discoveredSets: [], legacyBestScore: 987 }, JSON.stringify(['book', 'daily', version]));
+      tx.objectStore('souvenirs').put([{ typeId: 'P001', runId: 'completed-game' }, null, null], 'shared');
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }), { date, version });
+  await page.reload();
+  await page.getByTestId('home-settings').click();
+  const settings = page.getByRole('dialog');
+  for (const locale of ['en', 'fr', 'ja'] as const) {
+    await settings.locator('select').selectOption(locale);
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    await expect(page.getByTestId('home-daily-start')).toHaveText(translate(locale, 'daily.start'));
+    const daily = page.getByTestId('home-daily');
+    await expect(daily).toContainText(translate(locale, 'daily.note', { date }));
+    await expect(daily).toContainText(translate(locale, 'daily.best', { score: 1234 }));
+    await expect(daily).toContainText(translate(locale, 'save.legacyDailyBest', { score: 987 }));
+    const empty = translate(locale, 'souvenir.empty');
+    await expect(page.getByTestId('home-souvenirs')).toHaveText(
+      `${translate(locale, 'souvenir.title')}: ${prizeName(locale, 'P001')} / ${empty} / ${empty}`,
+    );
+  }
+  await settings.getByRole('button', { name: translate('ja', 'settings.close') }).click();
+  await expect(page.getByTestId('home-start')).toBeEnabled();
+});
+
 for (const locale of LOCALES) {
   test(`${locale}: read the longest question and tap through it on r006`, async ({ page }) => {
     test.setTimeout(90_000);
@@ -59,6 +101,8 @@ for (const locale of LOCALES) {
     await settings.getByRole('button', { name: translate(locale, 'settings.close'), exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.getByTestId('home-start')).toHaveText(translate(locale, 'home.start'));
+    await expect(page.getByTestId('home-daily-start')).toHaveText(translate(locale, 'daily.start'));
+    await expect(page.getByTestId('home-souvenirs')).toContainText(translate(locale, 'souvenir.title'));
     await page.evaluate(() => {
       const put = IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put = function (...args) {

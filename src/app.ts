@@ -906,7 +906,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     setScreen('home');
     setMode('normal');
     const settings = settingsStore.load();
-    screenHandle = mountHome(
+    const home = mountHome(
       screens,
       {
         i18n,
@@ -927,6 +927,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       },
       { nameDraft: nameStore.get() ?? '', selfBest: atomic ? atomic.profile(atomic.scope('normal')).bestScore : normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
     );
+    screenHandle = home;
     // Rewards versions: today's stall (E4) and the souvenir shelf (E3) under the normal start.
     if (hasDaily && dailyProfile) {
       const col = screens.querySelector<HTMLElement>('.scr-home .scr-col');
@@ -939,7 +940,6 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         btn.type = 'button';
         btn.className = 'btn';
         btn.dataset.testid = 'home-daily-start';
-        btn.textContent = expText('daily.start');
         btn.addEventListener('click', () => {
           cue('start');
           void startRun({ name: null, daily: true });
@@ -947,14 +947,29 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         const note = doc.createElement('p');
         note.className = 'note';
         const best = atomic ? atomic.profile(atomic.scope('daily', date)).bestScore : dailyProfile.load().bestScore;
-        note.textContent = `${expText('daily.note', { date })} ${best === null ? '' : expText('daily.best', { score: best })}`.trim();
         const oldBest = atomic?.profile(atomic.scope('daily', date)).legacyBestScore;
-        if (oldBest != null) note.append(' ', i18n.t('save.legacyDailyBest', {score:oldBest}));
         const shelf = doc.createElement('p');
         shelf.className = 'note';
         shelf.dataset.testid = 'home-souvenirs';
         const slots = atomic ? atomic.shelf.slots : souvenirs?.load().slots ?? [];
-        shelf.textContent = `${expText('souvenir.title')}: ${slots.map((s) => (s ? prizeName(i18n.locale, s.typeId) : expText('souvenir.empty'))).join(' / ')}`;
+        const updateLabels = () => {
+          btn.textContent = expText('daily.start');
+          const dailyLines = [expText('daily.note', { date })];
+          if (best !== null) dailyLines.push(expText('daily.best', { score: best }));
+          if (oldBest != null) dailyLines.push(i18n.t('save.legacyDailyBest', { score: oldBest }));
+          note.textContent = dailyLines.join(' ');
+          const names = slots.map(slot => slot ? prizeName(i18n.locale, slot.typeId) : expText('souvenir.empty'));
+          shelf.textContent = `${expText('souvenir.title')}: ${names.join(' / ')}`;
+        };
+        updateLabels();
+        const unsubscribe = i18n.subscribe(updateLabels);
+        screenHandle = {
+          ...home,
+          dispose() {
+            unsubscribe();
+            home.dispose();
+          },
+        };
         sec.append(btn, note, shelf);
         col.appendChild(sec);
       }
