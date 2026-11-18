@@ -260,3 +260,26 @@ it('enters finite fall grace once, then confirms the third shot exactly once', a
     scene.dispose();
   }
 });
+
+it('r006 drops an unapplied penalty at zero before scoring a later hidden-target hit', async () => {
+  const bundle = getGameplayBundle('expanded-next');
+  const scene = await booth(initialBooth());
+  try {
+    const plate = bundle.layout.devices.find(device => device.kind === 'penalty')!.box;
+    const x = bundle.layout.camera.standMinX;
+    const aim = aimAt(bundle, x, { ...plate.center, z: plate.center.z + plate.halfExtents.z }, 'standard');
+    const penalty = scene.fire(x, aim.yaw, aim.pitch).ledger;
+    expect(penalty.nominalPenalty).toBeGreaterThan(0);
+    expect(penalty).toMatchObject({ scoreBefore: 0, scoreAfter: 0, appliedPenalty: 0 });
+    expect(isLedgerEntryConsistent(penalty)).toBe(true);
+
+    const earned = scene.fire(-2.16, -0.1875, 0.24).ledger;
+    expect(earned).toMatchObject({
+      scoreBefore: 0, scoreAfter: bundle.tuning.scoring.hiddenTargetPoints, nominalPenalty: 0,
+    });
+    expect(isLedgerEntryConsistent(earned)).toBe(true);
+    expect(scene.c.current.score).toBe(earned.scoreAfter);
+  } finally {
+    scene.dispose();
+  }
+});
