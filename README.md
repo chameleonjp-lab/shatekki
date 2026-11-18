@@ -1,5 +1,11 @@
 # shatekki — 屋台の射的ゲーム
 
+## 36枠の内部候補を遊ぶ
+
+Node 22 以上で `npm ci`、`npm run build:next`、`npm run preview:next` を順に実行し、http://localhost:4178/ を開きます。ホームの識別子は `rules-v2-proposed-r006` です。公開用9枠と内部候補は独立した回として保存します。
+
+[通常画面と音の比較](docs/qa/visual/README.md) ／ [受入項目ごとの実測結果](docs/qa/post-pr23-evidence.md) ／ [7版の比較](docs/qa/post-pr23-balance.md) ／ [iPhone Safariの確認手順](docs/qa/post-pr23-iphone.md)
+
 ## 36枠版の要件と作業順（2026年11月18日）
 
 仕様・保存・ゲーム処理から屋台と景品の見た目、操作画面、演出、音、翻訳、試験までChatGPTが担当します。公開用の9枠と内部試作の36枠を確認し、残る10項目と実装・確認の順序をまとめました。

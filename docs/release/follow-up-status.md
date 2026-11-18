@@ -1,5 +1,11 @@
 # シャテッキの後続対応状況
 
+## PR #25 後の実装
+
+基準 main は `f70b01b`。提出順は [#26](https://github.com/chameleonjp-lab/shatekki/pull/26)（版の固定）、[#27](https://github.com/chameleonjp-lab/shatekki/pull/27)（保存）、[#28](https://github.com/chameleonjp-lab/shatekki/pull/28)（品替え）、[#29](https://github.com/chameleonjp-lab/shatekki/pull/29)（美術・音）、[#30](https://github.com/chameleonjp-lab/shatekki/pull/30)（日替わり・統合）、[#31](https://github.com/chameleonjp-lab/shatekki/pull/31)（翻訳検証・確認ページ準備・比較）。
+
+[Issue #1](https://github.com/chameleonjp-lab/shatekki/issues/1) と [Issue #2](https://github.com/chameleonjp-lab/shatekki/issues/2) の初期要件・26決定・景品と組の案は [要件](../requirements.md)、[決定履歴](../decision-log.md)、[景品100種](../prize-candidates.md)、[セット100組](../set-candidates.md) に収録した。36枠で追加した組と要件は [D34〜D37の修正書](../changes/2026-11-06-expanded-gameplay-requirements.md) を参照。
+
 ## 2026年11月18日の確認
 
 基準mainは `01ab59242c6ec627e0e5fcb72706c563e6a39c2c`。[PR #24](https://github.com/chameleonjp-lab/shatekki/pull/24)で前回の計画と関連文書4件を取り込んだ。[mainの自動確認](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522405736)は文書対象で成功し、[配信処理](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522454447)はゲームを再配信していない。公開用の設定は9枠、36枠は内部試作である。
