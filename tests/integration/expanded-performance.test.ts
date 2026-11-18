@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { getGameplayBundle } from '../../src/catalog/gameplay-config';
+import { rewardDevicesFor } from '../../src/core/rewards';
 import { createExpandedRun } from '../../src/core/expanded-run';
 import { createShotWorld } from '../../src/sim/world';
 import {
@@ -30,13 +31,13 @@ const T = bundle.tuning;
 const load = { barValue: 0.85, tier: 'perfect' as const, damageMultiplier: 1.5, pushMultiplier: 1.35 };
 const STALL_GUARD_MS = 50;
 
-function directionTo(standX: number, target: Vec3, m: ShotModifiers): Vec3 {
-  const muzzle = muzzlePosition(L, standX);
-  const zero = aimDirection(L, standX, { yaw: 0, pitch: 0 });
+function directionTo(standX: number, target: Vec3, m: ShotModifiers, layout = L, tuning = T): Vec3 {
+  const muzzle = muzzlePosition(layout, standX);
+  const zero = aimDirection(layout, standX, { yaw: 0, pitch: 0 });
   const yaw = Math.atan2(target.x - muzzle.x, -(target.z - muzzle.z)) - Math.atan2(zero.x, -zero.z);
-  const spec = ballisticForModifiers(T, 'standard', m);
+  const spec = ballisticForModifiers(tuning, 'standard', m);
   const yAt = (pitch: number): number => {
-    const path = corkFreeFlightPath(muzzle, aimDirection(L, standX, { yaw, pitch }), spec, 3);
+    const path = corkFreeFlightPath(muzzle, aimDirection(layout, standX, { yaw, pitch }), spec, 3);
     for (let i = 1; i < path.length; i++) {
       if (path[i]!.z <= target.z) {
         const a = path[i - 1]!;
@@ -53,16 +54,20 @@ function directionTo(standX: number, target: Vec3, m: ShotModifiers): Vec3 {
     if (yAt(mid) < target.y) lo = mid;
     else hi = mid;
   }
-  return aimDirection(L, standX, { yaw, pitch: (lo + hi) / 2 });
+  return aimDirection(layout, standX, { yaw, pitch: (lo + hi) / 2 });
 }
 
-async function measure(name: string, standX: number, target: Vec3, modifiers: ShotModifiers) {
-  const world = await createShotWorld(L, bundle.catalog, T);
-  const run = createExpandedRun({ runId: mintId.run(`perf-${name}`), seed: 5, tuning: T, playerName: null }, { ...bundle, expansion: bundle.expansion! });
+async function measure(name: string, standX: number, target: Vec3, modifiers: ShotModifiers, targetBundle = bundle) {
+  const { layout, tuning, catalog, expansion } = targetBundle;
+  const world = await createShotWorld(layout, catalog, tuning, {
+    transformPolicy: targetBundle.behavior?.transformPolicy,
+    rewardDevices: expansion?.profile.rewards ? rewardDevicesFor(expansion.profile.rewards) : undefined,
+  });
+  const run = createExpandedRun({ runId: mintId.run(`perf-${name}`), seed: 5, tuning, playerName: null }, { ...targetBundle, expansion: expansion! });
   world.syncShelf(run.shelf, run.clocks.motionSec);
   const bulletType = modifiers.bulletType ?? 'standard';
   world.fire(
-    { shotId: mintId.shot(1), origin: muzzlePosition(L, standX), direction: directionTo(standX, target, modifiers), load, bulletType },
+    { shotId: mintId.shot(1), origin: muzzlePosition(layout, standX), direction: directionTo(standX, target, modifiers, layout, tuning), load, bulletType },
     { runId: run.runId, chooseTransform: () => null, expanded: { modifiers, usableCells: run.expansion.cells.map((c) => c.cellId) } },
   );
   const stepMs: number[] = [];
@@ -128,4 +133,19 @@ describe('expanded worst-case shot cost (Node, prototype values)', () => {
     }
     expect(results[0]!.maxSimultaneousCorks).toBeGreaterThanOrEqual(3);
   }, 180_000);
+});
+
+
+it('measures the r006 flight ceiling with its single once-per-shot split plate', async () => {
+  const candidate = getGameplayBundle('expanded-next');
+  const plates = candidate.layout.devices.filter(d => d.kind === 'split');
+  expect(plates).toHaveLength(1);
+  expect(candidate.tuning.limits.maxSimultaneousCorks).toBe(8);
+  const split = plates[0]!.box.center;
+  const shot = await measure('r006-three-into-split', candidate.layout.camera.standMinX,
+    { ...split, z: split.z + 0.02 },
+    { ...BASE_SHOT_MODIFIERS, bulletType: 'bouncy', launch: { count: 3, spreadRad: 0.1 } }, candidate);
+  expect(shot.devices.filter(kind => kind === 'split')).toHaveLength(1);
+  expect(shot.maxSimultaneousCorks).toBe(4);
+  expect(shot.finished).toBe(true);
 });
