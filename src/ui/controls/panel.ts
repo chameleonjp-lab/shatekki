@@ -222,18 +222,23 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
   on(pad, 'pointercancel', endDrag);
 
   // Fire: only a press that started on this button while aiming counts.
-  let firePressArmed = false;
+  let firePointerId: number | null = null;
   on(fireBtn, 'pointerdown', (e: PointerEvent) => {
     e.preventDefault();
-    firePressArmed = mode === 'aiming';
+    if (mode === 'aiming' && firePointerId === null && !(e.pointerType === 'touch' && !e.isPrimary)) {
+      firePointerId = e.pointerId ?? 0;
+    }
   });
-  on(fireBtn, 'pointerup', () => {
-    if (firePressArmed && mode === 'aiming') deps.dispatch({ type: 'FIRE' });
-    firePressArmed = false;
+  on(fireBtn, 'pointerup', (e: PointerEvent) => {
+    if (firePointerId !== (e.pointerId ?? 0)) return;
+    firePointerId = null;
+    if (mode === 'aiming') deps.dispatch({ type: 'FIRE' });
   });
-  on(fireBtn, 'pointercancel', () => {
-    firePressArmed = false;
-  });
+  const cancelFire = (e: PointerEvent) => {
+    if (firePointerId === (e.pointerId ?? 0)) firePointerId = null;
+  };
+  on(fireBtn, 'pointercancel', cancelFire);
+  on(fireBtn, 'pointerleave', cancelFire);
   // Keyboard / accessibility path (click without pointer events).
   on(fireBtn, 'click', (e: MouseEvent) => {
     if (e.detail === 0 && mode === 'aiming') deps.dispatch({ type: 'FIRE' });
@@ -260,7 +265,7 @@ export function mountControls(root: HTMLElement, deps: PanelDeps): PanelHandle {
     update(m) {
       if (m.mode !== mode) {
         // Leaving aiming disarms a half-pressed fire; leaving position stops holds.
-        firePressArmed = false;
+        firePointerId = null;
         endHold();
         dragId = null;
       }
