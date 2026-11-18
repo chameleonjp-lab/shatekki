@@ -74,7 +74,12 @@ try {
     await page.goto(origin + candidatePath + 'record-check.html');
     await page.locator('#prepare').click();
     await expect(page.locator('output')).toContainText('控えを作成しました');
-    await open(candidatePath, rulesVersion);
+    await open(candidatePath + '?measure=1', rulesVersion);
+    await page.getByRole('button', { name: '計測結果' }).click();
+    const report = JSON.parse(await page.getByRole('dialog').locator('textarea').inputValue());
+    assert.equal(report.commit, commit);
+    assert.equal(report.rules, rulesVersion);
+    await page.getByRole('dialog').getByRole('button', { name: '閉じる' }).click();
     await start();
     await expect(page.locator('.bm-tile')).toHaveCount(36);
     await page.getByTestId('btn-confirm-position').click();
