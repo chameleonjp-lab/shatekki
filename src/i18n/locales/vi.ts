@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const VI: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Kỷ lục cũ (không rõ ngày): {score} điểm",
+  "save.quota": "Không đủ dung lượng lưu trữ.",
   "save.pending": "Đang lưu…",
   "save.failure": "Không thể lưu ván chơi.",
   "save.blocked": "Hãy đóng thẻ kia rồi thử lại.",

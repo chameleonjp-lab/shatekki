@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANS: Record<UiKey, string> = {
+  "save.legacyDailyBest": "旧记录（日期不详）：{score}分",
+  "save.quota": "存储空间不足。",
   "save.pending": "正在保存…",
   "save.failure": "未能保存本局游戏。",
   "save.blocked": "请关闭另一个标签页后重试。",

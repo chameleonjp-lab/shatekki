@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const RU: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Предыдущий рекорд (дата неизвестна): {score} очк.",
+  "save.quota": "Недостаточно свободного места.",
   "save.pending": "Сохранение…",
   "save.failure": "Не удалось сохранить игру.",
   "save.blocked": "Закройте другую вкладку и попробуйте снова.",

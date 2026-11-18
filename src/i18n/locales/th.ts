@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const TH: Record<UiKey, string> = {
+  "save.legacyDailyBest": "สถิติเดิม (ไม่ทราบวันที่): {score} คะแนน",
+  "save.quota": "พื้นที่จัดเก็บไม่เพียงพอ",
   "save.pending": "กำลังบันทึก…",
   "save.failure": "บันทึกเกมไม่ได้",
   "save.blocked": "ปิดแท็บอื่นแล้วลองอีกครั้ง",

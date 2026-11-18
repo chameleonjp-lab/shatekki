@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const ZH_HANT: Record<UiKey, string> = {
+  "save.legacyDailyBest": "舊紀錄（日期不詳）：{score}分",
+  "save.quota": "儲存空間不足。",
   "save.pending": "正在儲存…",
   "save.failure": "無法儲存這局遊戲。",
   "save.blocked": "請關閉另一個分頁後再試一次。",

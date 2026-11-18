@@ -1,6 +1,8 @@
 import type { UiKey } from './ja';
 
 export const FR: Record<UiKey, string> = {
+  "save.legacyDailyBest": "Ancien record (date inconnue) : {score} points",
+  "save.quota": "L’espace de stockage disponible est insuffisant.",
   "save.pending": "Enregistrement…",
   "save.failure": "Impossible d’enregistrer la partie.",
   "save.blocked": "Fermez l’autre onglet, puis réessayez.",
