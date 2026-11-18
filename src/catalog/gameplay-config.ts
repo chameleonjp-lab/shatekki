@@ -5,7 +5,7 @@
  * 'official-v1' is exactly today's rules-v1 (same object identities).
  * 'expanded-proposed' is the D34-D37 prototype; it is built lazily and cached.
  */
-import type { GameplayBundle, GameplayBundleKey, RewardConfig, RewardId, TuningConfig } from '../contracts';
+import type { GameplayBehavior, GameplayBundle, GameplayBundleKey, RewardConfig, RewardId, TuningConfig } from '../contracts';
 import { REWARD_IDS } from '../contracts';
 import { BOOTH_LAYOUT_V2 } from '../contracts';
 import { BOOTH_LAYOUT } from '../contracts/layout';
@@ -20,11 +20,26 @@ import series from '../../data/expansion-v2/series.json';
 import profile from '../../data/expansion-v2/profile.json';
 import rewardData from '../../data/expansion-v2/rewards.json';
 
+import nextProfiles from '../../data/expansion-v2/next-profile.json';
+
+function isNextProfile(key: ExpandedBundleKey): key is keyof typeof nextProfiles {
+  return Object.hasOwn(nextProfiles, key);
+}
+
+function behaviorFor(key: keyof typeof nextProfiles): GameplayBehavior {
+  const { persistence, transformPolicy, clock, presentation } = nextProfiles[key];
+  if (persistence !== 'atomic' || (transformPolicy !== 'preserve-center' && transformPolicy !== 'preserve-supported-bottom')
+    || (clock !== 'frame' && clock !== 'fixed') || (presentation !== 'confirmed-static' && presentation !== 'confirmed-motions')) {
+    throw new RangeError(`Invalid gameplay profile: ${key}`);
+  }
+  return Object.freeze({ persistence, transformPolicy, clock, presentation });
+}
+
 /** The raw expanded data as shipped in data/expansion-v2. */
 export const EXPANSION_RAW_DATA = { pairSets, questions, groups, effects, series, profile } as const;
 
 /** Internal prototype keys, each an exact build-time value. */
-export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full'] as const;
+export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial'] as const;
 export type ExpandedBundleKey = (typeof EXPANDED_BUNDLE_KEYS)[number];
 
 /**
@@ -43,7 +58,7 @@ export function resolveBundleKey(raw: unknown): GameplayBundleKey {
  */
 function rewardsFor(key: ExpandedBundleKey): { readonly rulesVersion: string; readonly rewards: RewardConfig | null } {
   if (key === 'expanded-proposed') return { rulesVersion: profile.rulesVersion, rewards: null };
-  const v = rewardData.versions[key];
+  const v = rewardData.versions[isNextProfile(key) ? 'expanded-full' : key];
   const enabled = v.enabled.filter((id): id is RewardId => (REWARD_IDS as readonly string[]).includes(id));
   if (enabled.length !== v.enabled.length) throw new RangeError(`rewards.json: unknown reward id in ${key}`);
   const d = rewardData.values;
@@ -60,7 +75,7 @@ function rewardsFor(key: ExpandedBundleKey): { readonly rulesVersion: string; re
     order: Object.freeze({ ...d.order }),
     lanterns: Object.freeze({ amount: d.lanterns.amount, zones: Object.freeze(d.lanterns.zones.map((z) => Object.freeze([z[0]!, z[1]!] as const))) }),
   });
-  return { rulesVersion: v.rulesVersion, rewards };
+  return { rulesVersion: isNextProfile(key) ? nextProfiles[key].rulesVersion : v.rulesVersion, rewards };
 }
 
 const OFFICIAL: GameplayBundle = Object.freeze({
@@ -84,7 +99,7 @@ function buildExpandedBundle(key: ExpandedBundleKey): GameplayBundle {
     shelfSlotCount: expansion.profile.slotCount,
     draw: Object.freeze({ ...RELEASE_TUNING.draw, tierTargets: expansion.profile.tierTargets }),
   });
-  return Object.freeze({ key, catalog, tuning, layout: BOOTH_LAYOUT_V2, expansion });
+  return Object.freeze({ key, behavior: isNextProfile(key) ? behaviorFor(key) : undefined, catalog, tuning, layout: BOOTH_LAYOUT_V2, expansion });
 }
 
 export function getGameplayBundle(key: GameplayBundleKey): GameplayBundle {

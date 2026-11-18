@@ -3,4 +3,7 @@ import { loadBuildSetup } from './app/bundle';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app not found');
-void loadBuildSetup().then(({ bundle, expandedUi }) => createApp(root, window, bundle, expandedUi));
+void loadBuildSetup().then(({ bundle, expandedUi }) => {
+  root.dataset.rulesVersion = bundle.catalog.rulesVersion;
+  return createApp(root, window, bundle, expandedUi);
+});

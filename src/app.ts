@@ -749,7 +749,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         onOpenSetBook: openSetBook,
       },
-      { nameDraft: nameStore.get() ?? '', selfBest: normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rankingAvailable },
+      { nameDraft: nameStore.get() ?? '', selfBest: normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
     );
     // Rewards versions: today's stall (E4) and the souvenir shelf (E3) under the normal start.
     if (hasDaily && dailyProfile) {

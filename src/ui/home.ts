@@ -23,6 +23,7 @@ export interface HomeInput {
   audio: AudioSettings;
   /** True while the game runs on prototype values (never ranked). */
   prototype: boolean;
+  rulesVersion?: string;
   /** False during private/offline publication. Defaults to a configured ranking link. */
   rankingAvailable?: boolean;
 }
@@ -92,7 +93,7 @@ export function homeViewModel(input: HomeInput, links: PublicLinks, locale: Loca
       note: rankingAvailable && links.labDetailUrl === null ? t('home.ranking.soon') : null,
     },
     shareText: buildHomeShareText(locale, links.canonicalUrl),
-    prototypeNotice: input.prototype ? t('prototype') : null,
+    prototypeNotice: input.prototype ? [t('prototype'), input.rulesVersion].filter(Boolean).join(' · ') : null,
     howto: { title: t('howto.title'), steps: HOWTO_KEYS.map((k) => t(k)), closeLabel: t('howto.close') },
   };
 }
