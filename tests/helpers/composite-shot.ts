@@ -58,4 +58,3 @@ export function buildState(bundle: GameplayBundle, s: Setup): ExpandedRunState {
   expect(isAmmoBalanced(state, INITIAL)).toBe(true);
   return state;
 }
-

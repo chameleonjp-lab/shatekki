@@ -56,4 +56,3 @@ export async function shootShopkeeper(page: Page) {
   await fire.dispatchEvent('pointerdown');
   await fire.dispatchEvent('pointerup');
 }
-
