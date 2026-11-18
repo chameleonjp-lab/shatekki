@@ -8,8 +8,11 @@ import { createMemoryRunRepository } from '../../src/persistence/indexed-run-rep
 import { collectLegacyProfile } from '../../src/persistence/legacy-import';
 import { FakeStorage } from './fake-storage';
 
-const bundle = getGameplayBundle('expanded-full');
-const initial = createExpandedRun({ runId: mintId.run('repository-spec'), seed: 731, tuning: bundle.tuning, playerName: null }, { ...bundle, expansion: bundle.expansion! });
+const bundle = getGameplayBundle('expanded-save-trial');
+const initial = createExpandedRun(
+  { runId: mintId.run('repository-spec'), seed: 731, tuning: bundle.tuning, playerName: null },
+  { ...bundle, expansion: bundle.expansion! },
+);
 const scope: RunScope = { mode: 'normal', rulesVersion: initial.rulesVersion };
 function saved(reply: SaveReply) {
   if (!reply.ok) throw Error(reply.reason);
@@ -19,7 +22,12 @@ function saved(reply: SaveReply) {
 it('checks receipts before revisions and returns the latest record after loss of a reply', async () => {
   const repo = createMemoryRunRepository('one');
   const first = saved(await repo.start(scope, initial, null)).record;
-  const confirm = { operationId: 'position-1', expected: first.token, state: { ...initial, phase: 'loading' as const }, gameTick: 10 };
+  const confirm = {
+    operationId: 'position-1',
+    expected: first.token,
+    state: { ...initial, phase: 'loading' as const },
+    gameTick: 10,
+  };
   const second = saved(await repo.saveCommand(confirm));
   const third = saved(await repo.claim(scope, second.record.token, 'resumeStable'));
   const replay = saved(await repo.saveCommand(confirm));
@@ -48,15 +56,36 @@ it('only starts the next game with the token of the explicitly closed terminal r
 it('reads only raw legacy keys, preserving broken records and separating the two books', () => {
   const storage = new FakeStorage();
   storage.setItem('shatekki.profile.v1', '{broken');
-  storage.setItem('shatekki.profile.v2', JSON.stringify({schemaVersion: 2, bestScores: {old: 100}, legacyBestScore: 21, discoveredSets: ['S001','PAIR001','PAIR999']}));
-  storage.setItem('shatekki.profile.v1.daily', JSON.stringify({schemaVersion: 1, bestScore: 50, discoveredSets: ['S002']}));
+  storage.setItem(
+    'shatekki.profile.v2',
+    JSON.stringify({
+      schemaVersion: 2,
+      bestScores: { old: 100 },
+      legacyBestScore: 21,
+      discoveredSets: ['S001', 'PAIR001', 'PAIR999'],
+    }),
+  );
+  storage.setItem(
+    'shatekki.profile.v1.daily',
+    JSON.stringify({ schemaVersion: 1, bestScore: 50, discoveredSets: ['S002'] }),
+  );
   const known = new Set(bundle.catalog.sets.keys());
   const before = [...storage.data];
   const normal = collectLegacyProfile(scope, storage, known);
   expect(normal.unreadable).toEqual(['shatekki.profile.v1']);
-  expect(normal.discoveredSets).toEqual(['S001','PAIR001']);
-  const daily = collectLegacyProfile({ ...scope, mode:'daily', startedDateJst:'2026-11-18' }, storage, known);
+  expect(normal.discoveredSets).toEqual(['S001', 'PAIR001']);
+  const daily = collectLegacyProfile({ ...scope, mode: 'daily', startedDateJst: '2026-11-18' }, storage, known);
   expect(daily.discoveredSets).toEqual(['S002']);
   expect(daily.legacyBestScore).toBe(50);
   expect([...storage.data]).toEqual(before);
+});
+
+it('rejects a damaged expanded candidate without changing the saved record', async () => {
+  const repo = createMemoryRunRepository('writer', bundle);
+  const record = saved(await repo.start(scope, initial, null)).record;
+  const damaged = { ...initial, score: 123, phase: 'loading' as const };
+  expect(
+    await repo.saveCommand({ expected: record.token, operationId: 'confirm', gameTick: 1, state: damaged }),
+  ).toEqual({ ok: false, reason: 'invalid' });
+  expect(await repo.read(scope)).toEqual(record);
 });
