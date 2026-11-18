@@ -1,4 +1,6 @@
-# ChatGPT・Claude 間の申し送り規約（敵対的検証反映版）
+# 旧体制の記録　ChatGPT・Claude間の申し送り規約
+
+2026年11月18日からは、ChatGPTが美術・演出・音も引き受け、同じ担当で実装と試験を進める。現在の着手順・統合・提出の窓口は[実装計画書](../superpowers/plans/2026-11-18-integrated-implementation.md)に記載した。以下の規約は当時の申し送りを読むための記録である。
 
 2026-11-06／1.1。正本は[要件](../requirements.md)と[決定記録](../decision-log.md)。[実装計画](../superpowers/plans/2026-11-06-shatekki-claude-code.md)と[検証結果](../reviews/2026-11-06-plan-adversarial-review.md)も参照する。
 

@@ -1,6 +1,6 @@
 # シャテッキ：PR #23後の残作業を完了する実装計画
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax. 担当と実行方法は既存の申し送り規約を優先する。
+> **2026年11月18日更新**　見た目を含む全工程の担当はChatGPT。現在の要件・実行順・合格条件は[統合要件仕様書](../../changes/2026-11-18-integrated-requirements.md)と[実装計画書](2026-11-18-integrated-implementation.md)を使う。この文書は保存・品替え・時計などの技術設計と11月14日時点の記録として参照する。
 
 **Goal:** 残作業10項目を、保存・品替え・演出の実装、再現可能な検証、正式化の判断まで追跡できる工程にする。
 
@@ -161,7 +161,7 @@ P1の小札→袋、P3の実際に得たコルク→弾入れ、P5の刻み合�
 
 ## 3. 工程と単独所有
 
-仕様・保存・統合済みの判定修正はChatGPT、美術・演出・音はClaude、共有型・起点・CIの統合は既存規約の統括が単独で担当する。希望モデルと実際に使えるモデルを区別し、無断でClaudeの担当モデルを変更しない。この文書PRではChatGPTが文書だけを編集する。
+11月14日時点では仕様・保存と美術・演出・音を別の担当に分けていた。11月18日以降はChatGPTが共有型・起点・自動確認を含めて統合し、各工程の実装と見た目の確認を進める。
 
 実装の順序：S00→S01→S02。S03はS00後に並行できる。S04はS02の確定通知が決まってから、S05はS02後、S06はS02〜S05の統合後。S07の翻訳確認は並行可、実機の最終記録は統合後。S08→S09。S10は工程ごとに更新する。同じsrc/app.ts・contracts・world.tsを複数担当が同時に編集しない。
 

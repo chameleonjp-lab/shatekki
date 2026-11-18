@@ -1,6 +1,12 @@
 # シャテッキの後続対応状況
 
-## 2026年11月14日の確認
+## 2026年11月18日の確認
+
+基準mainは `01ab59242c6ec627e0e5fcb72706c563e6a39c2c`。[PR #24](https://github.com/chameleonjp-lab/shatekki/pull/24)で前回の計画と関連文書4件を取り込んだ。[mainの自動確認](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522405736)は文書対象で成功し、[配信処理](https://github.com/chameleonjp-lab/shatekki/actions/runs/43522454447)はゲームを再配信していない。公開用の設定は9枠、36枠は内部試作である。
+
+ChatGPTが見た目・操作・演出・音から保存・統合・翻訳まで担当する。残る10項目と合格条件は[統合要件仕様書](../changes/2026-11-18-integrated-requirements.md)、作業と確認の順序は[実装計画書](../superpowers/plans/2026-11-18-integrated-implementation.md)、初稿で見つけた課題は[検証記録](../reviews/2026-11-18-integrated-plan-review.md)を参照する。
+
+## 2026年11月14日時点の確認
 
 基準main：6591d96f300ec4e16b45d58e56a793d407413a9a。PR #23までマージ済み、確認時点で開いているPRは0件。これは今回の計画PRを作成する前の状態です。
 

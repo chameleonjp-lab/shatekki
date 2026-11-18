@@ -1,6 +1,12 @@
 # shatekki — 屋台の射的ゲーム
 
-## PR #23後の残作業（2026年11月14日）
+## 36枠版の要件と作業順（2026年11月18日）
+
+仕様・保存・ゲーム処理から屋台と景品の見た目、操作画面、演出、音、翻訳、試験までChatGPTが担当します。公開用の9枠と内部試作の36枠を確認し、残る10項目と実装・確認の順序をまとめました。
+
+[統合要件仕様書](docs/changes/2026-11-18-integrated-requirements.md) ／ [実装計画書](docs/superpowers/plans/2026-11-18-integrated-implementation.md) ／ [初稿の検証と反映記録](docs/reviews/2026-11-18-integrated-plan-review.md)
+
+## PR #23後の残作業（2026年11月14日時点）
 
 [残作業10項目の実装計画](docs/superpowers/plans/2026-11-14-post-pr23-completion.md)と[敵対的検証・反映記録](docs/reviews/2026-11-14-post-pr23-completion-review.md)を参照してください。保存の一括確定、品替えの底補正、演出の仕上げ、日替わりと不足試験、実機・翻訳・バランス確認、正式化の順に進めます。
 
@@ -35,7 +41,7 @@ PR #23までの追加機能は内部試作です。公開用は9枠のofficial-v
 
 ## 進め方
 
-Claudeは初期実装と美術・演出・音、ChatGPTは要件管理と統合後の不具合修正を担当します。[CLAUDE.md](CLAUDE.md)・[申し送り規約](docs/handoff/protocol.md)に従い、今回の回答は[Claude宛の申し送り](docs/handoff/to-claude/2026-11-06-post-merge-followups.md)に記録しています。投稿と相手の受領は別に扱います。
+ChatGPTがゲームと見た目を一緒に実装し、共有コードの統合、提出後の不具合・競合の修正も受け持ちます。文面が固まった後に15言語を仕上げます。実機記録と試遊結果をもとに、利用者が正式値・公開を判断します。
 
 変更は専用ブランチからmainへのPRで提出し、マージは利用者が行います。GitHub Actionsは変更範囲に応じた確認を行い、[Pagesの定義](.github/workflows/pages.yml)では最新mainの同じ成功CI実行にビルド成果物がある場合、それを配信へ渡します。文書だけの変更でビルドを省略した場合は再配信しません。データベース登録はこの仕組みに含みません。
 
