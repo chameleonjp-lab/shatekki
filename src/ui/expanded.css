@@ -223,7 +223,7 @@
 .rwd-prize-name { font-size: 10px; line-height: 1.2; text-align: center; }
 .rwd-portrait { display: block; width: 32px; height: 32px; background-image: url('../view/assets/prize-atlas.webp'); background-size: 1000% 1000%; background-repeat: no-repeat; }
 .rwd-card[data-static='true'] .rwd-headline { animation: none; }
-.rwd-motion-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
+.ui-layer > .rwd-motion-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
 .rwd-motion {
   position: absolute; left: 14px; bottom: clamp(146px, 25dvh, 225px);
   width: 72px; height: 55px; pointer-events: none;
@@ -250,3 +250,4 @@
 @keyframes reward-drop { from { transform: translate(calc(34px + var(--spread)), -34px) rotate(15deg); opacity: 0; } 20% { opacity: 1; } to { transform: translate(0,12px) rotate(-4deg) scale(.6); opacity: 0; } }
 @keyframes reward-seal { from { transform: scale(1.7) rotate(-20deg); } to { transform: scale(1) rotate(-6deg); } }
 @media (prefers-reduced-motion: reduce) { .rwd-motion { display: none; } }
+.rwd-close { width: 100%; min-height: 36px; margin-top: 4px; border: 1px solid #bb9566; border-radius: 6px; background: #4d3329; color: #fff5e1; font: inherit; }
