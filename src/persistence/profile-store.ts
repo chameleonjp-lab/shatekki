@@ -146,7 +146,7 @@ export interface SettingsStore {
   status(): StoreStatus;
 }
 
-export function createSettingsStore(storage: KeyValueStorage, now: () => string = () => new Date().toISOString()): SettingsStore {
+export function createSettingsStore(storage: KeyValueStorage, now: () => string = () => new Date().toISOString(), quarantineInvalid = true): SettingsStore {
   let memory: Settings = DEFAULT_SETTINGS;
   let available = true;
   let lastError: string | null = null;
@@ -171,7 +171,7 @@ export function createSettingsStore(storage: KeyValueStorage, now: () => string 
     } catch {
       /* quarantined below */
     }
-    quarantine(storage, { atIso: now(), key: STORAGE_KEYS.settings, reason: 'invalid-settings', raw });
+    if (quarantineInvalid) quarantine(storage, { atIso: now(), key: STORAGE_KEYS.settings, reason: 'invalid-settings', raw });
     return memory;
   }
 

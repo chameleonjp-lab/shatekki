@@ -168,7 +168,11 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // ------------------------------------------------------------ stores
   const storage = browserStorage(win);
   const atomic = bundle.behavior?.persistence === 'atomic'
-    ? new AtomicGame(() => win.indexedDB, newRunId(win), catalog.rulesVersion, storage, new Set(catalog.sets.keys()))
+    ? new AtomicGame(() => win.indexedDB, newRunId(win), bundle, storage, () => {
+        session = null;
+        clearEngine();
+        savePrompt('save.blocked', () => void loadAtomic());
+      })
     : null;
   root.dataset.rulesVersion = catalog.rulesVersion;
   let session: PersistedSession | null = null;
@@ -195,9 +199,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     modeStorage = m === 'daily' ? dailyStorage : storage;
   };
   const souvenirs = hasDaily ? createSouvenirStore(storage) : null;
-  const settingsStore = createSettingsStore(storage);
+  const settingsStore = createSettingsStore(storage, undefined, !atomic);
   const nameStore = createPlayerNameStore(storage);
-  const ranking = createRankingService({ storage });
+  const ranking = createRankingService({ storage: atomic ? null : storage });
   const links = publicLinks();
   // The expanded prototype is never ranked (prototype values, internal builds only).
   const rankingAvailable = RANKING_CONFIG.gameSlug !== null && expansion === null;
@@ -233,8 +237,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // created/resumed from a user gesture; failures never stop the game.
   const audio = createAudioEngine();
   let audioSettings: AudioSettings = settingsStore.load().audio;
-  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) =>
-    audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) => {
+    if (!atomic || reasons.length === 0) audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
+  };
   const unlockAudio = () => void audio.unlock().catch(() => undefined);
   root.addEventListener('pointerdown', unlockAudio, { capture: true });
   root.addEventListener('keydown', unlockAudio, { capture: true });
@@ -425,7 +430,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (disposed) return;
     const dt = lastTs ? (ts - lastTs) / 1000 : 0;
     lastTs = ts;
-    if (screen === 'game') controller?.frame(dt);
+    if (screen === 'game' && (!atomic || recovery.hidden)) controller?.frame(dt);
     raf = win.requestAnimationFrame(loop);
   };
 
@@ -454,7 +459,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   };
 
   const uiCommand = (cmd: GameCommand): boolean | Promise<boolean> => {
-    if (markStale() || !controller) return false;
+    if (markStale() || !controller || (atomic && !recovery.hidden)) return false;
     if (session) return controller.dispatchPersisted(cmd).then(status => status === 'applied');
     const accepted = controller.dispatch(cmd);
     if (accepted) playAcceptedCue(cmd);
@@ -656,7 +661,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         onCommandApplied: (cmd, s) => {
           if (atomic) {
-            playAcceptedCue(cmd);
+            if (s.pauseReasons.every(reason => reason === 'manual')) playAcceptedCue(cmd);
             return;
           }
           // ORDER (A9): the answer is part of the run, so a reload before the first shot keeps it.
@@ -715,6 +720,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const savePrompt = (key: UiKey, retry?: () => void, conflict = false) => {
     recovery.replaceChildren();
     recovery.hidden = false;
+    root.dataset.saving = key;
     ui.inert = screens.inert = resumeBox.inert = true;
     panel?.cancelGestures();
     const message = doc.createElement('p');
@@ -742,6 +748,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   const clearEngine = () => {
     controller = null;
+    audio.silence();
     renderer?.dispose();
     renderer = null;
     world?.dispose();
@@ -750,6 +757,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   const dismissPrompt = () => {
     recovery.hidden = true;
+    delete root.dataset.saving;
     ui.inert = screens.inert = resumeBox.inert = false;
     lastTs = 0;
   };
@@ -757,7 +765,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const saveError = (error: unknown, retry: () => void) => {
     const reason = (error as {reason?: string} | null)?.reason;
     if (reason === 'conflict' || reason === 'invalid') savePrompt('save.conflict', () => void loadAtomic(), true);
-    else savePrompt(reason === 'blocked' ? 'save.blocked' : 'save.failure', retry);
+    else if (reason === 'blocked') savePrompt('save.blocked', retry);
+    else savePrompt(reason === 'quota' ? 'save.quota' : 'save.failure', retry);
   };
 
   const saveStatus = (current: PersistedSession) => {
@@ -921,6 +930,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         note.className = 'note';
         const best = atomic ? atomic.profile(atomic.scope('daily', date)).bestScore : dailyProfile.load().bestScore;
         note.textContent = `${expText('daily.note', { date })} ${best === null ? '' : expText('daily.best', { score: best })}`.trim();
+        const oldBest = atomic?.profile(atomic.scope('daily', date)).legacyBestScore;
+        if (oldBest != null) note.append(' ', i18n.t('save.legacyDailyBest', {score:oldBest}));
         const shelf = doc.createElement('p');
         shelf.className = 'note';
         shelf.dataset.testid = 'home-souvenirs';
@@ -1075,9 +1086,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       if (record.result) { showSavedRecord(record); return; }
       if (abandon) {
         const next = CORE_RULES.reduceGame(record.state,{type:'ABANDON'}, {catalog,tuning,layout,expansion});
-        const reply = await atomic.repo.saveCommand({expected:record.token, state:next, operationId:record.state.runId + '/abandon', gameTick:record.gameTick});
-        if (!reply.ok) throw Object.assign(new Error(reply.reason), {reason:reply.reason});
-        showSavedRecord(reply.record);
+        session = new PersistedSession(atomic.repo, record, saveStatus);
+        await session.command(next, record.state.runId + '/abandon', record.gameTick, reply => showSavedRecord(reply.record));
       } else await startRun({name:null, resume:record.state});
     } catch (error) { saveError(error, () => { dismissPrompt(); void resumeAtomic(abandon); }); }
   };
@@ -1137,6 +1147,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     currentPauseReasons: () => reasons,
     dispose() {
       disposed = true;
+      atomic?.repo?.close();
       win.cancelAnimationFrame(raf);
       win.removeEventListener('resize', onResize);
       win.removeEventListener('orientationchange', onResize);
