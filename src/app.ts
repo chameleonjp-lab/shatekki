@@ -489,6 +489,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
       case 'FIRE':
         return cue('fire');
+      // r007: the gauge opens and closes (no heartbeat or sway sounds exist in this candidate)
+      case 'OPEN_GAUGE':
+        return cue('loadStart');
+      case 'CANCEL_GAUGE':
+        return cue('cancel');
+      case 'CHOOSE_SHOPKEEPER_TALK':
+        return undefined;
       case 'PAUSE':
         audio.silence();
         return cue('cancel');

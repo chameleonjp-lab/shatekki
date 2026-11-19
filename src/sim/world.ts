@@ -174,7 +174,7 @@ interface ActiveShot {
   seesaw: PrizeInstanceId[];
   /** Layout v3: first contact per target in order (for the shot's facts), and corks that left. */
   contactLog: { readonly key: string; readonly contact: RepresentativeContact; readonly order: number }[];
-  exits: { readonly reason: ProjectileEndReason; readonly position: Vec3; readonly velocity: Vec3 }[];
+  exits: { readonly reason: ProjectileEndReason; readonly position: Vec3; readonly velocity: Vec3; readonly generation: number; readonly index: number }[];
 }
 
 interface PendingRequest {
@@ -517,7 +517,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (p.ended) return;
     p.ended = true;
     if (reason === 'reflectionLimit' || reason === 'timeLimit') a.endedByLimit = true;
-    if (reason !== 'split') a.exits.push({ reason, position: p.position, velocity: p.velocity });
+    if (reason !== 'split') a.exits.push({ reason, position: p.position, velocity: p.velocity, generation: p.generation, index: Number(p.id.slice(p.id.lastIndexOf('-c') + 2)) });
     emit((eventId, shotId) => ({ type: 'projectileEnded', eventId, shotId, projectileId: p.id, reason, position: p.position }));
   };
 
@@ -680,7 +680,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
 
   /** Where the first cork (in launch order) of a shot with no contact went. */
   const exitOf = (a: ActiveShot): ShotExit => {
-    const e = a.exits[0];
+    // The original cork first, then its children in their stable order (never the order they happened to end).
+    const e = [...a.exits].sort((x, y) => x.generation - y.generation || x.index - y.index)[0];
     if (!e) return 'unknown';
     if (e.reason === 'timeLimit') return 'time';
     if (e.reason !== 'outOfBounds') return 'unknown';

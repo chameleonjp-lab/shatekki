@@ -213,6 +213,8 @@ test('a normal shot at the hat: 30 points, +1 cork, one question, then the resul
   await shot(page, info, '08-hat-aim');
   await shoot(page);
   await expect(page.getByTestId('shopkeeper-question')).toBeVisible({ timeout: 20_000 });
+  // the question closes any speech bubble and none starts while it is open
+  await expect(page.getByTestId('shopkeeper-speech')).toBeHidden();
   await shot(page, info, '09-hat-question');
   await page.getByTestId('shopq-choice-A').click();
   await settle(page);
@@ -247,4 +249,27 @@ test('a normal shot at the fan face: one fan contact, a question, and the card n
   await shot(page, info, '12-fan-card');
   const last = (await record(page)).lastSummary!;
   expect(last.touchedFirstHitTargets).toContain('shopkeeper:fan');
+});
+
+test('today\'s stall (daily) uses the same aim-first rules, its own record, and resumes after a reload', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await page.goto('/?e2e=1');
+  await page.getByTestId('home-daily-start').click();
+  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
+  const r0 = await record(page);
+  expect(r0.scope.mode).toBe('daily');
+  expect(r0.state.rulesVersion).toBe('rules-v2-proposed-r007');
+  await page.locator('.rwd-order button').nth(1).click();
+  await page.getByTestId('btn-right').tap();
+  await expect.poll(async () => (await savedAim(page)).x).toBeCloseTo(0.14, 5);
+  await shoot(page);
+  await settle(page);
+  await shot(page, info, '13-daily');
+  await page.reload();
+  await page.getByTestId('btn-resume-run').click();
+  await page.getByTestId('btn-resume').click();
+  const s = (await record(page)).state;
+  expect(s.phase).toBe('aiming');
+  expect(s.shotsFired).toBe(1);
+  expect(s.standX).toBeCloseTo(0.14, 5);
 });

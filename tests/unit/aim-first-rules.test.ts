@@ -189,6 +189,17 @@ describe('r007 power-zone width', () => {
   });
 });
 
+describe('r007 power-zone width with the FX037/038 bar speed', () => {
+  it('a slower bar (period ×1.15) and a wider zone (×1.25) both apply to the same press', () => {
+    const s0 = run();
+    const s = { ...s0, expansion: { ...s0.expansion, next: { modifiers: { ...BASE_SHOT_MODIFIERS, loadPeriodMult: 1.15, powerZoneWidthMult: 1.25 }, hint: null } } };
+    // with period 1.4 × 1.15 the bar reaches 0.79 at 0.79/2 × 1.61 s; 0.79 is perfect only with the wider zone
+    const fired = send(tick(send(s, { type: 'OPEN_GAUGE' }), (0.79 / 2) * 1.4 * 1.15), { type: 'FIRE' });
+    expect(fired.load?.barValue).toBeCloseTo(0.79, 2);
+    expect(fired.load?.tier).toBe('perfect');
+  });
+});
+
 describe('r007 talk (店主と話す)', () => {
   it('hint: once per run, changes no ammo, score, shot count or random stream', () => {
     const s = run();

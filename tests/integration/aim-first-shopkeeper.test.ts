@@ -266,6 +266,15 @@ describe('4b: one shot, every part once, in a fixed order', () => {
     expect(state.ammo).toBeGreaterThanOrEqual(1);
   });
 
+  it('the last cork on the hat and the feet: ammo is 0 in the middle, yet the +1 and the 1.25 zone both survive to the next shot', () => {
+    const s = inFlight(fixedRun(16, { ammo: 1, shotsFired: 9 }));
+    expect(s.ammo).toBe(0);
+    const { state, summary } = settleWith(s, ['hat', 'feet'], ['shopkeeper:hat', 'shopkeeper:feet'], 'A', forcing('FX001'));
+    expect(summary.runEnded).toBe(false);
+    expect(summary.parts!.find((p) => p.part === 'feet')).toMatchObject({ powerZoneWidthMult: 1.25, reason: null });
+    expect(powerZoneWidthFor(state)).toBe(1.25);
+  });
+
   it('at the cap the hat still scores but gives +0 with the reason; with no cork left the run ends after the answer', () => {
     const capped = fixedRun(12, { ammo: 1, shotsFired: 19, bonusAmmoTotal: 10 });
     const s = inFlight(capped);
