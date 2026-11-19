@@ -121,7 +121,9 @@ export type UiCue =
         // Rewards (plan P1/P3): prizes won in one shot (count), and continuing from the last cork.
         | 'takeTier' | 'lastShotContinue'
         // P5: a metal latch at the same moment as the perfect-load sound.
-        | 'critLatch' | 'windChime';
+        | 'critLatch' | 'windChime'
+        /** r007: the shopkeeper's speech bubble appeared. */
+        | 'speech';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */

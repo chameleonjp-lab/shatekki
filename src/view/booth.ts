@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import type { Box3, BoothLayout, DeviceGeometry, HiddenTargetGeometry, StaticSurface } from '../contracts';
 import { Kit, ROT_X, mergeParts, type V3 } from './assets/kit';
 import { C } from './assets/prize-recipes';
-import { buildShopkeeper } from './shopkeeper';
+import { buildShopkeeper, buildShopkeeperV3 } from './shopkeeper';
 
 const PI = Math.PI;
 const DECAL = 0.002;
@@ -341,7 +341,8 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
     hidden.set(t.targetId, m);
     group.add(m);
   }
-  const keeper = buildShopkeeper(layout.shopkeeper, lit);
+  // Layout v3 (r007): the humanoid shopkeeper with the fan and tray panels of the layout.
+  const keeper = layout.reflectors ? buildShopkeeperV3(layout.shopkeeper, layout.reflectors, lit) : buildShopkeeper(layout.shopkeeper, lit);
   group.add(keeper.group);
 
   const proxies = new THREE.Group();
@@ -360,6 +361,19 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
   for (const p of layout.shopkeeper) addProxy(`shopkeeper-${p.part}`, p.box);
   for (const t of layout.hiddenTargets) addProxy(t.targetId, t.box);
   for (const c of layout.backgroundCells ?? []) addProxy(c.cellId, c.box);
+  // Oriented panels (fan, tray): the reticle ray meets them where the cork would.
+  for (const r of layout.reflectors ?? []) {
+    const sx = r.halfExtents.x * 2;
+    const sy = r.halfExtents.y * 2;
+    const sz = r.halfExtents.z * 2;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx + 2 * pickInflate, sy + 2 * pickInflate, sz + 2 * pickInflate), proxyMat);
+    m.userData = { size: [sx, sy, sz] };
+    m.position.set(r.center.x, r.center.y, r.center.z);
+    m.quaternion.set(r.rotation.x, r.rotation.y, r.rotation.z, r.rotation.w);
+    m.name = r.part ? `proxy:shopkeeper-${r.part}` : `proxy:reflector-${r.reflectorId}`;
+    m.updateMatrixWorld(true);
+    proxies.add(m);
+  }
 
   // warm dusk lighting
   const hemi = new THREE.HemisphereLight(0xffe2b8, 0x5a3a30, 1.6);

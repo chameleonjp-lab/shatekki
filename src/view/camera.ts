@@ -15,6 +15,11 @@ export interface CameraPose {
   readonly fovDeg: number;
 }
 
+/** r007: share of the aim the camera turns with, and the horizontal view (degrees). */
+export const V3_YAW_FOLLOW = 0.85;
+export const V3_PITCH_FOLLOW = 0.5;
+export const V3_HORIZONTAL_FOV_DEG = 44;
+
 /** Share of the stand offset the camera looks toward (0 = always shelf centre line, 1 = straight ahead). */
 const LOOK_FOLLOW = 0.6;
 
@@ -24,8 +29,23 @@ const LOOK_FOLLOW = 0.6;
  * picture agree. 34 degrees of horizontal view shows about three and a half
  * columns of the middle board (0.42 m pitch) whatever the phone's aspect.
  */
-export function cameraPose(layout: BoothLayout, standX: number, aspect: number): CameraPose {
+export function cameraPose(layout: BoothLayout, standX: number, aspect: number, aim?: { readonly yaw: number; readonly pitch: number }): CameraPose {
   const mid = layout.tiers[1]!;
+  if (layout.slotModel === 'v3-36') {
+    // r007: the view turns with the player's own aim input only (never sway, power or effects):
+    // the full yaw, so a side wall comes into view when aimed at, and part of the pitch.
+    const eye = { x: standX, y: layout.camera.eye.y, z: layout.camera.eye.z };
+    const base = { x: 0, y: mid.topY + 0.03 - eye.y, z: mid.centerZ - eye.z };
+    const dist = Math.hypot(base.x, base.y, base.z);
+    const yaw = (aim?.yaw ?? 0) * V3_YAW_FOLLOW;
+    const pitch = Math.atan2(base.y, Math.hypot(base.x, base.z)) + (aim?.pitch ?? 0) * V3_PITCH_FOLLOW;
+    const cp = Math.cos(pitch);
+    return {
+      eye,
+      target: { x: eye.x + Math.sin(yaw) * cp * dist, y: eye.y + Math.sin(pitch) * dist, z: eye.z - Math.cos(yaw) * cp * dist },
+      fovDeg: fovForAspect(aspect, V3_HORIZONTAL_FOV_DEG),
+    };
+  }
   if (layout.slotModel === 'v2-36') {
     return {
       eye: { x: standX, y: layout.camera.eye.y, z: layout.camera.eye.z },
