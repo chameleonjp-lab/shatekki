@@ -1,5 +1,9 @@
 # shatekki — 屋台の射的ゲーム
 
+## 照準から始める36枠版の次期設計（2026年11月19日）
+
+[要件と採用案](docs/changes/2026-11-19-aim-first-stall-requirements.md)・[描写仕様](docs/design/2026-11-19-aim-first-stall-art.md)・[店主の台詞100種](docs/design/2026-11-19-shopkeeper-lines.md)・[実装計画](docs/superpowers/plans/2026-11-19-aim-first-stall.md)。左右ボタンで動き、狙いを決めてから威力を選んで撃つ。100枚の効果マス、当たった位置の粒、セット成立の得点札を次期内部候補の工程に含めた。[検証で反映した変更](docs/reviews/2026-11-19-aim-first-stall-review.md)
+
 ## 36枠の内部候補を遊ぶ
 
 Node 22 以上で `npm ci`、`npm run build:next`、`npm run preview:next` を順に実行し、http://localhost:4178/ を開きます。ホームの識別子は `rules-v2-proposed-r006` です。公開用9枠と内部候補は独立した回として保存します。
