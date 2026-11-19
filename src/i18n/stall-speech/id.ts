@@ -39,6 +39,11 @@ export const AF_ID: AfLocaleContent = {
     'exp.fx.FX012.r007.name': 'Kekuatan lebih mudah', 'exp.fx.FX013.r007.name': 'Kekuatan jauh lebih mudah', 'exp.fx.FX035.r007.name': 'Kekuatan agak sulit', 'exp.fx.FX036.r007.name': 'Kekuatan lebih sulit',
     'exp.fx.FX012.r007.result': 'Zona kekuatan tembakan berikut 1,25 kali lebih lebar', 'exp.fx.FX013.r007.result': 'Zona kekuatan tembakan berikut 1,5 kali lebih lebar',
     'exp.fx.FX035.r007.result': 'Zona kekuatan tembakan berikut menjadi 0,85 kali', 'exp.fx.FX036.r007.result': 'Zona kekuatan tembakan berikut menjadi 0,7 kali',
+    'af.howto.1': 'Bergerak ke kiri dan kanan dengan ◀▶. Tahan untuk terus bergerak.',
+    'af.howto.2': 'Geser bingkai di bawah untuk membidik. Bidikan tidak bergoyang.',
+    'af.howto.3': '“Tembak” memunculkan bilah kekuatan. Tombol yang sama, “Lepas”, menembakkan satu gabus.',
+    'af.howto.4': 'Jatuhkan hadiah sampai tempat pengambilan untuk mendapatkannya. Mulai dengan 10 gabus, bisa tambah hingga 10.',
+    'af.howto.5': 'Kumpulkan 2 atau 3 jenis hadiah untuk melengkapi set. Buku koleksi memberi petunjuk.',
   },
   lines: [
     'Selamat datang. Lihat-lihat kalau ada hadiah yang menarik.', 'Raknya penuh. Mau mulai dari mana?', 'Kalau matahari terbenam, merah lampionnya indah sekali.',

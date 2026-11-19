@@ -76,7 +76,9 @@ function panel() {
   const sent: Record<string, unknown>[] = [];
   let x = 0;
   const commits = vi.fn();
+  const reverts = vi.fn();
   const h = mountAimFirstControls(e.root as unknown as HTMLElement, {
+    revertAim: reverts,
     dispatch: (c) => {
       sent.push(c as Record<string, unknown>);
       if ((c as { type: string }).type === 'SET_POSITION') x = (c as { x: number }).x;
@@ -92,7 +94,7 @@ function panel() {
   });
   h.update(snap('aiming'), false);
   const el = (id: string) => (e.root as unknown as FakeElement).byTestId(id);
-  return { ...e, h, sent, commits, el, x: () => x, setX: (v: number) => (x = v) };
+  return { ...e, h, sent, commits, reverts, el, x: () => x, setX: (v: number) => (x = v) };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -122,11 +124,11 @@ describe('r007 controls: move, aim, 撃つ → 発射', () => {
     vi.advanceTimersByTime(300);
     p.win.run(4000);
     expect(p.x()).toBe(-2.65);
-    p.el('btn-left').dispatch('pointercancel', { pointerId: 3 });
+    p.el('btn-left').dispatch('pointerup', { pointerId: 3 });
     expect(p.commits).toHaveBeenCalledTimes(2);
   });
 
-  it('a second finger, a blur and hiding the page never leave a hold running', () => {
+  it('a second finger, a blur and hiding the page never leave a hold running, and drop it without saving', () => {
     const p = panel();
     p.el('btn-right').dispatch('pointerdown', { pointerId: 1 });
     p.el('btn-left').dispatch('pointerdown', { pointerId: 2 }); // ignored: one gesture at a time
@@ -135,7 +137,42 @@ describe('r007 controls: move, aim, 撃つ → 発射', () => {
     p.win.run(1000);
     expect(p.x()).toBe(0);
     expect(p.sent.filter((c) => c.type === 'SET_POSITION')).toEqual([]);
+    expect(p.commits).not.toHaveBeenCalled();
+    expect(p.reverts).toHaveBeenCalledTimes(1);
+  });
+
+  it('03: an interrupted glide or drag (cancel, early capture loss, pause) is dropped, never saved; a normal release saves once', () => {
+    const p = panel();
+    // glide then the browser cancels the pointer
+    p.el('btn-right').dispatch('pointerdown', { pointerId: 1 });
+    vi.advanceTimersByTime(300);
+    p.win.run(500);
+    p.el('btn-right').dispatch('pointercancel', { pointerId: 1 });
+    expect(p.reverts).toHaveBeenCalledTimes(1);
+    // a drag whose capture is lost before the release
+    const pad = p.el('aim-pad');
+    pad.dispatch('pointerdown', { pointerId: 2, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 2, clientX: 40, clientY: 0 });
+    pad.dispatch('lostpointercapture', { pointerId: 2 });
+    expect(p.reverts).toHaveBeenCalledTimes(2);
+    // a drag interrupted by the pause button
+    pad.dispatch('pointerdown', { pointerId: 3, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 3, clientX: 40, clientY: 0 });
+    p.el('btn-pause').dispatch('click');
+    expect(p.reverts).toHaveBeenCalledTimes(3);
+    expect(p.commits).not.toHaveBeenCalled();
+    // a normal release saves once; the capture loss that follows it changes nothing
+    pad.dispatch('pointerdown', { pointerId: 4, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 4, clientX: 40, clientY: 0 });
+    pad.dispatch('pointerup', { pointerId: 4 });
+    pad.dispatch('lostpointercapture', { pointerId: 4 });
     expect(p.commits).toHaveBeenCalledTimes(1);
+    expect(p.reverts).toHaveBeenCalledTimes(3);
+    p.el('btn-left').dispatch('pointerdown', { pointerId: 5 });
+    p.el('btn-left').dispatch('pointerup', { pointerId: 5 });
+    p.el('btn-left').dispatch('lostpointercapture', { pointerId: 5 });
+    expect(p.commits).toHaveBeenCalledTimes(2);
+    expect(p.reverts).toHaveBeenCalledTimes(3);
   });
 
   it('the first press opens the gauge; it must be released before a new press fires; key repeat never fires', () => {

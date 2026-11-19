@@ -110,6 +110,8 @@ type StaticTarget =
 type Target = StaticTarget | { readonly t: 'prize'; readonly id: PrizeInstanceId };
 
 const SURFACE_FRICTION: Readonly<Record<SurfaceMaterial, number>> = { wood: 0.5, cloth: 0.8, paper: 0.6, metal: 0.35, plastic: 0.45 };
+/** Layout v3: the surfaces whose reflection readies the A2 chime (walls and shelf boards). */
+const CHIME_REFLECTORS = /^(left-wall|right-wall|back-wall|shelf-\d+)$/;
 /** Falling = moving down faster than this (m/s). */
 const FALL_SPEED = 0.4;
 const NEAR_EDGE_M = 0.04;
@@ -607,7 +609,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
     // A2: a real reflection off a wall, a board or a back-wall cell (a continuing contact is not one).
-    if (!continuing && (target.t === 'surface' || target.t === 'cell')) p.chimeReady = true;
+    // r007 (layout v3) counts only the walls, the boards and the cells: the ceiling, the floor, the counter
+    // and the tray's stand are not "a wall, a board or a cell" (requirements A2). r006 keeps its rule.
+    if (!continuing && (target.t === 'cell' || (target.t === 'surface' && (!facedCells || CHIME_REFLECTORS.test(target.id))))) p.chimeReady = true;
     // A4: a cork that went into the slot stays in the bank.
     if (target.t === 'rewardPiggy' && !continuing) {
       endProjectile(a, p, 'stopped');

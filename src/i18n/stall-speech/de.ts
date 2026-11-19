@@ -39,6 +39,11 @@ export const AF_DE: AfLocaleContent = {
     'exp.fx.FX012.r007.name': 'Leichtere Kraft', 'exp.fx.FX013.r007.name': 'Viel leichtere Kraft', 'exp.fx.FX035.r007.name': 'Etwas schwerere Kraft', 'exp.fx.FX036.r007.name': 'Schwerere Kraft',
     'exp.fx.FX012.r007.result': 'Die Kraftzonen des nächsten Schusses sind 1,25-mal so breit', 'exp.fx.FX013.r007.result': 'Die Kraftzonen des nächsten Schusses sind 1,5-mal so breit',
     'exp.fx.FX035.r007.result': 'Die Kraftzonen des nächsten Schusses sind 0,85-mal so breit', 'exp.fx.FX036.r007.result': 'Die Kraftzonen des nächsten Schusses sind 0,7-mal so breit',
+    'af.howto.1': 'Mit ◀▶ nach links und rechts. Gedrückt halten zum Weitergehen.',
+    'af.howto.2': 'Im Rahmen unten ziehen, um zu zielen. Das Ziel wackelt nicht.',
+    'af.howto.3': '„Schießen“ zeigt den Kraftbalken. Derselbe Knopf, jetzt „Abfeuern“, schießt einen Korken.',
+    'af.howto.4': 'Wirf einen Preis bis zur Sammelstelle, um ihn zu gewinnen. Du startest mit 10 Korken, bis zu 10 kommen dazu.',
+    'af.howto.5': 'Sammle 2 oder 3 Sorten, um ein Set zu vervollständigen. Das Sammelbuch hilft.',
   },
   lines: [
     'Willkommen. Schau ruhig, ob dir etwas gefällt.', 'Die Regale sind voll. Womit fangen wir an?', 'Wenn die Sonne untergeht, leuchten die roten Laternen so schön.',

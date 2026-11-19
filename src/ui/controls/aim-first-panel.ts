@@ -21,6 +21,8 @@ export interface AimFirstPanelDeps {
   dispatch(command: unknown): boolean | Promise<boolean>;
   /** Save the finished move/aim (r007 numbered save). */
   commitAim(): void;
+  /** Drop the interrupted move/aim: back to the last position and aim whose save succeeded. */
+  revertAim(): void;
   currentAim(): AimAngles;
   currentStandX(): number;
   onRetry(): void;
@@ -166,8 +168,12 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     }
     raf = win.requestAnimationFrame(glide);
   };
-  /** End the hold. `asTap`: released before the hold delay, so the one step is added now. */
-  const endHold = (asTap: boolean) => {
+  /**
+   * End the hold. `asTap`: released before the hold delay, so the one step is added now.
+   * `interrupted`: cancelled, capture lost, blur, hidden, rotated or paused: nothing of this
+   * gesture is kept (the last saved position comes back) and nothing is saved.
+   */
+  const endHold = (asTap: boolean, interrupted = false) => {
     if (holdDir === 0) return;
     const dir = holdDir;
     const wasGliding = gliding;
@@ -177,6 +183,10 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     holdTimer = null;
     win.cancelAnimationFrame(raf);
     if (gesture?.kind === 'move') gesture = null;
+    if (interrupted) {
+      deps.revertAim();
+      return;
+    }
     if (asTap && !wasGliding && canMove()) void deps.dispatch({ type: 'SET_POSITION', x: clampX(deps.currentStandX() + dir * deps.move.step) });
     deps.commitAim();
   };
@@ -201,7 +211,8 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     });
     for (const type of ['pointercancel', 'lostpointercapture']) {
       on(b, type, (e: PointerEvent) => {
-        if (gesture?.kind === 'move' && gesture.pointerId === e.pointerId) endHold(false);
+        // after a normal release the gesture is already over, so a late capture loss changes nothing
+        if (gesture?.kind === 'move' && gesture.pointerId === e.pointerId) endHold(false, true);
       });
     }
     // keyboard: one step per press, never the auto-repeat
@@ -213,13 +224,9 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       }
     });
   }
-  on(win, 'blur', () => endHold(false));
+  on(win, 'blur', () => interruptGestures());
   on(doc, 'visibilitychange', () => {
-    if (doc.visibilityState === 'hidden') {
-      endHold(false);
-      endDrag();
-      gesture = null;
-    }
+    if (doc.visibilityState === 'hidden') interruptGestures();
   });
 
   // ---- aim pad (relative drag)
@@ -246,13 +253,25 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     const a = deps.currentAim();
     void deps.dispatch({ type: 'AIM', yaw: a.yaw + dx * AIM_SENSITIVITY, pitch: a.pitch - dy * AIM_SENSITIVITY });
   });
-  const endDrag = (e?: PointerEvent) => {
+  const endDrag = (e?: PointerEvent, interrupted = false) => {
     if (gesture?.kind !== 'aim' || (e && gesture.pointerId !== e.pointerId)) return;
     gesture = null;
-    if (dragged) deps.commitAim();
+    const moved = dragged;
     dragged = false;
+    if (interrupted) {
+      if (moved) deps.revertAim();
+    } else if (moved) deps.commitAim();
   };
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) on(pad, type, (e: PointerEvent) => endDrag(e));
+  on(pad, 'pointerup', (e: PointerEvent) => endDrag(e));
+  // a cancelled pointer or a capture lost before the release drops the drag
+  on(pad, 'pointercancel', (e: PointerEvent) => endDrag(e, true));
+  on(pad, 'lostpointercapture', (e: PointerEvent) => endDrag(e, true));
+  /** Drop whatever move or drag is under way (blur, hidden, rotation, pause, a panel opening). */
+  function interruptGestures(): void {
+    endHold(false, true);
+    endDrag(undefined, true);
+    gesture = null;
+  }
 
   // ---- 撃つ / 発射 on press; the opening press must be released first
   let openedBy: number | null = null;
@@ -290,17 +309,15 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
   on(skipBtn, 'click', () => void deps.dispatch({ type: 'SKIP_PRESENTATION' }));
   on(resumeBtn, 'click', () => void deps.dispatch({ type: 'RESUME', reason: 'manual' }));
   on(pauseBtn, 'click', () => {
-    endHold(false);
+    interruptGestures();
     void deps.dispatch({ type: 'PAUSE', reason: 'manual' });
   });
   on(retryBtn, 'click', () => deps.onRetry());
   on(panel, 'touchmove', (e: TouchEvent) => e.preventDefault(), { passive: false });
 
-  /** End held moves and drags (saved once). `keepPress`: the press that opened the gauge is still down. */
+  /** Drop held moves and drags (never saved). `keepPress`: the press that opened the gauge is still down. */
   const cancelGestures = (keepPress = false) => {
-    endHold(false);
-    endDrag();
-    gesture = null;
+    interruptGestures();
     if (!keepPress) openedBy = null;
   };
 
@@ -312,7 +329,7 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       const paused = snap.view.paused;
       const next = paused && s.phase !== 'ended' && s.phase !== 'abandoned' ? 'paused' : s.phase;
       if (next !== mode) {
-        // leaving aiming ends any held move or drag (and saves it)
+        // leaving aiming (pause, rotation, a question) drops any held move or drag
         if (mode === 'aiming') cancelGestures(next === 'loading');
         if (next !== 'loading') openedBy = null;
       }

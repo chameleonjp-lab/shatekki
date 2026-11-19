@@ -26,6 +26,8 @@ export interface HomeInput {
   rulesVersion?: string;
   /** False during private/offline publication. Defaults to a configured ranking link. */
   rankingAvailable?: boolean;
+  /** A version with other controls (r007) gives its own steps; absent = the shared rules-v1 steps. */
+  howtoSteps?: (locale: Locale) => readonly string[];
 }
 
 export interface HomeViewModel {
@@ -94,7 +96,7 @@ export function homeViewModel(input: HomeInput, links: PublicLinks, locale: Loca
     },
     shareText: buildHomeShareText(locale, links.canonicalUrl),
     prototypeNotice: input.prototype ? [t('prototype'), input.rulesVersion].filter(Boolean).join(' · ') : null,
-    howto: { title: t('howto.title'), steps: HOWTO_KEYS.map((k) => t(k)), closeLabel: t('howto.close') },
+    howto: { title: t('howto.title'), steps: input.howtoSteps ? input.howtoSteps(locale) : HOWTO_KEYS.map((k) => t(k)), closeLabel: t('howto.close') },
   };
 }
 

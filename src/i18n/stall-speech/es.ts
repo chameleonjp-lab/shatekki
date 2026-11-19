@@ -39,6 +39,11 @@ export const AF_ES: AfLocaleContent = {
     'exp.fx.FX012.r007.name': 'Fuerza más fácil', 'exp.fx.FX013.r007.name': 'Fuerza mucho más fácil', 'exp.fx.FX035.r007.name': 'Fuerza algo más difícil', 'exp.fx.FX036.r007.name': 'Fuerza más difícil',
     'exp.fx.FX012.r007.result': 'Las zonas de fuerza del próximo tiro son 1,25 veces más anchas', 'exp.fx.FX013.r007.result': 'Las zonas de fuerza del próximo tiro son 1,5 veces más anchas',
     'exp.fx.FX035.r007.result': 'Las zonas de fuerza del próximo tiro miden 0,85 veces', 'exp.fx.FX036.r007.result': 'Las zonas de fuerza del próximo tiro miden 0,7 veces',
+    'af.howto.1': 'Muévete con ◀▶. Mantén pulsado para seguir.',
+    'af.howto.2': 'Arrastra el marco de abajo para apuntar. La mira no se mueve sola.',
+    'af.howto.3': '«Disparar» muestra la barra de fuerza. Pulsa el mismo botón, «Fuego», para lanzar un corcho.',
+    'af.howto.4': 'Haz caer un premio hasta la zona de recogida para ganarlo. Empiezas con 10 corchos y puedes sumar hasta 10 más.',
+    'af.howto.5': 'Reúne 2 o 3 tipos de premios para completar un set. El álbum da pistas.',
   },
   lines: [
     'Bienvenido. Mira si algo te llama la atención.', 'Los estantes están llenos. ¿Por dónde empezamos?', 'Cuando se pone el sol, el rojo de los farolillos queda precioso.',

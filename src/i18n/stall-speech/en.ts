@@ -91,6 +91,11 @@ export const AF_EN: AfLocaleContent = {
     'exp.fx.FX013.r007.result': 'Your next shot’s power zones are 1.5× wider',
     'exp.fx.FX035.r007.result': 'Your next shot’s power zones are 0.85× as wide',
     'exp.fx.FX036.r007.result': 'Your next shot’s power zones are 0.7× as wide',
+    'af.howto.1': 'Move left and right with ◀▶. Hold to keep moving.',
+    'af.howto.2': 'Drag the frame below to aim. The sight never sways.',
+    'af.howto.3': '"Shoot" shows the power gauge. Press the same button, now "Fire", to fire one cork.',
+    'af.howto.4': 'Knock a prize down to the pickup spot to win it. You start with 10 corks and can gain up to 10 more.',
+    'af.howto.5': 'Collect 2 or 3 kinds of prizes to complete a set. The set book gives hints.',
   },
   lines: [
     'Welcome. Take a look if anything catches your eye.',

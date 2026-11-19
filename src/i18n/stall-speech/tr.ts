@@ -39,6 +39,11 @@ export const AF_TR: AfLocaleContent = {
     'exp.fx.FX012.r007.name': 'Daha kolay güç', 'exp.fx.FX013.r007.name': 'Çok daha kolay güç', 'exp.fx.FX035.r007.name': 'Biraz daha zor güç', 'exp.fx.FX036.r007.name': 'Daha zor güç',
     'exp.fx.FX012.r007.result': 'Sonraki atışın güç bölgeleri 1,25 kat genişler', 'exp.fx.FX013.r007.result': 'Sonraki atışın güç bölgeleri 1,5 kat genişler',
     'exp.fx.FX035.r007.result': 'Sonraki atışın güç bölgeleri 0,85 katına iner', 'exp.fx.FX036.r007.result': 'Sonraki atışın güç bölgeleri 0,7 katına iner',
+    'af.howto.1': '◀▶ ile sola sağa gidin. Basılı tutunca devam eder.',
+    'af.howto.2': 'Nişan için alttaki çerçevede kaydırın. Nişangâh sallanmaz.',
+    'af.howto.3': '“Ateş” güç çubuğunu açar. Aynı düğme, “Fırlat”, bir mantar atar.',
+    'af.howto.4': 'Ödülü toplama yerine düşürünce kazanırsınız. 10 mantarla başlar, en çok 10 tane daha alırsınız.',
+    'af.howto.5': '2 ya da 3 tür ödül toplayınca set tamamlanır. Koleksiyon defteri ipucu verir.',
   },
   lines: [
     'Hoş geldin. Gözüne bir şey çarparsa bak.', 'Raflar dolu. Nereden başlayalım?', 'Güneş batınca fenerlerin kırmızısı çok güzel oluyor.',

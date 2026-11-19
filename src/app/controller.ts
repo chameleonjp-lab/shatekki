@@ -270,6 +270,19 @@ export class GameController {
     });
   }
 
+  /**
+   * r007: an interrupted move or drag is dropped: the position and aim go back to the last
+   * ones whose save succeeded (nothing is written). Without a session, the state is kept.
+   */
+  revertAim(): void {
+    const s = this.state;
+    const saved = this.deps.session?.record.state;
+    if (!isAimFirstState(s) || s.phase !== 'aiming' || !saved || saved.phase !== 'aiming') return;
+    if (saved.standX === s.standX && saved.aim.yaw === s.aim.yaw && saved.aim.pitch === s.aim.pitch) return;
+    this.state = { ...s, standX: saved.standX, aim: saved.aim };
+    this.emit();
+  }
+
   private replay(record: PersistedRecord): void {
     this.state = record.state;
     this.lastSummary = record.lastSummary;

@@ -76,6 +76,31 @@ describe('工程1: aim, move and fire are saved as the plan says', () => {
     world.dispose();
   });
 
+  it('03: an interrupted move/drag goes back to the last saved aim; a saved one is never undone; a failed save is retried as the same operation', async () => {
+    const { repo, session, c, world } = await setup();
+    await c.dispatchPersisted({ type: 'SET_POSITION', x: 1.0 });
+    expect(await c.commitAim()).toBe('applied');
+    // an interrupted glide and drag
+    await c.dispatchPersisted({ type: 'SET_POSITION', x: 2.0 });
+    await c.dispatchPersisted({ type: 'AIM', yaw: 0.3, pitch: 0.2 });
+    c.revertAim();
+    expect(c.current).toMatchObject({ standX: 1.0, aim: { yaw: 0, pitch: 0 } });
+    // after a successful save, a late revert (capture loss after the release, a redraw) changes nothing
+    await c.dispatchPersisted({ type: 'AIM', yaw: 0.1, pitch: 0 });
+    expect(await c.commitAim()).toBe('applied');
+    c.revertAim();
+    expect(c.current.aim).toEqual({ yaw: 0.1, pitch: 0 });
+    // a failed save keeps the screen as moved; the retry writes the same operation, and a reload reads it
+    await c.dispatchPersisted({ type: 'SET_POSITION', x: -0.5 });
+    const save = vi.spyOn(repo, 'saveCommand').mockResolvedValueOnce({ ok: false, reason: 'quota' });
+    expect(await c.commitAim()).toBe('retryable');
+    expect(await session.retry()).toBe('applied');
+    expect(save.mock.calls[0]).toEqual(save.mock.calls[1]);
+    const claimed = await repo.claim(SCOPE, session.record.token, 'resumeStable');
+    expect(claimed.ok && claimed.record.state).toMatchObject({ standX: -0.5, aim: { yaw: 0.1, pitch: 0 } });
+    world.dispose();
+  });
+
   it('opening and cancelling the gauge are not saved; a reload with the gauge open comes back aiming', async () => {
     const { repo, session, c, world } = await setup();
     const save = vi.spyOn(repo, 'saveCommand');

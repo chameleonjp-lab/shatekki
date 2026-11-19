@@ -39,6 +39,11 @@ export const AF_IT: AfLocaleContent = {
     'exp.fx.FX012.r007.name': 'Forza più facile', 'exp.fx.FX013.r007.name': 'Forza molto più facile', 'exp.fx.FX035.r007.name': 'Forza un po’ più difficile', 'exp.fx.FX036.r007.name': 'Forza più difficile',
     'exp.fx.FX012.r007.result': 'Le zone di forza del prossimo tiro sono 1,25 volte più larghe', 'exp.fx.FX013.r007.result': 'Le zone di forza del prossimo tiro sono 1,5 volte più larghe',
     'exp.fx.FX035.r007.result': 'Le zone di forza del prossimo tiro sono larghe 0,85 volte', 'exp.fx.FX036.r007.result': 'Le zone di forza del prossimo tiro sono larghe 0,7 volte',
+    'af.howto.1': 'Muoviti con ◀▶. Tieni premuto per continuare.',
+    'af.howto.2': 'Trascina nel riquadro sotto per mirare. La mira non trema.',
+    'af.howto.3': '«Tira» mostra la barra della forza. Lo stesso tasto, «Fuoco», spara un tappo.',
+    'af.howto.4': 'Fai cadere un premio fino al punto di raccolta per vincerlo. Si parte con 10 tappi e se ne aggiungono fino a 10.',
+    'af.howto.5': 'Raccogli 2 o 3 tipi di premi per completare un set. L’album dà indizi.',
   },
   lines: [
     'Benvenuto. Dai un’occhiata se qualcosa ti piace.', 'Gli scaffali sono pieni. Da dove cominciamo?', 'Al tramonto il rosso delle lanterne è bellissimo.',

@@ -68,6 +68,9 @@ import { normalizePlayerName } from './ranking/name';
 import { createAudioEngine, effectCueFor } from './audio';
 import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
+/** Commands still taken while the r007 talk panel is open. */
+const TALK_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['CHOOSE_SHOPKEEPER_TALK', 'PAUSE', 'RESUME']);
+
 export interface AppHandle {
   readonly root: HTMLElement;
   currentPauseReasons(): readonly PauseReason[];
@@ -417,8 +420,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const uiText = (k: string, p?: Readonly<Record<string, string | number>>) => (k in UI_KEYS ? i18n.t(k as UiKey, p) : k);
   const baseExpText = expandedUi ? expandedUi.createExpansionTranslator(() => i18n.locale, uiText) : uiText;
   // r007 words (af.*, the four r007 effect names) come from their own table; everything else as before.
-  const expText = (k: string, p?: Readonly<Record<string, string | number>>): string =>
-    aimFirstCfg && expandedUi && expandedUi.isAfKey(k) ? expandedUi.afText(i18n.locale, k, p) : baseExpText(k, p);
+  // r007: its own words, and FX012/013/035/036 read as power-zone effects everywhere (card, result, 3D labels).
+  const expText = expandedUi ? expandedUi.aimFirstTranslator(() => i18n.locale, baseExpText, expansion) : baseExpText;
 
   const updateExpandedUi = (snap: ControllerSnapshot) => {
     const ex = snap.view.expansion;
@@ -508,6 +511,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   const uiCommand = (cmd: GameCommand): boolean | Promise<boolean> => {
     if (markStale() || !controller || (atomic && !recovery.hidden)) return false;
+    // r007: while the talk panel is open nothing behind it acts, however the input arrives
+    // (a pointer, Tab + Enter, a glide frame or a release that comes late).
+    if (talkPanel?.isOpen && !TALK_COMMANDS.has(cmd.type)) return false;
     if (session) return controller.dispatchPersisted(cmd).then(status => status === 'applied');
     const accepted = controller.dispatch(cmd);
     if (accepted) playAcceptedCue(cmd);
@@ -526,12 +532,16 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     afPanel = kit.mountAimFirstControls(ui, {
       dispatch: (cmd) => uiCommand(cmd as GameCommand),
       commitAim: () => void controller?.commitAim(),
+      revertAim: () => controller?.revertAim(),
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
       onRetry: () => void leaveResult(true),
       onTalk: () => {
-        const talk = controller?.viewState().aimFirst?.talk;
-        if (talk) talkPanel?.open(talk);
+        // only from a stable aim: not while a save is running, the gauge is open or the stage is paused
+        const c = controller;
+        const talk = c?.viewState().aimFirst?.talk;
+        if (!c || !talk || c.persistencePending || c.current.phase !== 'aiming' || reasons.length > 0) return;
+        talkPanel?.open(talk);
       },
       t: (k, p) => (kit.isAfKey(k) ? kit.afText(i18n.locale, k, p) : t(k)),
       move: { step: aimFirstCfg!.moveStep, holdDelayMs: aimFirstCfg!.holdDelayMs, holdSpeed: aimFirstCfg!.holdSpeed, min: layout.camera.standMinX, max: layout.camera.standMaxX },
@@ -546,6 +556,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       },
       describe: (o) => talkText(o),
       onOpenChange: (open) => {
+        // the controls cannot be focused or pressed behind the panel; closing gives them back
+        ui.inert = open || !recovery.hidden;
         if (open) {
           afPanel?.cancelGestures();
           speech?.hide();
@@ -922,6 +934,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     recovery.hidden = true;
     delete root.dataset.saving;
     ui.inert = screens.inert = resumeBox.inert = false;
+    if (talkPanel?.isOpen) ui.inert = true;
     lastTs = 0;
   };
 
@@ -1078,7 +1091,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         onOpenSetBook: openSetBook,
       },
-      { nameDraft: nameStore.get() ?? '', selfBest: atomic ? atomic.profile(atomic.scope('normal')).bestScore : normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
+      { ...(aimFirstCfg && expandedUi ? { howtoSteps: (loc: typeof i18n.locale) => [1, 2, 3, 4, 5].map((n) => expandedUi.afText(loc, `af.howto.${n}` as never)) } : {}), nameDraft: nameStore.get() ?? '', selfBest: atomic ? atomic.profile(atomic.scope('normal')).bestScore : normalProfile.load().bestScore, audio: settings.audio, prototype: isPrototype, rulesVersion: catalog.rulesVersion, rankingAvailable },
     );
     screenHandle = home;
     // Rewards versions: today's stall (E4) and the souvenir shelf (E3) under the normal start.
