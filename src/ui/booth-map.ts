@@ -32,6 +32,8 @@ export interface MapModel {
   readonly columns: number;
   /** Row-major (row 1 first), columns left to right. */
   readonly cells: readonly MapCell[];
+  /** Layout v3 only: '?' and '✓' counts of the side walls and the outer back band. */
+  readonly walls?: readonly WallSummary[];
   /** Columns (1-based, inclusive) the camera shows now; fractions are of the full width. */
   readonly view: { readonly fromColumn: number; readonly toColumn: number; readonly left: number; readonly width: number };
   readonly prizeCount: number;
@@ -108,7 +110,23 @@ export function boothMapModel(input: MapInput): MapModel {
   const r = Math.max(0, Math.min(1, (maxX - edgeL) / total));
   const fromColumn = Math.max(1, Math.min(columns, Math.floor(l * columns + 1e-9) + 1));
   const toColumn = Math.max(fromColumn, Math.min(columns, Math.ceil(r * columns - 1e-9)));
-  return { rows: 3, columns, cells, view: { fromColumn, toColumn, left: l, width: Math.max(0, r - l) }, prizeCount: occupied.size, usedCount };
+  // Layout v3 (r007): the 64 cells outside the 3×12 slots, summed per wall (left / outer back band / right).
+  const walls: WallSummary[] = [];
+  if ((layout.backgroundCells ?? []).some((c) => c.face !== undefined)) {
+    for (const wall of ['left', 'edge', 'right'] as const) {
+      const geoms = (layout.backgroundCells ?? []).filter((c) => (wall === 'edge' ? (c.face ?? 'back') === 'back' && c.slotId === undefined : c.face === wall));
+      const used = geoms.filter((c) => cellById.get(c.cellId as string) === true).length;
+      walls.push({ wall, used, unused: geoms.length - used });
+      usedCount += used;
+    }
+  }
+  return { rows: 3, columns, cells, view: { fromColumn, toColumn, left: l, width: Math.max(0, r - l) }, prizeCount: occupied.size, usedCount, walls };
+}
+
+export interface WallSummary {
+  readonly wall: 'left' | 'edge' | 'right';
+  readonly used: number;
+  readonly unused: number;
 }
 
 /** Stand x for a tap at a horizontal fraction (0..1) of the map, clamped to the stand range. */
@@ -155,7 +173,11 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
   const body = doc.createElement('div');
   body.className = 'booth-map-body';
   body.append(grid, frame);
-  box.append(title, body);
+  const wallsRow = doc.createElement('div');
+  wallsRow.className = 'booth-map-walls';
+  wallsRow.dataset.testid = 'booth-map-walls';
+  wallsRow.hidden = true;
+  box.append(title, body, wallsRow);
   root.appendChild(box);
 
   let previous: MapModel | null = null;
@@ -221,6 +243,11 @@ export function mountBoothMap(root: HTMLElement, deps: BoothMapDeps): BoothMapHa
           .filter(Boolean)
           .join(' / ');
       });
+      if (model.walls) {
+        const text = model.walls.map((w) => `${deps.t(`af.map.${w.wall}`)} ?${w.unused} ✓${w.used}`).join(' · ');
+        if (wallsRow.textContent !== text) wallsRow.textContent = text;
+        wallsRow.hidden = false;
+      }
       if (previous?.view.left !== model.view.left) frame.style.left = `${(model.view.left * 100).toFixed(2)}%`;
       if (previous?.view.width !== model.view.width) frame.style.width = `${(model.view.width * 100).toFixed(2)}%`;
       previous = model;

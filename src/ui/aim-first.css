@@ -208,3 +208,7 @@
   .af-shoot { min-height: 60px; }
   .af-card { top: calc(env(safe-area-inset-top) + 64px); }
 }
+
+/* ---- r007: wall cell counts under the 3×12 overview */
+.booth-map-walls { font-size: 9px; line-height: 1.25; margin-top: 2px; white-space: normal; opacity: 0.95; }
+.booth-map-walls[hidden] { display: none; }

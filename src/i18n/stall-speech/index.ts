@@ -11,9 +11,15 @@ export { SPEECH_LINES, AF_UI_JA, SPEECH_JA };
 export type { AfUiKey, SpeechCondition, SpeechCategory, SpeechLineDef } from './ja';
 
 export interface AfLocaleContent {
-  readonly ui: Partial<Record<AfUiKey, string>>;
-  readonly lines: Partial<Record<string, string>>;
+  readonly ui: Readonly<Record<AfUiKey, string>>;
+  /** K001..K100 in order (100 entries). */
+  readonly lines: readonly string[];
 }
+
+const lineIndex = (id: string): number => {
+  const m = /^K(\d{3})$/.exec(id);
+  return m ? Number(m[1]) - 1 : -1;
+};
 
 function fill(text: string, params?: Readonly<Record<string, string | number>>): string {
   return params ? text.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m)) : text;
@@ -33,5 +39,6 @@ export function afText(locale: Locale, key: AfUiKey, params?: Readonly<Record<st
 /** One spoken line by id (K001..K100). */
 export function speechText(locale: Locale, id: string): string {
   if (locale === 'ja') return SPEECH_JA[id] ?? id;
-  return AF_LOCALES[locale]?.lines[id] ?? AF_LOCALES.en?.lines[id] ?? SPEECH_JA[id] ?? id;
+  const i = lineIndex(id);
+  return AF_LOCALES[locale]?.lines[i] ?? AF_LOCALES.en?.lines[i] ?? SPEECH_JA[id] ?? id;
 }
