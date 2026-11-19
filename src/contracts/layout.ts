@@ -78,17 +78,46 @@ export type ShopkeeperPart = 'hat' | 'fan' | 'body' | 'feet';
  */
 export interface BackgroundCellGeometry {
   readonly cellId: BackgroundCellId;
-  readonly slotId: SlotId;
-  /** 1 = top row. */
-  readonly row: 1 | 2 | 3;
-  /** 1-based from the left, 1..12. */
-  readonly column: number;
+  /** The slot in front of the cell (the 36 cells behind the 3×12 shelf). Absent for the r007 extra cells. */
+  readonly slotId?: SlotId;
+  /** 1 = top row (the 36 cells behind the shelf). Absent for the r007 extra cells. */
+  readonly row?: 1 | 2 | 3;
+  /** 1-based from the left, 1..12 (the 36 cells behind the shelf). Absent for the r007 extra cells. */
+  readonly column?: number;
   readonly box: Box3;
   readonly faceNormal: Vec3;
+  /** Layout v3 (r007): which wall the cell is printed on. Absent = 'back'. */
+  readonly face?: CellFace;
+  /** Layout v3: band 1 (top) .. 5 (bottom) and lane (back wall: 1..14 from the left; side walls: 1..3 from the back). */
+  readonly band?: number;
+  readonly lane?: number;
+}
+
+export type CellFace = 'back' | 'left' | 'right';
+
+/**
+ * Layout v3 (r007): an oriented thin panel that reflects corks toward the shelves
+ * (the shopkeeper's fan and the tray on its stand). The drawn panel and the collider
+ * share this geometry; the front face is the side `frontNormal` points to.
+ */
+export interface ReflectorGeometry {
+  readonly reflectorId: 'fan' | 'tray';
+  /** The shopkeeper part a hit on this panel counts as (fan → 'fan'); null for the tray (no points, no question). */
+  readonly part: ShopkeeperPart | null;
+  readonly center: Vec3;
+  /** Half extents in the panel's own frame: x = width, y = height, z = thickness. */
+  readonly halfExtents: Vec3;
+  /** Rotation of the panel frame (unit quaternion). */
+  readonly rotation: { readonly x: number; readonly y: number; readonly z: number; readonly w: number };
+  /** Outward normal of the front face in world space (= rotation applied to +z). */
+  readonly frontNormal: Vec3;
+  readonly material: SurfaceMaterial;
+  /** Bounce factor used instead of the material's (front and back alike). */
+  readonly bounce: number;
 }
 
 /** 'v1-9': rules-v1 three-by-three shelf. 'v2-36': three rows × twelve columns with background cells. */
-export type SlotModel = 'v1-9' | 'v2-36';
+export type SlotModel = 'v1-9' | 'v2-36' | 'v3-36';
 
 export interface ShopkeeperPartGeometry {
   readonly part: ShopkeeperPart;
@@ -128,8 +157,10 @@ export interface BoothLayout {
   /** Projectiles leaving this box are removed (not scored). Off-screen inside is still simulated. */
   readonly activeBounds: Box3;
   readonly camera: CameraRig;
-  /** Layout v2 only: 36 cells, one per slot, same order as `slots`. */
+  /** Layout v2: 36 cells, one per slot, same order as `slots`. Layout v3 (r007): those 36 first, then 64 more. */
   readonly backgroundCells?: readonly BackgroundCellGeometry[];
+  /** Layout v3 (r007): the fan and the tray. Absent elsewhere. */
+  readonly reflectors?: readonly ReflectorGeometry[];
 }
 
 const box = (cx: number, cy: number, cz: number, hx: number, hy: number, hz: number): Box3 => ({

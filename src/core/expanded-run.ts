@@ -11,6 +11,7 @@ import { rngNext, seedRng, type RngState } from '../catalog/rng';
 import { assignCells } from './background-cells';
 import { createRun, lowestStatus } from './state';
 import { initialRewards } from './rewards';
+import { INITIAL_AIM_FIRST } from './aim-first';
 
 export interface ExpandedBundleInput {
   readonly catalog: RuntimeCatalog;
@@ -64,9 +65,12 @@ export function createExpandedRun(config: RunConfig, bundle: ExpandedBundleInput
       effects: effectsRng as ExpansionRunState['rng']['effects'],
     },
     ...(withRewards ? { rewards: withRewards.rewards } : {}),
+    // r007: the run starts aiming (no position confirmation) and keeps the talk and aim-save counter.
+    ...(expansion.profile.aimFirst ? { aimFirst: INITIAL_AIM_FIRST } : {}),
   };
   return {
     ...base,
+    ...(expansion.profile.aimFirst ? { phase: 'aiming' as const } : {}),
     ...(withRewards ? { shelf: withRewards.shelf } : {}),
     schemaVersion: EXPANDED_RUN_STATE_SCHEMA_VERSION,
     rulesVersion: expansion.profile.rulesVersion,

@@ -59,6 +59,13 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    // r007 internal candidate (VITE_SHATEKKI_BUNDLE=expanded-aim-first, rules-v2-proposed-r007), local only.
+    {
+      command: process.env.CI_PREBUILT === 'true' ? 'npm run preview:aim-first' : 'npm run build:aim-first && npm run preview:aim-first',
+      url: 'http://127.0.0.1:4180',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
   ],
   projects: [
     {
@@ -74,7 +81,7 @@ export default defineConfig({
     },
     {
       name: 'compact-portrait-chromium',
-      testMatch: ['**/next-long-text.spec.ts', '**/reward-motions.spec.ts'],
+      testMatch: ['**/next-long-text.spec.ts', '**/reward-motions.spec.ts', '**/aim-first*.spec.ts', '**/stall-speech.spec.ts'],
       use: {
         browserName: 'chromium',
         viewport: { width: 402, height: 700 },

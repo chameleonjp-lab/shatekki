@@ -104,6 +104,10 @@ const PRESETS: Record<string, Preset> = {
   // settle
   collect: { n: 7, color: 0xffe27a, speed: 1.2, life: 0.7, size: 0.014, gravity: -0.8, spread: 1.8 },
   setComplete: { n: 14, color: 0xfff0a0, speed: 1.8, life: 1.0, size: 0.016, gravity: -0.3, spread: 2 },
+  // r007 (layout v3): a cell sheds small square chips; the shopkeeper's cloth a soft unbleached powder
+  cellChip: { n: 5, color: 0xd9b77a, speed: 0.8, life: 0.35, size: 0.012, gravity: 3.2, spread: 1.0 },
+  cellChipUsed: { n: 3, color: 0x8a7a66, speed: 0.6, life: 0.25, size: 0.009, gravity: 3.2, spread: 1.0 },
+  clothPowder: { n: 6, color: 0xf2e6d0, speed: 0.45, life: 0.55, size: 0.014, gravity: 0.5, spread: 1.3 },
 };
 
 const RING_COLOR: Record<string, number> = {
@@ -202,6 +206,13 @@ function presetKeyFor(t: ImpactTarget): string {
   }
 }
 
+/** r007: what each contact sheds at the real contact point (wood chips, amber sparks, cloth powder). */
+function presetKeyForV3(t: ImpactTarget): string {
+  if (t.kind === 'cell') return t.activated ? 'cellChip' : 'cellChipUsed';
+  if (t.kind === 'shopkeeper') return t.part === 'fan' ? 'paper' : 'clothPowder';
+  return presetKeyFor(t);
+}
+
 function offscreenKeyFor(t: ImpactTarget): string | null {
   switch (t.kind) {
     case 'prize':
@@ -266,6 +277,7 @@ export function createEffects(deps: EffectsDeps): Effects {
   const waiters: { at: number; resolve: () => void }[] = [];
   const collectPos = new Map<string, Vec3>();
 
+  const v3 = layout.slotModel === 'v3-36';
   const reactions = new Map<ShopkeeperPart, Reaction>();
   for (const g of layout.shopkeeper) {
     const mesh = deps.shopkeeperParts.get(g.part);
@@ -419,7 +431,7 @@ export function createEffects(deps: EffectsDeps): Effects {
       case 'impact': {
         const t = ev.target;
         const speedScale = Math.min(1.4, 0.6 + ev.speed / 14);
-        burst(presetKeyFor(t), ev.point.x, ev.point.y, ev.point.z, ev.normal.x, ev.normal.y, ev.normal.z, speedScale);
+        burst(v3 ? presetKeyForV3(t) : presetKeyFor(t), ev.point.x, ev.point.y, ev.point.z, ev.normal.x, ev.normal.y, ev.normal.z, speedScale);
         if (t.kind === 'shopkeeper') react(t.part);
         const key = offscreenKeyFor(t);
         if (key) offscreen(key, ev.point);

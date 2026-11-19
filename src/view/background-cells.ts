@@ -54,7 +54,39 @@ function stroke(k: Kit, color: number, pts: readonly Pt[], scale: number, thick:
   }
 }
 
+/** Layout v3 side-wall cell: the same panel, frame and corner mark, printed on a wall facing ±x. */
+function paintSideCell(k: Kit, cell: BackgroundCellGeometry, visual: CellVisual): void {
+  const { center: c, halfExtents: h } = cell.box;
+  const col = COLORS[visual];
+  const sx = cell.faceNormal.x > 0 ? 1 : -1; // the printed face looks toward +sx
+  k.box(col.panel, h.x * 2, h.y * 2, h.z * 2, [c.x, c.y, c.z]);
+  const face = c.x + sx * (h.x + DECAL / 2);
+  const f = 0.011;
+  k.box(col.frame, DECAL, f, h.z * 2, [face, c.y + h.y - f / 2, c.z]);
+  k.box(col.frame, DECAL, f, h.z * 2, [face, c.y - h.y + f / 2, c.z]);
+  k.box(col.frame, DECAL, h.y * 2, f, [face, c.y, c.z - h.z + f / 2]);
+  k.box(col.frame, DECAL, h.y * 2, f, [face, c.y, c.z + h.z - f / 2]);
+  // the mark sits in the upper corner nearest the player; strokes drawn in the wall plane
+  const u = Math.min(h.z, h.y) * 0.42;
+  const mz = c.z + h.z - 0.075;
+  const my = c.y + h.y - 0.085;
+  const x = face + sx * DECAL;
+  const pts = visual === 'unused' ? QUESTION : CHECK;
+  const thick = visual === 'unused' ? 0.011 : 0.014;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i]!;
+    const [bx, by] = pts[i + 1]!;
+    // face u axis: toward the player is +z on both walls; mirror on the left wall so the glyph reads correctly
+    const du = (bx - ax) * u * -sx;
+    const dv = (by - ay) * u;
+    const len = Math.hypot(du, dv) + thick * 0.9;
+    k.box(col.mark, DECAL, thick, len, [x, my + ((ay + by) / 2) * u, mz + ((ax + bx) / 2) * u * -sx], [Math.atan2(dv, du) * -1, 0, 0]);
+  }
+  if (visual === 'unused') k.box(col.mark, DECAL, 0.013, 0.013, [x, my - 0.34 * u, mz]);
+}
+
 function paintCell(k: Kit, cell: BackgroundCellGeometry, visual: CellVisual): void {
+  if (cell.face === 'left' || cell.face === 'right') return paintSideCell(k, cell, visual);
   const { center: c, halfExtents: h } = cell.box;
   const col = COLORS[visual];
   // The panel IS the collider box: what is drawn is what a cork can touch.

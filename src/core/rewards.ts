@@ -259,7 +259,11 @@ export function reduceWithRewards(state: RunState, command: GameCommand, ctx: Re
   if (after === state || !isExpandedRunState(after)) return after;
   const ar = after.expansion.rewards ?? r;
 
-  if (command.type === 'CONFIRM_POSITION' && state.phase === 'position' && after.phase === 'loading') {
+  // r007: the A5 preview follows the stand while aiming, is fixed when the gauge opens and goes back to a preview on cancel.
+  if (command.type === 'CANCEL_GAUGE' && ar.target && ar.target.forShot === after.shotsFired + 1) {
+    return withRewards(after, { ...ar, target: null });
+  }
+  if ((command.type === 'CONFIRM_POSITION' && state.phase === 'position' && after.phase === 'loading') || (command.type === 'OPEN_GAUGE' && after.phase === 'loading')) {
     const offered = targetOffer(after, cfg, ctx.tuning);
     if (!offered) return after;
     const target: RewardTargetState = { forShot: after.shotsFired + 1, geometry: targetGeometryAt(ctx.layout, ctx.tuning, after.standX), offered };
@@ -415,7 +419,7 @@ export function rewardViewState(state: RunState, cfg: RewardConfig | null, layou
   const r = state.expansion.rewards;
   let target: RewardViewState['target'] = null;
   if (r.target) target = { geometry: r.target.geometry, offered: r.target.offered, mode: 'fixed' };
-  else if (state.phase === 'position') {
+  else if (state.phase === 'position' || (state.phase === 'aiming' && state.expansion.aimFirst)) {
     const offered = targetOffer(state, cfg, tuning);
     if (offered) target = { geometry: targetGeometryAt(layout, tuning, state.standX), offered, mode: 'preview' };
   }

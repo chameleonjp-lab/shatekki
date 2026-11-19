@@ -64,6 +64,8 @@ export interface ThreeRenderer extends Renderer {
   lastExpandedModel(): ExpandedViewModel | null;
   /** Scene triangle / mesh counts and WebGL draw calls of the last frame. */
   stats(): SceneStats & { drawCalls: number };
+  /** r007: CSS-pixel position just above the shopkeeper's head in the last frame, or null when off screen. */
+  projectShopkeeperHead(): { readonly x: number; readonly y: number } | null;
 }
 
 export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRendererDeps): ThreeRenderer {
@@ -107,7 +109,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     render(frame: SimulationFrame, view: ViewState): void {
       if (disposed) return;
       applyFrame(graph, frame);
-      applyCameraPose(camera, cameraPose(layout, view.standX, width / height), width / height);
+      applyCameraPose(camera, cameraPose(layout, view.standX, width / height, view.aimFirst?.aim), width / height);
       last = updateAim(graph, view);
       if (expandedView) expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }));
       fx.handleEvents(frame.events, frame.simTimeSec);
@@ -140,5 +142,13 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     lastReticle: () => last,
     lastExpandedModel: () => expandedView?.lastModel() ?? null,
     stats: () => ({ ...graph.stats(), drawCalls: webgl.info.render.calls }),
+    projectShopkeeperHead() {
+      const hat = layout.shopkeeper.find((p) => p.part === 'hat');
+      if (!hat) return null;
+      const v = new THREE.Vector3(hat.box.center.x, hat.box.center.y + hat.box.halfExtents.y + 0.04, hat.box.center.z).project(camera);
+      if (v.z > 1 || v.x < -0.95 || v.x > 0.95 || v.y < -0.9 || v.y > 0.95) return null;
+      const rect = canvas.getBoundingClientRect();
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+    },
   };
 }

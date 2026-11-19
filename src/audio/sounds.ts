@@ -118,6 +118,8 @@ export const SOUNDS = {
   'take.3': def(2, 0.25, [t('triangle', 1047, 0, 0.08, 0.28), t('triangle', 1319, 0.07, 0.08, 0.28), t('triangle', 1568, 0.14, 0.18, 0.3)]),
   'take.taiko': def(2, 0.3, [t('sine', 120, 0, 0.28, 0.65, 70), n('lowpass', 260, 0, 0.12, 0.3), t('sine', 98, 0.14, 0.2, 0.4, 60)]),
   'reward.chime': def(2, 0.3, [t('sine', 1568, 0, 0.42, 0.22), t('sine', 2351, 0, 0.21, 0.12)]),
+  // r007: a short paper rustle when the shopkeeper's bubble appears (never a voice)
+  'speech.paper': def(2, 0.4, [n('bandpass', 3800, 0, 0.07, 0.07, 1.4), n('bandpass', 2600, 0.05, 0.06, 0.05, 1.2)]),
   'load.latch': def(1, 0.1, [t('square', 2400, 0, 0.025, 0.14, 1800), n('highpass', 5500, 0, 0.03, 0.12)]),
   'lastShot.hayashi': def(2, 0.6, [t('sine', 1568, 0, 0.1, 0.24, 1760), t('sine', 1760, 0.1, 0.1, 0.24), t('sine', 2093, 0.2, 0.22, 0.24), t('sine', 140, 0, 0.12, 0.45, 90), t('sine', 140, 0.22, 0.12, 0.4, 90)]),
   // ---- settlement
@@ -258,6 +260,7 @@ export const UI_CUE_SOUND: Record<UiCueName, SoundId> = {
   lastShotContinue: 'lastShot.hayashi',
   critLatch: 'load.latch',
   windChime: 'reward.chime',
+  speech: 'speech.paper',
 };
 
 const TIER_SOUND: Record<LoadTier, SoundId> = {

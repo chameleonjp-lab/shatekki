@@ -13,3 +13,10 @@ export { mountEffectResults, effectResultsModel } from '../ui/effect-results';
 export { mountRewardPanel, momentCue, shotMoment, rewardLine, renderRewardSet } from '../ui/reward-panel';
 export { bestShotOf } from '../core/rewards';
 export { mountRewardMotions } from '../view/reward-motions';
+// r007 (aim first, stall speech, talk, shot card)
+export { mountAimFirstControls } from '../ui/controls/aim-first-panel';
+export { mountTalkPanel } from '../ui/shopkeeper-talk';
+export { SpeechScheduler, mountSpeechBubble } from '../ui/shopkeeper-speech';
+export { aimFirstCardModel, mountAimFirstCard, partLines } from '../ui/aim-first-card';
+export { afText, speechText, isAfKey, SPEECH_LINES } from '../i18n/stall-speech';
+export { speechConditions } from '../ui/speech-conditions';

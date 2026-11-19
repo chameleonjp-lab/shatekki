@@ -163,6 +163,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const expansion = bundle.expansion;
   if (expansion && !expandedUi) throw new Error('the expanded bundle needs its UI pieces (loadBuildSetup)');
   const isPrototype = catalogValueStatus(catalog) !== 'approved' || tuning.valueStatus !== 'approved';
+  /** r007: aim first, the shopkeeper's parts, talk and speech bubbles (internal candidate only). */
+  const aimFirstCfg = bundle.behavior?.controls === 'aim-first' ? expansion?.profile.aimFirst ?? null : null;
   const e2e = new URLSearchParams(win.location.search).has('e2e');
   root.innerHTML = '';
 
@@ -317,6 +319,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let rewardPanel: ReturnType<ExpandedUiKit['mountRewardPanel']> | null = null;
   const illustratedRewards = bundle.behavior?.presentation === 'confirmed-motions';
   let rewardMotions: ReturnType<ExpandedUiKit['mountRewardMotions']> | null = null;
+  // r007 pieces
+  let afPanel: ReturnType<ExpandedUiKit['mountAimFirstControls']> | null = null;
+  let talkPanel: ReturnType<ExpandedUiKit['mountTalkPanel']> | null = null;
+  let speechBubble: ReturnType<ExpandedUiKit['mountSpeechBubble']> | null = null;
+  let speech: InstanceType<ExpandedUiKit['SpeechScheduler']> | null = null;
+  let afCard: ReturnType<ExpandedUiKit['mountAimFirstCard']> | null = null;
   let firedWithLastCork = false;
   let mapUpdatedAt = -Infinity;
   let shownQuestion = '';
@@ -358,7 +366,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     reasons = environmentPauseReasons(snapshot(win));
     rotate.hidden = !reasons.includes('landscape');
     root.dataset.pause = reasons.join(' ');
-    if (reasons.length > 0) audio.silence(); // nothing piles up while hidden / rotated (AC36)
+    if (reasons.length > 0) {
+      audio.silence(); // nothing piles up while hidden / rotated (AC36)
+      // r007: rotating or hiding closes an unchosen talk without using it
+      talkPanel?.close();
+      afPanel?.cancelGestures();
+    }
     controller?.setEnvironmentPause(reasons);
   };
   const onResize = () => {
@@ -391,7 +404,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // ------------------------------------------------------------ game
   const rewardCfg = expansion?.profile.rewards ?? null;
   const onChange = (snap: ControllerSnapshot) => {
-    panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
+    if (afPanel) {
+      afPanel.update({ state: snap.state, view: snap.view, maxBonusAmmo: tuning.maxBonusAmmoTotal }, !!controller?.persistencePending);
+      talkPanel?.update(snap.view.aimFirst?.talk);
+    } else panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
     if (expansion) updateExpandedUi(snap);
     if (rewardPanel && rewardCfg) rewardPanel.update(snap.view.expansion?.rewards, { shots: rewardCfg.order.shots, amount: rewardCfg.order.amount });
@@ -399,7 +415,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // Text for the expanded view and panel: UI keys through i18n, exp.* content keys through the content resolvers.
   const uiText = (k: string, p?: Readonly<Record<string, string | number>>) => (k in UI_KEYS ? i18n.t(k as UiKey, p) : k);
-  const expText = expandedUi ? expandedUi.createExpansionTranslator(() => i18n.locale, uiText) : uiText;
+  const baseExpText = expandedUi ? expandedUi.createExpansionTranslator(() => i18n.locale, uiText) : uiText;
+  // r007 words (af.*, the four r007 effect names) come from their own table; everything else as before.
+  const expText = (k: string, p?: Readonly<Record<string, string | number>>): string =>
+    aimFirstCfg && expandedUi && expandedUi.isAfKey(k) ? expandedUi.afText(i18n.locale, k, p) : baseExpText(k, p);
 
   const updateExpandedUi = (snap: ControllerSnapshot) => {
     const ex = snap.view.expansion;
@@ -442,6 +461,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     lastTs = ts;
     if (screen === 'game' && (!atomic || recovery.hidden) && controller) {
       controller.frame(dt);
+      if (speech) tickSpeech(dt);
       if (import.meta.env.VITE_SHATEKKI_PREVIEW_METER === '1' && win.shatekkiMeasureFrame) {
         const state = controller.current;
         const graph = renderer?.graph;
@@ -469,6 +489,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         return cue('loadStop', s?.load ? { tier: s.load.tier } : {});
       case 'FIRE':
         return cue('fire');
+      // r007: the gauge opens and closes (no heartbeat or sway sounds exist in this candidate)
+      case 'OPEN_GAUGE':
+        return cue('loadStart');
+      case 'CANCEL_GAUGE':
+        return cue('cancel');
+      case 'CHOOSE_SHOPKEEPER_TALK':
+        return undefined;
       case 'PAUSE':
         audio.silence();
         return cue('cancel');
@@ -494,9 +521,84 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     else playCommandCue(cmd);
   };
 
+  const mountAimFirstPanel = (): PanelHandle => {
+    const kit = expandedUi!;
+    afPanel = kit.mountAimFirstControls(ui, {
+      dispatch: (cmd) => uiCommand(cmd as GameCommand),
+      commitAim: () => void controller?.commitAim(),
+      currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
+      currentStandX: () => controller?.current.standX ?? 0,
+      onRetry: () => void leaveResult(true),
+      onTalk: () => {
+        const talk = controller?.viewState().aimFirst?.talk;
+        if (talk) talkPanel?.open(talk);
+      },
+      t: (k, p) => (kit.isAfKey(k) ? kit.afText(i18n.locale, k, p) : t(k)),
+      move: { step: aimFirstCfg!.moveStep, holdDelayMs: aimFirstCfg!.holdDelayMs, holdSpeed: aimFirstCfg!.holdSpeed, min: layout.camera.standMinX, max: layout.camera.standMaxX },
+    });
+    // Above the 3D labels (the stage overlay layers sit over the whole ui layer).
+    talkPanel = kit.mountTalkPanel(overlay, {
+      t: expText,
+      choose: async (choice) => {
+        const ok = await uiCommand({ type: 'CHOOSE_SHOPKEEPER_TALK', choice });
+        if (ok) cue('confirm');
+        return ok;
+      },
+      describe: (o) => talkText(o),
+      onOpenChange: (open) => {
+        if (open) {
+          afPanel?.cancelGestures();
+          speech?.hide();
+          speechBubble?.hide();
+          cue('select');
+        }
+      },
+    });
+    speechBubble = kit.mountSpeechBubble(overlay);
+    speech = new kit.SpeechScheduler(controller?.current.seed ?? 0, aimFirstCfg!.speech, kit.SPEECH_LINES);
+    afCard = kit.mountAimFirstCard(overlay, expText);
+    const handle = afPanel;
+    return { cancelGestures: () => handle.cancelGestures(), update: () => undefined, dispose: () => handle.dispose() };
+  };
+
+  /** Words for a saved talk result (hint names or the corks received). */
+  const talkText = (o: NonNullable<NonNullable<RunState['expansion']>['aimFirst']>['talk'] & object, withAmmo = true): string => {
+    if (o.choice === 'ammo') return withAmmo
+      ? expText('af.talk.result.ammo', { n: o.ammoGranted, ammo: controller?.current.ammo ?? 0, m: o.powerZoneWidthMult ?? 1 })
+      : expText('af.talk.result.ammoShort', { n: o.ammoGranted, m: o.powerZoneWidthMult ?? 1 });
+    if (o.hint?.setId) return expText('af.talk.result.hint', { set: setDisplayName(i18n.locale, String(o.hint.setId), expText) || String(o.hint.setId), names: o.hint.missingTypeIds.map((id) => prizeName(i18n.locale, id)).join('・') });
+    return expText('af.talk.result.noHint');
+  };
+
+  /** r007 speech: counts only calm aiming time; the bubble sits by the shopkeeper's head or at the top. */
+  const tickSpeech = (dt: number) => {
+    const c = controller;
+    if (!c || !speech || !speechBubble || !expandedUi) return;
+    const s = c.current;
+    const view = c.viewState();
+    const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen &&
+      !view.expansion?.question && view.expansion?.rewards?.order?.status !== 'offered' && recovery.hidden && reasons.length === 0;
+    const head = renderer?.projectShopkeeperHead?.() ?? null;
+    const facts = { state: s, view, last: c.snapshot().lastSummary, maxBonusAmmo: tuning.maxBonusAmmoTotal, rewards: rewardCfg, mode, recorded: !atomic?.memory, shopkeeperVisible: head !== null };
+    const r = speech.tick(dt, calm, expandedUi.speechConditions(facts));
+    if (r.showing === null) speechBubble.hide();
+    else if (r.start !== null) {
+      speechBubble.show(expandedUi.speechText(i18n.locale, r.start), expText('af.speaker'), head);
+      cue('speech');
+    }
+  };
+
   const mountPanel = () => {
     panel?.dispose();
-    panel = mountControls(ui, {
+    afPanel = null;
+    talkPanel?.destroy();
+    talkPanel = null;
+    speechBubble?.destroy();
+    speechBubble = null;
+    speech = null;
+    afCard?.destroy();
+    afCard = null;
+    panel = aimFirstCfg && expandedUi ? mountAimFirstPanel() : mountControls(ui, {
       dispatch: (cmd) => uiCommand(cmd as GameCommand),
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
@@ -549,6 +651,18 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           rewardMotions = expandedUi.mountRewardMotions(ui, {
             cue,
             card: (input, event) => {
+              if (afCard && expandedUi) {
+                // r007: one card per shot built from the confirmed summary only.
+                const fx = expandedUi.effectResultsModel(event.summary, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity });
+                const effectLines = [...fx.lines.map((l) => (l.name ? `${l.name}: ${l.text}` : l.text)), ...(fx.deferred ? [fx.deferred] : [])];
+                const model = expandedUi.aimFirstCardModel(
+                  { summary: event.summary, freshSets: event.freshSets, ammoBeforeShot: event.ammoBeforeShot, effectLines },
+                  { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id) },
+                );
+                afCard.show(model, { quiet: event.replayed || event.reducedMotion });
+                if (!event.replayed && model.kind === 'set' && event.freshSets.length === 0) cue('setComplete');
+                return;
+              }
               effectResults?.show(event.summary);
               rewardPanel?.showShot({
                 ...input,
@@ -583,6 +697,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
         // Miss / near-miss are decided only after settlement (AC27).
         onSettled: (cls) => {
+          // r007 never plays the old "miss" sound: every shot gets its own line on the card instead.
+          if (aimFirstCfg) return;
           if (cls === 'miss') cue('miss');
           else if (cls === 'nearMiss') cue('nearMiss');
         },
@@ -692,6 +808,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         },
         // Checkpoints (persistence-design.md §2): before the sim runs, after STOP_LOAD, after settlement.
         onShotFired: (s) => {
+          afCard?.hide();
+          speech?.hide();
+          speechBubble?.hide();
           rewardMotions?.clear();
           effectResults?.hide();
           rewardPanel?.hideCard();
@@ -1074,6 +1193,35 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       { result, selfBestBefore, submit: ranking.getStatus(result.runId), top: ranking.getTop(), links, rankingAvailable, lastShot },
     );
     screenHandle = handle;
+    // r007: the one talk of the run and the last shot's shopkeeper parts, read from the saved run (shown once).
+    if (aimFirstCfg && expandedUi) {
+      const col = screens.querySelector<HTMLElement>('.scr-result .scr-col');
+      const ended = atomic?.record?.state ?? shownEnded ?? controller?.current ?? null;
+      const talk = ended && isExpandedRunState(ended) ? ended.expansion.aimFirst?.talk ?? null : null;
+      const parts = atomic?.record?.lastSummary?.parts ?? controller?.snapshot().lastSummary?.parts ?? [];
+      if (col && (talk || parts.length > 0)) {
+        const sec = doc.createElement('section');
+        sec.className = 'sec af-result';
+        sec.dataset.testid = 'result-aim-first';
+        if (talk) {
+          const p = doc.createElement('p');
+          p.dataset.testid = 'result-talk';
+          p.textContent = expText('af.talk.used', { text: talkText(talk, false) });
+          sec.appendChild(p);
+        }
+        if (parts.length > 0) {
+          const h = doc.createElement('h3');
+          h.textContent = expText('af.result.parts');
+          sec.appendChild(h);
+          for (const line of expandedUi.partLines(parts, { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id) })) {
+            const p = doc.createElement('p');
+            p.textContent = line;
+            sec.appendChild(p);
+          }
+        }
+        col.appendChild(sec);
+      }
+    }
     // E3: the souvenir shelf under the result (rewards versions; the same three slots in both modes).
     souvenirView?.dispose();
     souvenirView = null;
@@ -1256,6 +1404,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       effectResults?.destroy();
       questionPanel?.destroy();
       boothMap?.destroy();
+      talkPanel?.destroy();
+      speechBubble?.destroy();
+      afCard?.destroy();
       panel?.dispose();
       renderer?.dispose();
       world?.dispose();
