@@ -46,6 +46,7 @@ import type { ConfirmedPresentation, PersistedRecord, SaveReply } from '../contr
 import type { DispatchResult, PersistedSession } from './persisted-session';
 import { FixedGameClock } from '../core/game-clock';
 import { aimNearReward, rewardConfigOf, rewardViewState } from '../core/rewards';
+import { PREVIEW_LOAD, aimFirstRequest, isAimFirstState, powerZoneWidthFor, powerZones, talkAvailability } from '../core/aim-first';
 
 export interface RulesApi {
   createRun(config: RunConfig, catalog: RuntimeCatalog): RunState;
@@ -160,9 +161,12 @@ export class GameController {
     const reservation = s.phase === 'resolving' && e.active ? e.active : e.next;
     const ballistic = ballisticForModifiers(this.deps.tuning, s.bulletType, reservation.modifiers);
     const rewards = rewardViewState(s, rewardConfigOf(this.deps.expansion), this.deps.layout, this.deps.tuning);
-    const nearDevice = this.deps.preciseRewardAim && s.phase === 'aiming' && rewards &&
+    const aimFirst = isAimFirstState(s);
+    // r007 shows the guides from the first moment of aiming and keeps them fixed while the gauge runs.
+    const aimingNow = s.phase === 'aiming' || (aimFirst && s.phase === 'loading');
+    const nearDevice = this.deps.preciseRewardAim && aimingNow && rewards &&
       aimNearReward(rewards, this.deps.layout, s.standX, effectiveAim, ballistic);
-    const guide = s.phase === 'aiming' && reservation.hint === 'aimPreview';
+    const guide = aimingNow && reservation.hint === 'aimPreview';
     const preview = (nearDevice || guide) ? this.aimPreview(s, effectiveAim, ballistic, this.deps.preciseRewardAim ? rewards?.target?.geometry : undefined) : null;
     const question = s.inFlight?.stage === 'question' ? (s.inFlight.plan?.question ?? null) : null;
     // The archived shot keeps both series. Their live outlines and refill labels end with play.
@@ -178,17 +182,23 @@ export class GameController {
       ...(rewards ? { rewards } : {}),
       question: question && s.inFlight ? { shotId: s.inFlight.shotId, questionId: question.questionId, answer: question.answer } : null,
     };
-    return { ...base, ballistic, expansion, ...(nearDevice && preview ? { rewardAim: preview } : {}) };
+    const out: ViewState = { ...base, ballistic, expansion, ...(nearDevice && preview ? { rewardAim: preview } : {}) };
+    if (!aimFirst || !this.deps.expansion) return out;
+    const width = powerZoneWidthFor(s);
+    const talk = talkAvailability(s, { tuning: this.deps.tuning, expansion: this.deps.expansion });
+    return { ...out, aimFirst: { powerZoneWidthMult: width, zones: powerZones(this.deps.tuning, width), aim: s.aim, talk: { ...talk, used: s.expansion.aimFirst.talk } } };
   }
 
   /** Share the same read-only query between the reticle and the optional trajectory guide. */
   private aimPreview(s: RunState, aim: AimAngles, flight: BallisticSpec, target?: RewardTargetGeometry): AimPreview | null {
-    if (!isExpandedRunState(s) || !s.load) return null;
+    const aimFirst = isAimFirstState(s);
+    if (!isExpandedRunState(s) || (!s.load && !aimFirst)) return null;
     const pose = this.deps.preciseRewardAim ? s.clocks.motionSec : 0;
     const key = [s.shotsFired, s.standX, aim.yaw, aim.pitch, pose, flight.speed, flight.gravity, flight.corkRadius, target?.outerRadius].join('|');
     if (key === this.previewKey) return this.preview;
-    const probe = this.deps.rules.reduceGame(s, { type: 'FIRE' }, this.ctx);
-    const request = probe !== s ? probe.inFlight?.request : undefined;
+    // r007: the flight path does not depend on the power, so the preview needs no FIRE probe.
+    const probe = aimFirst ? s : this.deps.rules.reduceGame(s, { type: 'FIRE' }, this.ctx);
+    const request = aimFirst ? aimFirstRequest(s, PREVIEW_LOAD, this.deps.layout) : probe !== s ? probe.inFlight?.request : undefined;
     if (!request) return null;
     this.preview = this.deps.world.previewFirstContact(request, s.expansion.next.modifiers, target);
     this.previewKey = key;
@@ -204,7 +214,8 @@ export class GameController {
     const cmd = parsed.command;
     const session = this.deps.session;
     if (!session) return this.dispatch(input) ? 'applied' : 'rejected';
-    if (['SET_POSITION', 'AIM', 'PAUSE', 'RESUME', 'SKIP_PRESENTATION'].includes(cmd.type)) {
+    // r007: opening and cancelling the gauge stay local; a reload returns to the last saved aiming state.
+    if (['SET_POSITION', 'AIM', 'PAUSE', 'RESUME', 'SKIP_PRESENTATION', 'OPEN_GAUGE', 'CANCEL_GAUGE'].includes(cmd.type)) {
       return this.applyLocal(cmd) ? 'applied' : 'rejected';
     }
     const before = this.state;
@@ -214,6 +225,7 @@ export class GameController {
       : this.deps.rules.reduceGame(before, cmd, this.ctx);
     if (after === before) return 'rejected';
     const operationId = cmd.type === 'FIRE' ? `${after.runId}/${after.shotsFired}/fire`
+      : cmd.type === 'CHOOSE_SHOPKEEPER_TALK' ? `${after.runId}/shopkeeper-talk`
       : `${after.runId}/${session.record.token.revision + 1}/${cmd.type}`;
     this.clock?.advance(0, true);
     return session.command(after, operationId, this.gameTick, (reply) => {
@@ -228,6 +240,33 @@ export class GameController {
         this.delayedFire = () => this.finishCommand(cmd, before, this.state);
         this.emit();
       } else this.finishCommand(cmd, before, this.state);
+    });
+  }
+
+  /**
+   * r007: save the finished move or aim (button released, drag ended) as one numbered operation.
+   * Nothing is written while the position and aim equal the saved ones. A failed write keeps the
+   * same operation for the explicit retry.
+   */
+  async commitAim(): Promise<DispatchResult> {
+    const s = this.state;
+    const session = this.deps.session;
+    if (!isAimFirstState(s) || s.phase !== 'aiming' || s.pauseReasons.length > 0) return 'rejected';
+    if (!session) return 'applied';
+    if (this.persistencePending) return 'rejected';
+    const saved = session.record.state;
+    if (saved.phase === 'aiming' && saved.standX === s.standX && saved.aim.yaw === s.aim.yaw && saved.aim.pitch === s.aim.pitch) return 'applied';
+    const seq = (isAimFirstState(saved) ? saved.expansion.aimFirst.aimSeq : s.expansion.aimFirst.aimSeq) + 1;
+    const after: RunState = { ...s, pauseReasons: [], expansion: { ...s.expansion, aimFirst: { ...s.expansion.aimFirst, aimSeq: seq } } };
+    this.clock?.advance(0, true);
+    return session.command(after, `${s.runId}/aim/${seq}`, this.gameTick, (reply) => {
+      if (reply.replayed) return this.replay(reply.record);
+      // Only the counter comes back from the save; the position and aim on screen stay as they are.
+      const cur = this.state;
+      if (isAimFirstState(cur) && isAimFirstState(reply.record.state)) {
+        this.state = { ...cur, expansion: { ...cur.expansion, aimFirst: { ...cur.expansion.aimFirst, aimSeq: reply.record.state.expansion.aimFirst.aimSeq } } };
+      }
+      this.emit();
     });
   }
 
@@ -265,7 +304,7 @@ export class GameController {
       this.delayedFire = null;
       fire();
     }
-    if (command.type === 'FIRE' && before.phase === 'aiming' && after.phase === 'resolving' && after.inFlight) {
+    if (command.type === 'FIRE' && (before.phase === 'aiming' || before.phase === 'loading') && after.phase === 'resolving' && after.inFlight) {
       this.presentationSkipped = false;
       this.deps.onShotFired?.(after);
       const active = isExpandedRunState(after) ? after.expansion.active : null;

@@ -67,6 +67,8 @@ export interface ShotRecord {
   readonly deferredTransforms?: readonly DeferredTransform[];
   /** Rules versions with rewards: what the cork touched for A2-A5. */
   readonly rewardContacts?: RewardContacts;
+  /** Layout v3 (r007): contact facts and the exit of a cork that touched nothing. */
+  readonly facts?: import('./events').ShotFacts;
 }
 
 export interface SimulationStep {

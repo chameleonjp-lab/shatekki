@@ -21,25 +21,32 @@ import profile from '../../data/expansion-v2/profile.json';
 import rewardData from '../../data/expansion-v2/rewards.json';
 
 import nextProfiles from '../../data/expansion-v2/next-profile.json';
+import aimFirstProfiles from '../../data/expansion-v2/aim-first-profile.json';
+import { BOOTH_LAYOUT_V3 } from '../contracts/layout-v3';
+import type { AimFirstConfig, EffectDef, EffectId, ExpansionCatalog } from '../contracts';
 
-function isNextProfile(key: ExpandedBundleKey): key is keyof typeof nextProfiles {
-  return Object.hasOwn(nextProfiles, key);
+type ProfileKey = keyof typeof nextProfiles | keyof typeof aimFirstProfiles;
+const PROFILES: Readonly<Record<ProfileKey, (typeof nextProfiles)[keyof typeof nextProfiles] & { readonly controls?: string }>> = { ...nextProfiles, ...aimFirstProfiles };
+
+function isNextProfile(key: ExpandedBundleKey): key is ProfileKey {
+  return Object.hasOwn(PROFILES, key);
 }
 
-function behaviorFor(key: keyof typeof nextProfiles): GameplayBehavior {
-  const { persistence, transformPolicy, clock, presentation } = nextProfiles[key];
+function behaviorFor(key: ProfileKey): GameplayBehavior {
+  const { persistence, transformPolicy, clock, presentation, controls } = PROFILES[key];
+  if (controls !== undefined && controls !== 'aim-first') throw new RangeError(`Invalid gameplay profile: ${key}`);
   if (persistence !== 'atomic' || (transformPolicy !== 'preserve-center' && transformPolicy !== 'preserve-supported-bottom')
     || (clock !== 'frame' && clock !== 'fixed') || (presentation !== 'confirmed-static' && presentation !== 'confirmed-motions')) {
     throw new RangeError(`Invalid gameplay profile: ${key}`);
   }
-  return Object.freeze({ persistence, transformPolicy, clock, presentation });
+  return Object.freeze({ persistence, transformPolicy, clock, presentation, ...(controls ? { controls } : {}) });
 }
 
 /** The raw expanded data as shipped in data/expansion-v2. */
 export const EXPANSION_RAW_DATA = { pairSets, questions, groups, effects, series, profile } as const;
 
 /** Internal prototype keys, each an exact build-time value. */
-export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next'] as const;
+export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next', 'expanded-aim-first'] as const;
 export type ExpandedBundleKey = (typeof EXPANDED_BUNDLE_KEYS)[number];
 
 /**
@@ -75,7 +82,7 @@ function rewardsFor(key: ExpandedBundleKey): { readonly rulesVersion: string; re
     order: Object.freeze({ ...d.order }),
     lanterns: Object.freeze({ amount: d.lanterns.amount, zones: Object.freeze(d.lanterns.zones.map((z) => Object.freeze([z[0]!, z[1]!] as const))) }),
   });
-  return { rulesVersion: isNextProfile(key) ? nextProfiles[key].rulesVersion : v.rulesVersion, rewards };
+  return { rulesVersion: isNextProfile(key) ? PROFILES[key].rulesVersion : v.rulesVersion, rewards };
 }
 
 const OFFICIAL: GameplayBundle = Object.freeze({
@@ -88,18 +95,47 @@ const OFFICIAL: GameplayBundle = Object.freeze({
 
 const expandedCache = new Map<ExpandedBundleKey, GameplayBundle>();
 
+const isAimFirst = (key: ExpandedBundleKey): key is keyof typeof aimFirstProfiles => Object.hasOwn(aimFirstProfiles, key);
+
+/**
+ * r007: FX012/013/035/036 widen or narrow the power zones instead of the hand sway, with their own
+ * names. The other 96 effects and every other version keep their data.
+ */
+function aimFirstEffects(key: keyof typeof aimFirstProfiles): typeof effects {
+  const zones: Readonly<Record<string, number>> = aimFirstProfiles[key].powerZoneEffects;
+  return effects.map((e) => (e.id in zones ? { ...e, operation: { kind: 'shotModifiers', set: { powerZoneWidthMult: zones[e.id]! } } } : e)) as typeof effects;
+}
+
+function withAimFirst(key: keyof typeof aimFirstProfiles, expansion: ExpansionCatalog): ExpansionCatalog {
+  const p = aimFirstProfiles[key];
+  const renamed = new Map<EffectId, EffectDef>();
+  for (const [id, def] of expansion.effects) {
+    renamed.set(id, id in p.powerZoneEffects ? Object.freeze({ ...def, nameKey: `exp.fx.${id}.r007.name`, resultKey: `exp.fx.${id}.r007.result` }) : def);
+  }
+  const aimFirst: AimFirstConfig = JSON.parse(JSON.stringify(p.aimFirst));
+  return Object.freeze({
+    ...expansion,
+    effects: Object.freeze(renamed),
+    profile: Object.freeze({ ...expansion.profile, cellCount: 100 as const, aimFirst: Object.freeze(aimFirst) }),
+  });
+}
+
 function buildExpandedBundle(key: ExpandedBundleKey): GameplayBundle {
   const version = rewardsFor(key);
-  const built = buildExpansion(RELEASE_CATALOG, { ...EXPANSION_RAW_DATA, profile: { ...profile, rulesVersion: version.rulesVersion } });
+  const aimFirst = isAimFirst(key);
+  const limits = aimFirst ? { ...profile.limits, powerZoneWidthMult: aimFirstProfiles[key].powerZoneWidthMult } : profile.limits;
+  const raw = { ...EXPANSION_RAW_DATA, ...(aimFirst ? { effects: aimFirstEffects(key) } : {}), profile: { ...profile, limits, rulesVersion: version.rulesVersion } };
+  const built = buildExpansion(RELEASE_CATALOG, raw);
   const catalog = built.catalog;
-  const expansion = version.rewards ? Object.freeze({ ...built.expansion, profile: Object.freeze({ ...built.expansion.profile, rewards: version.rewards }) }) : built.expansion;
+  const withRewards = version.rewards ? Object.freeze({ ...built.expansion, profile: Object.freeze({ ...built.expansion.profile, rewards: version.rewards }) }) : built.expansion;
+  const expansion = aimFirst ? withAimFirst(key, withRewards) : withRewards;
   const tuning: TuningConfig = Object.freeze({
     ...RELEASE_TUNING,
     valueStatus: 'prototype' as const,
     shelfSlotCount: expansion.profile.slotCount,
     draw: Object.freeze({ ...RELEASE_TUNING.draw, tierTargets: expansion.profile.tierTargets }),
   });
-  return Object.freeze({ key, behavior: isNextProfile(key) ? behaviorFor(key) : undefined, catalog, tuning, layout: BOOTH_LAYOUT_V2, expansion });
+  return Object.freeze({ key, behavior: isNextProfile(key) ? behaviorFor(key) : undefined, catalog, tuning, layout: aimFirst ? BOOTH_LAYOUT_V3 : BOOTH_LAYOUT_V2, expansion });
 }
 
 export function getGameplayBundle(key: GameplayBundleKey): GameplayBundle {

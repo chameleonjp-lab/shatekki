@@ -7,7 +7,7 @@
  */
 import type { PrizeInstanceId, PrizeTypeId, RunId, SetId, ShotId, SlotId, DeviceId } from './ids';
 import { isQuestionId } from './ids';
-import type { AnswerShopkeeperCommand, EffectPlan, ExpansionRunState, FlightBarrier, QuestionChoice } from './expansion';
+import type { AnswerShopkeeperCommand, EffectPlan, ExpansionRunState, FlightBarrier, QuestionChoice, TalkChoice } from './expansion';
 import type { Pose, Vec3 } from './geometry';
 import type { BulletType, CollectedPrize, ScoreLedgerEntry } from './events';
 import type { ShopkeeperPart } from './layout';
@@ -280,7 +280,13 @@ export type GameCommand =
   /** Expanded rules only; rejected by rules-v1. */
   | AnswerShopkeeperCommand
   /** A9: take or decline the shopkeeper's order, before the first shot only. */
-  | { readonly type: 'ORDER'; readonly accept: boolean };
+  | { readonly type: 'ORDER'; readonly accept: boolean }
+  /** r007: "撃つ" opens the power gauge with the current position and aim fixed. */
+  | { readonly type: 'OPEN_GAUGE' }
+  /** r007: "照準に戻る" closes the gauge without using a cork. */
+  | { readonly type: 'CANCEL_GAUGE' }
+  /** r007: "店主と話す", once per run, while aiming. */
+  | { readonly type: 'CHOOSE_SHOPKEEPER_TALK'; readonly choice: TalkChoice };
 
 export type GameCommandType = GameCommand['type'];
 export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
@@ -295,6 +301,9 @@ export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
   'SKIP_PRESENTATION',
   'ANSWER_SHOPKEEPER',
   'ORDER',
+  'OPEN_GAUGE',
+  'CANCEL_GAUGE',
+  'CHOOSE_SHOPKEEPER_TALK',
 ];
 
 export type CommandParseResult =
@@ -352,6 +361,13 @@ export function parseCommand(input: unknown): CommandParseResult {
       if (typeof o.accept !== 'boolean') return { ok: false, reason: 'accept must be a boolean' };
       return { ok: true, command: { type, accept: o.accept } };
     }
+    case 'CHOOSE_SHOPKEEPER_TALK': {
+      if (!hasOnlyKeys(o, ['type', 'choice'])) return { ok: false, reason: 'unexpected fields' };
+      if (o.choice !== 'hint' && o.choice !== 'ammo') return { ok: false, reason: 'invalid choice' };
+      return { ok: true, command: { type, choice: o.choice } };
+    }
+    case 'OPEN_GAUGE':
+    case 'CANCEL_GAUGE':
     case 'CONFIRM_POSITION':
     case 'STOP_LOAD':
     case 'FIRE':

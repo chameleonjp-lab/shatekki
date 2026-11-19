@@ -123,7 +123,8 @@ export function validateRunState(
     if (!isObj(l) || !isNum(l.barValue) || l.barValue < 0 || l.barValue > 1 || typeof l.tier !== 'string' || !TIERS.includes(l.tier)) return 'invalid load';
     if (!isNum(l.damageMultiplier) || !isNum(l.pushMultiplier) || l.damageMultiplier <= 0 || l.pushMultiplier <= 0) return 'invalid load multipliers';
   }
-  if (phase === 'aiming' && s.load === null) return 'aiming without a load result';
+  // r007 aims before the power is chosen: its aiming phase has no load result.
+  if (phase === 'aiming' && s.load === null && !expansion?.profile.aimFirst) return 'aiming without a load result';
 
   // ledger and score
   if (!Array.isArray(s.ledger) || !s.ledger.every(ledgerShapeOk)) return 'invalid ledger shape';
@@ -175,7 +176,7 @@ export function validateRunState(
 
   // first hits
   if (!Array.isArray(s.firstHitsScored) || new Set(s.firstHitsScored).size !== s.firstHitsScored.length) return 'invalid firstHitsScored';
-  const parts = new Set(layout.shopkeeper.map((p) => `shopkeeper:${p.part}`));
+  const parts = new Set([...layout.shopkeeper.map((p) => `shopkeeper:${p.part}`), ...(layout.reflectors ?? []).filter((r) => r.part !== null).map((r) => `shopkeeper:${r.part}`)]);
   const hidden = new Set(layout.hiddenTargets.map((h) => `hidden:${h.targetId}`));
   for (const k of s.firstHitsScored) if (typeof k !== 'string' || !(parts.has(k) || hidden.has(k))) return 'unknown first-hit key';
 
@@ -232,6 +233,7 @@ function validateReservation(r: unknown, exp: ExpansionCatalog, tuning: TuningCo
   if (!within(m.loadPeriodMult, lim.loadPeriodMult)) return 'reservation load period outside the limits';
   if (!within(m.radiusMult, lim.radiusMult)) return 'reservation radius outside the limits';
   if (!within(m.splitSpreadMult, lim.splitSpreadMult)) return 'reservation split spread outside the limits';
+  if (m.powerZoneWidthMult !== undefined && !(lim.powerZoneWidthMult && within(m.powerZoneWidthMult, lim.powerZoneWidthMult))) return 'reservation power zone outside the limits';
   if (!Number.isInteger(m.extraReflections) || Math.abs(m.extraReflections as number) > lim.reflections.max - lim.reflections.min) return 'reservation extraReflections outside the limits';
   if (m.bulletType !== null && !(typeof m.bulletType === 'string' && m.bulletType in tuning.bulletTypes)) return 'reservation bulletType unknown';
   const l = m.launch;
@@ -285,7 +287,23 @@ function validateExpansionState(s: Obj, exp: ExpansionCatalog, layout: BoothLayo
   }
   const rng = x.rng;
   if (!isObj(rng) || !isValidRngState(rng.cells) || !isValidRngState(rng.questions) || !isValidRngState(rng.effects)) return 'invalid expansion rng';
+  const aimProblem = validateAimFirstState(x.aimFirst, exp, shots, phase);
+  if (aimProblem !== null) return aimProblem;
   return validateRewardState(x.rewards, exp, catalog, shots);
+}
+
+/** r007: present exactly when the version has the aim-first controls; the talk is paid at most once. */
+function validateAimFirstState(a: unknown, exp: ExpansionCatalog, shots: number, phase: string): string | null {
+  const cfg = exp.profile.aimFirst;
+  if (!cfg) return a === undefined ? null : 'aim-first state in a version without it';
+  if (!isObj(a) || !isInt(a.aimSeq)) return 'invalid aim-first state';
+  if (phase === 'position') return 'aim-first run in the position phase';
+  const t = a.talk;
+  if (t === null) return null;
+  if (!isObj(t) || (t.choice !== 'hint' && t.choice !== 'ammo') || !isInt(t.afterShot) || t.afterShot > shots) return 'invalid talk';
+  if (!isInt(t.ammoRequested) || !isInt(t.ammoGranted) || t.ammoGranted > t.ammoRequested || t.ammoRequested > cfg.talk.ammo) return 'talk paid more than the version allows';
+  if (t.choice === 'hint' && (t.ammoRequested !== 0 || !isObj(t.hint))) return 'invalid talk hint';
+  return null;
 }
 
 /**

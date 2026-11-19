@@ -146,6 +146,8 @@ export function mergeModifiers(base: ShotModifiers, patch: ShotModifierPatch, li
   if (patch.splitSpreadMult !== undefined) out.splitSpreadMult = clamp(patch.splitSpreadMult, limits.splitSpreadMult);
   if (patch.extraReflections !== undefined) out.extraReflections = Math.trunc(clamp(patch.extraReflections, { min: -reflectSpan, max: reflectSpan }));
   if (patch.launch !== undefined) out.launch = Object.freeze({ count: patch.launch.count, spreadRad: clamp(patch.launch.spreadRad, { min: 0, max: 0.5 }) });
+  // r007: the latest power-zone width wins; versions without the range never get the field.
+  if (patch.powerZoneWidthMult !== undefined && limits.powerZoneWidthMult) out.powerZoneWidthMult = clamp(patch.powerZoneWidthMult, limits.powerZoneWidthMult);
   return Object.freeze(out);
 }
 

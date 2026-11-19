@@ -1,0 +1,21 @@
+{
+  "expanded-aim-first": {
+    "rulesVersion": "rules-v2-proposed-r007",
+    "persistence": "atomic",
+    "transformPolicy": "preserve-supported-bottom",
+    "clock": "fixed",
+    "presentation": "confirmed-motions",
+    "controls": "aim-first",
+    "cellCount": 100,
+    "powerZoneWidthMult": { "min": 0.7, "max": 1.5 },
+    "powerZoneEffects": { "FX012": 1.25, "FX013": 1.5, "FX035": 0.85, "FX036": 0.7 },
+    "aimFirst": {
+      "moveStep": 0.14,
+      "holdDelayMs": 300,
+      "holdSpeed": 1.4,
+      "parts": { "hatAmmo": 1, "feetPowerZoneWidthMult": 1.25 },
+      "talk": { "ammo": 1, "ammoPowerZoneWidthMult": 0.85 },
+      "speech": { "firstSec": 6, "intervalSec": 12, "showSec": 4.5, "recentWindow": 5 }
+    }
+  }
+}

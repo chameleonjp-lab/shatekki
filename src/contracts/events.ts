@@ -12,7 +12,7 @@ import type { Quat, Vec3 } from './geometry';
 import type { DeviceKind, ShopkeeperPart, SurfaceMaterial } from './layout';
 import type { PrizeMaterial } from './catalog';
 import type { FirstHitKey, PrizeOutcome } from './sim';
-import type { AppliedTransform, DeferredTransform, PlannedEffect } from './expansion';
+import type { AppliedTransform, DeferredTransform, PartOutcome, PlannedEffect } from './expansion';
 import type { RewardOutcome } from './rewards';
 
 export const EVENTS_VERSION = 1;
@@ -23,7 +23,8 @@ export type ImpactTarget =
   | { readonly kind: 'prize'; readonly instanceId: PrizeInstanceId; readonly typeId: PrizeTypeId; readonly material: PrizeMaterial }
   | { readonly kind: 'surface'; readonly surfaceId: string; readonly material: SurfaceMaterial }
   | { readonly kind: 'device'; readonly deviceId: DeviceId; readonly deviceKind: DeviceKind; /** false when this device already fired in this shot (decision 31) */ readonly activated: boolean }
-  | { readonly kind: 'shopkeeper'; readonly part: ShopkeeperPart }
+  /** face: r007 fan panel only ('front' reflects toward the shelf; 'back' and 'edge' are ordinary contacts). */
+  | { readonly kind: 'shopkeeper'; readonly part: ShopkeeperPart; readonly face?: 'front' | 'back' | 'edge' }
   | { readonly kind: 'hidden'; readonly targetId: string }
   /** Layout v2 back-wall cell. activated=false: already used this run (ordinary reflection only). */
   | { readonly kind: 'cell'; readonly cellId: BackgroundCellId; readonly activated: boolean };
@@ -267,6 +268,34 @@ export interface ShotSummary {
   readonly deferredTransforms?: readonly DeferredTransform[];
   /** Rules versions with rewards: what A1-A10 did in this shot, in A1 → A10 order (granted = real amount). */
   readonly rewards?: readonly RewardOutcome[];
+  /** r007: shopkeeper parts touched in this shot, hat → fan → body → feet, with their first-hit effects. */
+  readonly parts?: readonly PartOutcome[];
+  /** r007: what the shot really touched and where a cork that touched nothing left (never re-derived from the picture). */
+  readonly facts?: ShotFacts;
+}
+
+/** r007: the contact that explains a shot best, picked from the sim's real contacts. */
+export type RepresentativeContact =
+  | { readonly kind: 'prize'; readonly instanceId: PrizeInstanceId; readonly typeId: PrizeTypeId; readonly collected: boolean }
+  | { readonly kind: 'cell'; readonly cellId: BackgroundCellId; readonly activated: boolean }
+  | { readonly kind: 'device'; readonly deviceId: DeviceId; readonly deviceKind: DeviceKind; readonly activated: boolean }
+  | { readonly kind: 'shopkeeper'; readonly part: ShopkeeperPart }
+  | { readonly kind: 'tray' }
+  | { readonly kind: 'hidden'; readonly targetId: string }
+  | { readonly kind: 'surface'; readonly surfaceId: string };
+
+/** Where a cork with no contact at all left the stall (or why it ended). */
+export type ShotExit = 'left' | 'right' | 'up' | 'down' | 'back' | 'front' | 'time' | 'unknown';
+
+export interface ShotFacts {
+  /** null when no cork touched anything. */
+  readonly representative: RepresentativeContact | null;
+  /** Set only when no cork of the shot touched anything. */
+  readonly exit: ShotExit | null;
+  /** Prizes pushed but not collected in this shot. */
+  readonly pushedPrizes: readonly PrizeTypeId[];
+  /** True when an unused cell is next to a used cell this shot touched (for "the next '?' still works"). */
+  readonly unusedNeighbour: boolean;
 }
 
 /**

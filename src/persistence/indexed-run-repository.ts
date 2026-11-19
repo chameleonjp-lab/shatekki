@@ -66,7 +66,32 @@ function canonical(value: unknown): string {
   });
 }
 
+/** r007 "店主と話す": the only command that may add a cork, once per run, together with its reservation. */
+function talkAllowed(from: RunState, to: RunState, operationId: string): boolean {
+  const before = from.expansion?.aimFirst;
+  const after = to.expansion?.aimFirst;
+  if (!before || !after || before.talk !== null || after.talk === null) return false;
+  const granted = after.talk.ammoGranted;
+  return (
+    operationId === to.runId + '/shopkeeper-talk' &&
+    from.phase === 'aiming' && to.phase === 'aiming' &&
+    to.inFlight === null &&
+    from.shotsFired === to.shotsFired &&
+    after.talk.afterShot === to.shotsFired &&
+    to.ammo === from.ammo + granted &&
+    to.bonusAmmoTotal === from.bonusAmmoTotal + granted &&
+    canonical(from.ledger) === canonical(to.ledger) &&
+    canonical(from.collected) === canonical(to.collected) &&
+    canonical(from.completedSets) === canonical(to.completedSets) &&
+    from.score === to.score
+  );
+}
+
 function commandAllowed(from: RunState, to: RunState, operationId: string): boolean {
+  if (!terminal(from) && operationId.endsWith('/shopkeeper-talk')) return talkAllowed(from, to, operationId);
+  // r007 saves each finished move/aim as its own numbered operation; nothing else may change with it.
+  const aimSeq = to.expansion?.aimFirst?.aimSeq;
+  if (operationId.includes('/aim/') && (aimSeq === undefined || operationId !== to.runId + '/aim/' + aimSeq || aimSeq !== (from.expansion?.aimFirst?.aimSeq ?? -1) + 1 || from.phase !== 'aiming' || to.phase !== 'aiming')) return false;
   // Points, discoveries, and earlier shot records only change at settlement.
   if (
     terminal(from) ||
@@ -77,7 +102,8 @@ function commandAllowed(from: RunState, to: RunState, operationId: string): bool
     canonical(from.completedSets) !== canonical(to.completedSets)
   )
     return false;
-  if (from.phase === 'aiming' && to.phase === 'resolving') {
+  // r007 opens the gauge locally, so its FIRE is saved from the last saved aiming (or loading) state.
+  if ((from.phase === 'aiming' || (from.phase === 'loading' && from.expansion?.aimFirst)) && to.phase === 'resolving') {
     return (
       operationId === to.runId + '/' + to.shotsFired + '/fire' &&
       to.shotsFired === from.shotsFired + 1 &&
@@ -104,6 +130,8 @@ function createRepository(
   bundle?: GameplayBundle,
 ): RunRepository {
   const knownPrizes = (bundle?.catalog ?? RELEASE_CATALOG).prizes;
+  /** r007: runs start and continue in the aiming phase (there is no position step). */
+  const aimFirst = !!bundle?.expansion?.profile.aimFirst;
   const validState = (state: RunState) =>
     bundle
       ? validateRunState(state, bundle.catalog, bundle.tuning, bundle.layout, bundle.expansion) === null
@@ -215,7 +243,7 @@ function createRepository(
           summary.shotNumber !== state.shotsFired ||
           state.shotsFired !== current.state.shotsFired ||
           state.inFlight !== null ||
-          (state.phase !== 'ended' && state.phase !== 'position') ||
+          (state.phase !== 'ended' && state.phase !== (aimFirst ? 'aiming' : 'position')) ||
           summary.runEnded !== (state.phase === 'ended') ||
           summary.ammoAfter !== state.ammo ||
           summary.ledger.scoreBefore !== current.state.score ||
@@ -300,7 +328,7 @@ function createRepository(
           !validScope(scope) ||
           scope.rulesVersion !== state.rulesVersion ||
           !state.runId ||
-          state.phase !== 'position' ||
+          state.phase !== (aimFirst ? 'aiming' : 'position') ||
           state.inFlight ||
           state.shotsFired !== 0 ||
           !validState(state)

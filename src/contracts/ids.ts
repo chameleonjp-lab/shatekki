@@ -53,6 +53,12 @@ const QUESTION_RE = /^Q\d{3}$/;
 const EFFECT_RE = /^FX\d{3}$/;
 const SERIES_RE = /^SER\d{2}$/;
 const CELL_RE = /^cell-r[1-3]-c(0[1-9]|1[0-2])$/;
+/**
+ * r007 (layout v3) adds 64 cells: 34 more on the back wall and 15 on each side wall.
+ * Back: cell-bk-<band>-<col> (band top|r1|r2|r3|bot, col L|01..12|R; never one of the 36 above).
+ * Sides: cell-lw-<band>-<lane> / cell-rw-<band>-<lane> (lane back|mid|front).
+ */
+const CELL_V3_RE = /^(cell-bk-(top|bot)-(L|R|0[1-9]|1[0-2])|cell-bk-r[1-3]-(L|R)|cell-[lr]w-(top|r[1-3]|bot)-(back|mid|front))$/;
 export const EFFECT_GROUP_IDS = ['GAIN', 'RISK', 'STOCK', 'GUIDE', 'MIX', 'CHAOS'] as const;
 
 export function isPrizeTypeId(v: unknown): v is PrizeTypeId {
@@ -95,7 +101,7 @@ export function isSeriesId(v: unknown): v is SeriesId {
   return typeof v === 'string' && SERIES_RE.test(v);
 }
 export function isBackgroundCellId(v: unknown): v is BackgroundCellId {
-  return typeof v === 'string' && CELL_RE.test(v);
+  return typeof v === 'string' && (CELL_RE.test(v) || CELL_V3_RE.test(v));
 }
 export function isEffectGroupId(v: unknown): v is EffectGroupId {
   return typeof v === 'string' && (EFFECT_GROUP_IDS as readonly string[]).includes(v);

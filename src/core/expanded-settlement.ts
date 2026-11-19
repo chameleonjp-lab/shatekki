@@ -18,6 +18,8 @@ import { seriesDef } from './series';
 import type { SettlementResult } from './settlement';
 import type { ExpandedPlanContext } from './effect-plan';
 import { rewardConfigOf, settleRewards } from './rewards';
+import { setHintFor } from './aim-first';
+import type { PartOutcome } from '../contracts';
 
 export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: ExpandedPlanContext): SettlementResult {
   if (!isExpandedRunState(state)) throw new Error('resolveExpandedShot: not an expanded run');
@@ -105,6 +107,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
         }
       : {}),
   };
+  const aimFirst = exp.aimFirst !== undefined;
 
   const base: ExpandedRunState = {
     ...state,
@@ -141,7 +144,8 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
       tuning,
       ctx.layout,
     );
-    next = { ...base, phase: 'position', shelf: r.shelf, draw: r.draw };
+    // r007 goes straight back to aiming at the same position and aim.
+    next = { ...base, phase: aimFirst ? 'aiming' : 'position', shelf: r.shelf, draw: r.draw };
   }
   if (!isAmmoBalanced(next, tuning.initialAmmo)) throw new Error('resolveExpandedShot: ammo invariant broken (shotsFired + ammo + ammoLostTotal !== initialAmmo + bonusAmmoTotal)');
 
@@ -166,8 +170,27 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     appliedTransforms: record.appliedTransforms ?? [],
     deferredTransforms: record.deferredTransforms ?? [],
     ...(settled ? { rewards: rewardOutcomes } : {}),
+    ...(plan.parts ? { parts: finalParts(plan.parts, next, runEnded, ctx) } : {}),
+    ...(record.facts ? { facts: record.facts } : {}),
   };
   return { state: next, summary };
+}
+
+/**
+ * r007: what each part really left after the whole shot. The feet's wider zone is shown only if it
+ * survived every later effect and the game goes on; the body's pair is chosen from the final shelf.
+ */
+function finalParts(parts: readonly PartOutcome[], next: ExpandedRunState, runEnded: boolean, ctx: ExpandedPlanContext): PartOutcome[] {
+  return parts.map((p) => {
+    if (!p.first) return p;
+    if (p.effect === 'powerZone') {
+      if (runEnded) return { ...p, powerZoneWidthMult: null, reason: 'runEnded' };
+      const kept = next.expansion.next.modifiers.powerZoneWidthMult;
+      return kept === p.powerZoneWidthMult ? p : { ...p, powerZoneWidthMult: null, reason: 'overwritten' };
+    }
+    if (p.effect === 'setHint') return { ...p, hint: setHintFor(next, ctx.catalog, ctx.expansion) };
+    return p;
+  });
 }
 
 /**

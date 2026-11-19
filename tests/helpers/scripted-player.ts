@@ -1,4 +1,5 @@
 import { aimAt } from './aim-at';
+import { aimThrough } from './aim-v3';
 import { rewardConfigOf, rewardDevicesFor } from '../../src/core/rewards';
 import { GameController, type RulesApi } from '../../src/app/controller';
 import { CORE_RULES } from '../../src/app/rules';
@@ -86,8 +87,15 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
       standX = Math.min(cam.standMaxX, Math.max(cam.standMinX, pick.pose.position.x + (rand() - 0.5) * 0.3));
       target = pick.pose.position;
     }
+    const aimFirst = b.behavior?.controls === 'aim-first';
     c.dispatch({ type: 'SET_POSITION', x: standX });
-    c.dispatch({ type: 'CONFIRM_POSITION' });
+    if (aimFirst) {
+      // r007: aim first (no sway), then open the gauge; the same bar targets as the other versions.
+      const st = c.current;
+      const bt0 = isExpandedRunState(st) ? (st.expansion.next.modifiers.bulletType ?? st.bulletType) : st.bulletType;
+      c.dispatch({ type: 'AIM', ...(aimThrough(b, st.standX, target) ?? aimAt(b, st.standX, target, bt0)) });
+      c.dispatch({ type: 'OPEN_GAUGE' });
+    } else c.dispatch({ type: 'CONFIRM_POSITION' });
     const bar = LOAD_BARS[Math.floor(rand() * LOAD_BARS.length)]!;
     const period = b.tuning.loading.barPeriodSec * (isExpandedRunState(c.current) ? c.current.expansion.next.modifiers.loadPeriodMult : 1);
     let left = (bar * period) / 2;
@@ -96,11 +104,13 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
       c.frame(dt);
       left -= dt;
     }
-    c.dispatch({ type: 'STOP_LOAD' });
+    if (!aimFirst) c.dispatch({ type: 'STOP_LOAD' });
     const s1 = c.current;
     const bt = isExpandedRunState(s1) ? (s1.expansion.next.modifiers.bulletType ?? s1.bulletType) : s1.bulletType;
-    c.dispatch({ type: 'AIM', ...aimAt(b, s1.standX, target, bt) });
-    for (let i = 0; i < 5; i++) c.frame(0.1);
+    if (!aimFirst) {
+      c.dispatch({ type: 'AIM', ...aimAt(b, s1.standX, target, bt) });
+      for (let i = 0; i < 5; i++) c.frame(0.1);
+    }
     const beforeFire = c.current;
     const gameTick = c.gameTick;
     if (!c.dispatch({ type: 'FIRE' })) throw new Error(`FIRE rejected in ${s1.phase}`);

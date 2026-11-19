@@ -16,6 +16,8 @@
  * Neither function reads the clock, the DOM or the physics world.
  */
 import type {
+  PartOutcome,
+  ShopkeeperPart,
   AnswerShopkeeperCommand,
   BoothLayout,
   EffectPlan,
@@ -37,7 +39,7 @@ import type {
 } from '../contracts';
 import { isExpandedRunState, mintId } from '../contracts';
 import { nextIndex, shuffled } from './expansion-rng';
-import { EMPTY_RESERVATION, applyOperation, inapplicableReason, withAmmoAdded, withIntent, type EffectEnv, type EffectWork } from './gameplay-effects';
+import { EMPTY_RESERVATION, applyOperation, inapplicableReason, mergeModifiers, withAmmoAdded, withIntent, type EffectEnv, type EffectWork } from './gameplay-effects';
 import { nextBulletType } from './gimmicks';
 import { groupForChoice, nextPendingQuestion } from './questions';
 import { sortPrizesByBoardOrder } from './series';
@@ -230,6 +232,14 @@ export function planFlightEnd(state: RunState, barrier: FlightBarrier, ctx: Expa
     }
   }
 
+  // 2b. r007: first-hit shopkeeper parts, after cells and devices and before the answer.
+  let parts: PartOutcome[] | undefined;
+  if (ctx.expansion.profile.aimFirst && exp.aimFirst) {
+    const r = planPartEffects(state, barrier, work, ctx);
+    work = r.work;
+    parts = r.parts;
+  }
+
   // 3. question: only a shopkeeper hit asks, and only while the bag has one left.
   const question = barrier.shopkeeperHit ? nextPendingQuestion(exp) : null;
   const plan: EffectPlan = {
@@ -241,8 +251,53 @@ export function planFlightEnd(state: RunState, barrier: FlightBarrier, ctx: Expa
     rng: { ...exp.rng, effects: work.rng },
     projection: projectionOf(work),
     complete: question === null,
+    ...(parts ? { parts } : {}),
   };
   return withPlan(state, flight, barrier, plan, question === null ? 'postEffects' : 'question');
+}
+
+/** Display and processing order of the parts (requirements §5.1). */
+export const PART_ORDER: readonly ShopkeeperPart[] = ['hat', 'fan', 'body', 'feet'];
+
+/**
+ * r007 part effects. Each part counts once per shot (split corks included) and acts only on its
+ * first hit in the run, judged from the same contact keys the ledger scores.
+ */
+function planPartEffects(state: ExpandedRunState, barrier: FlightBarrier, work: EffectWork, ctx: ExpandedPlanContext): { work: EffectWork; parts: PartOutcome[] } {
+  const cfg = ctx.expansion.profile.aimFirst!;
+  const touched = PART_ORDER.filter((p) => barrier.shopkeeperParts.includes(p));
+  const scored = new Set(state.firstHitsScored);
+  const parts: PartOutcome[] = [];
+  for (const part of touched) {
+    const first = !scored.has(`shopkeeper:${part}`);
+    const base = { part, first, firstPoints: first ? ctx.tuning.scoring.shopkeeperPoints[part] ?? 0 : 0, ammoRequested: 0, ammoGranted: 0, powerZoneWidthMult: null, hint: null };
+    if (!first) {
+      parts.push({ ...base, effect: 'none', reason: 'alreadyHit' });
+      continue;
+    }
+    switch (part) {
+      case 'hat': {
+        const r = withAmmoAdded(work, cfg.parts.hatAmmo, state.shotsFired, ctx.tuning);
+        work = r.work;
+        parts.push({ ...base, effect: 'ammo', ammoRequested: cfg.parts.hatAmmo, ammoGranted: r.delta, reason: r.delta > 0 ? null : 'noAmmoRoom' });
+        break;
+      }
+      case 'feet': {
+        const modifiers = mergeModifiers(work.next.modifiers, { powerZoneWidthMult: cfg.parts.feetPowerZoneWidthMult }, ctx.expansion.profile.limits);
+        work = { ...work, next: { ...work.next, modifiers } };
+        parts.push({ ...base, effect: 'powerZone', powerZoneWidthMult: modifiers.powerZoneWidthMult ?? null, reason: null });
+        break;
+      }
+      case 'body':
+        // The pair is chosen at settlement, from the shelf after refills and transforms.
+        parts.push({ ...base, effect: 'setHint', reason: null });
+        break;
+      case 'fan':
+        parts.push({ ...base, effect: 'none', reason: null });
+        break;
+    }
+  }
+  return { work, parts };
 }
 
 // ------------------------------------------------------- answerShopkeeper

@@ -7,7 +7,7 @@ import type { AimAngles, FinalResult, LoadTier, Phase } from './game';
 import type { AimPreview, BallisticSpec } from './aim';
 import type { BackgroundCellId, EffectId, PrizeInstanceId, PrizeTypeId, QuestionId, SeriesId, SetId, ShotId } from './ids';
 import type { RewardDeviceLayout, RewardId, RewardOrderState, RewardTargetGeometry } from './rewards';
-import type { HintKind, QuestionChoice } from './expansion';
+import type { HintKind, QuestionChoice, TalkOutcome } from './expansion';
 
 /**
  * Expanded rules: checked state the view may draw. The view never draws
@@ -72,6 +72,22 @@ export interface ViewState {
   readonly rewardAim?: AimPreview;
   /** Expanded rules only. */
   readonly expansion?: ExpansionViewState;
+  /** r007 only: the power zones the gauge draws (same numbers the classifier uses) and the talk state. */
+  readonly aimFirst?: AimFirstViewState;
+}
+
+export interface AimFirstViewState {
+  readonly powerZoneWidthMult: number;
+  readonly zones: readonly { readonly tier: LoadTier; readonly min: number; readonly max: number }[];
+  /** Requested aim (the camera follows it; there is no sway). */
+  readonly aim: AimAngles;
+  readonly talk: {
+    readonly blocked: 'used' | 'notAiming' | 'noAmmo' | 'paused' | 'orderOpen' | null;
+    readonly ammoBlocked: 'ammoCap' | 'zoneReserved' | null;
+    readonly ammoOffer: number;
+    readonly powerZoneWidthMult: number;
+    readonly used: TalkOutcome | null;
+  };
 }
 
 export interface PresentOptions {

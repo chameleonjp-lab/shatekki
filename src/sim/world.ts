@@ -64,7 +64,8 @@ import type {
   TuningConfig,
   Vec3,
 } from '../contracts';
-import { REWARD_TARGET_HALF_THICKNESS, ballisticForModifiers, mintId } from '../contracts';
+import { REWARD_TARGET_HALF_THICKNESS, ballisticForModifiers, cellAtFacePoint, mintId, neighbourCells } from '../contracts';
+import type { ReflectorGeometry, RepresentativeContact, ShotExit, ShotFacts } from '../contracts';
 import { MAX_POWER_MULTIPLIER, nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
@@ -103,7 +104,9 @@ type StaticTarget =
   | { readonly t: 'rewardTarget' }
   /** A2 / A4 devices (r003). */
   | { readonly t: 'rewardChime' }
-  | { readonly t: 'rewardPiggy' };
+  | { readonly t: 'rewardPiggy' }
+  /** Layout v3 (r007): the fan (a shopkeeper part) and the tray, oriented panels. */
+  | { readonly t: 'reflector'; readonly r: ReflectorGeometry };
 type Target = StaticTarget | { readonly t: 'prize'; readonly id: PrizeInstanceId };
 
 const SURFACE_FRICTION: Readonly<Record<SurfaceMaterial, number>> = { wood: 0.5, cloth: 0.8, paper: 0.6, metal: 0.35, plastic: 0.45 };
@@ -169,6 +172,9 @@ interface ActiveShot {
   chimeAfterReflection: boolean;
   piggyDeposit: boolean;
   seesaw: PrizeInstanceId[];
+  /** Layout v3: first contact per target in order (for the shot's facts), and corks that left. */
+  contactLog: { readonly key: string; readonly contact: RepresentativeContact; readonly order: number }[];
+  exits: { readonly reason: ProjectileEndReason; readonly position: Vec3; readonly velocity: Vec3 }[];
 }
 
 interface PendingRequest {
@@ -184,6 +190,8 @@ const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y,
 export const REWARD_TARGET_SURFACE_ID = 'reward-target';
 export const REWARD_CHIME_SURFACE_ID = 'reward-chime';
 export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
+/** Layout v3: surface id of a reflector that is not a shopkeeper part ('reflector-tray'). */
+export const REFLECTOR_SURFACE_PREFIX = 'reflector-';
 
 /** Proposed expanded limits (effects appendix 3.2); the bundle may pass its own. */
 export interface ShotWorldOptions {
@@ -244,12 +252,28 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   // Layout v2: thin solid boxes on the back wall. Real surfaces (corks reflect, prizes in front block them).
   const cellGeoms: readonly BackgroundCellGeometry[] = [...(layout.backgroundCells ?? [])].sort((a, b) => (a.cellId < b.cellId ? -1 : 1));
   for (const c of cellGeoms) addStatic(c.box, SURFACE_FRICTION.wood, { t: 'cell', cellId: c.cellId });
+  // Layout v3: the fan and the tray are oriented panels; what is drawn is what a cork can touch.
+  for (const r of layout.reflectors ?? []) {
+    const c = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(r.halfExtents.x, r.halfExtents.y, r.halfExtents.z)
+        .setTranslation(r.center.x, r.center.y, r.center.z)
+        .setRotation(r.rotation)
+        .setFriction(SURFACE_FRICTION[r.material])
+        .setRestitution(0),
+      fixedBody,
+    );
+    targets.set(c.handle, { t: 'reflector', r });
+  }
+  const cellById = new Map(cellGeoms.map((c) => [c.cellId as string, c]));
+  const facedCells = cellGeoms.some((c) => c.face !== undefined);
   // A2 / A4 devices (r003 only): solid, for every shot.
   if (options.rewardDevices?.chime) addStatic(options.rewardDevices.chime, SURFACE_FRICTION.metal, { t: 'rewardChime' });
   if (options.rewardDevices?.piggySlot) addStatic(options.rewardDevices.piggySlot, SURFACE_FRICTION.plastic, { t: 'rewardPiggy' });
   /** One cell per contact: the cell whose face contains the point (boundary tolerance, then lowest id). */
   const CELL_EDGE_EPS = 1e-6;
   const cellAtPoint = (pt: Vec3, hitCell: BackgroundCellId): BackgroundCellId => {
+    // Layout v3: back and side walls, one cell per point (shared rule in contracts/layout-v3).
+    if (facedCells) return cellAtFacePoint(cellGeoms, pt)?.cellId ?? hitCell;
     for (const c of cellGeoms) {
       const b = c.box;
       if (Math.abs(pt.x - b.center.x) <= b.halfExtents.x + CELL_EDGE_EPS && Math.abs(pt.y - b.center.y) <= b.halfExtents.y + CELL_EDGE_EPS) return c.cellId;
@@ -433,6 +457,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return { kind: 'surface', surfaceId: REWARD_CHIME_SURFACE_ID, material: 'metal' };
       case 'rewardPiggy':
         return { kind: 'surface', surfaceId: REWARD_PIGGY_SURFACE_ID, material: 'plastic' };
+      case 'reflector':
+        return t.r.part ? { kind: 'shopkeeper', part: t.r.part } : { kind: 'surface', surfaceId: REFLECTOR_SURFACE_PREFIX + t.r.reflectorId, material: t.r.material };
       case 'prize': {
         const p = live.get(t.id)!;
         return { kind: 'prize', instanceId: t.id, typeId: p.src.typeId, material: p.cfg.material };
@@ -457,6 +483,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return 't:chime';
       case 'rewardPiggy':
         return 't:piggy';
+      case 'reflector':
+        return `r:${t.r.reflectorId}`;
       case 'prize':
         return `p:${t.id}`;
     }
@@ -478,6 +506,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return 'metal';
       case 'rewardPiggy':
         return 'plastic';
+      case 'reflector':
+        return t.r.material;
       case 'prize':
         return live.get(t.id)!.cfg.material;
     }
@@ -487,6 +517,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (p.ended) return;
     p.ended = true;
     if (reason === 'reflectionLimit' || reason === 'timeLimit') a.endedByLimit = true;
+    if (reason !== 'split') a.exits.push({ reason, position: p.position, velocity: p.velocity });
     emit((eventId, shotId) => ({ type: 'projectileEnded', eventId, shotId, projectileId: p.id, reason, position: p.position }));
   };
 
@@ -531,18 +562,20 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       const activated =
         (target.t === 'device' && !a.usedDevices.has(target.deviceId)) ||
         (target.t === 'cell' && a.usableCells.has(target.cellId) && !a.activatedCells.has(target.cellId));
+      const impactTarget = targetImpact(target, activated);
       emit((eventId, shotId) => ({
         type: 'impact',
         eventId,
         runId: a.runId,
         shotId,
         projectileId: p.id,
-        target: targetImpact(target, activated),
+        target: target.t === 'reflector' && impactTarget.kind === 'shopkeeper' ? { ...impactTarget, face: reflectorFace(target.r, n) } : impactTarget,
         point,
         normal: n,
         speed,
         reflectionIndex,
       }));
+      if (facedCells) logContact(a, key, target, activated);
       if (target.t === 'device' && activated) splitNow = activateDevice(a, p, target.deviceId, target.kind, hitTimeSec);
       if (target.t === 'cell' && activated) {
         a.activatedCells.add(target.cellId);
@@ -562,11 +595,14 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         }
       }
       if (target.t === 'shopkeeper') a.firstHit.push(`shopkeeper:${target.part}`);
+      // The fan is one contact: one part hit and one reflection, never two (the tray is no part).
+      if (target.t === 'reflector' && target.r.part) a.firstHit.push(`shopkeeper:${target.r.part}`);
       if (target.t === 'hidden') a.firstHit.push(`hidden:${target.targetId}`);
     }
 
     const bullet = tuning.bulletTypes[p.bulletType];
-    const e = tuning.cork.restitution * bullet.restitution * bounceFactor(targetMaterial(target)) * (p.x ? p.x.restitutionMult : 1);
+    const bounce = target.t === 'reflector' ? target.r.bounce : bounceFactor(targetMaterial(target));
+    const e = tuning.cork.restitution * bullet.restitution * bounce * (p.x ? p.x.restitutionMult : 1);
     p.velocity = reflectVelocity(p.velocity, n, e, TANGENTIAL_KEEP);
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
@@ -582,6 +618,82 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (splitNow && !wouldStop && !wouldHitLimit && splitCork(a, p, n)) return;
     if (wouldStop) endProjectile(a, p, 'stopped');
     else if (wouldHitLimit) endProjectile(a, p, 'reflectionLimit');
+  };
+
+  /** Which face of a reflector a contact normal (outward, toward the cork) belongs to. */
+  const reflectorFace = (r: ReflectorGeometry, n: Vec3): 'front' | 'back' | 'edge' => {
+    const d = dot(n, r.frontNormal);
+    return d > 0.7 ? 'front' : d < -0.7 ? 'back' : 'edge';
+  };
+
+  /** Layout v3: keep the first contact with each target, in order, for the shot's facts. */
+  const logContact = (a: ActiveShot, key: string, target: Target, activated: boolean): void => {
+    if (a.contactLog.some((c) => c.key === key)) return;
+    let contact: RepresentativeContact;
+    switch (target.t) {
+      case 'prize': {
+        const lp = live.get(target.id);
+        contact = { kind: 'prize', instanceId: target.id, typeId: lp ? lp.src.typeId : (target.id as unknown as PrizeTypeId), collected: false };
+        break;
+      }
+      case 'cell':
+        contact = { kind: 'cell', cellId: target.cellId, activated };
+        break;
+      case 'device':
+        contact = { kind: 'device', deviceId: target.deviceId, deviceKind: target.kind, activated };
+        break;
+      case 'shopkeeper':
+        contact = { kind: 'shopkeeper', part: target.part };
+        break;
+      case 'reflector':
+        contact = target.r.part ? { kind: 'shopkeeper', part: target.r.part } : { kind: 'tray' };
+        break;
+      case 'hidden':
+        contact = { kind: 'hidden', targetId: target.targetId };
+        break;
+      case 'surface':
+        contact = { kind: 'surface', surfaceId: target.id };
+        break;
+      default:
+        contact = { kind: 'surface', surfaceId: key };
+    }
+    a.contactLog.push({ key, contact, order: a.contactLog.length });
+  };
+
+  /** Layout v3: the facts of a finished shot, from its real contacts and the corks that left. */
+  const shotFacts = (a: ActiveShot): ShotFacts => {
+    const collected = new Set(a.collected.map((c) => c.instanceId as string));
+    const rank = (c: RepresentativeContact): number => (c.kind === 'prize' ? 0 : c.kind === 'cell' ? 1 : 2);
+    const contacts = a.contactLog.map((c) => (c.contact.kind === 'prize' ? { ...c, contact: { ...c.contact, collected: collected.has(c.contact.instanceId) } } : c));
+    // A won prize explains the shot first; otherwise prize → cell → device and the rest, then contact order.
+    const sorted = [...contacts].sort((x, y) => Number(y.contact.kind === 'prize' && y.contact.collected) - Number(x.contact.kind === 'prize' && x.contact.collected) || rank(x.contact) - rank(y.contact) || x.order - y.order);
+    const representative = sorted[0]?.contact ?? null;
+    const pushedPrizes = contacts.flatMap((c) => (c.contact.kind === 'prize' && !c.contact.collected ? [c.contact.typeId] : []));
+    let unusedNeighbour = false;
+    for (const c of contacts) {
+      if (c.contact.kind !== 'cell' || c.contact.activated) continue;
+      const geom = cellById.get(c.contact.cellId as string);
+      if (geom && neighbourCells(cellGeoms, geom).some((n) => a.usableCells.has(n.cellId) && !a.activatedCells.has(n.cellId))) unusedNeighbour = true;
+    }
+    return { representative, exit: representative ? null : exitOf(a), pushedPrizes, unusedNeighbour };
+  };
+
+  /** Where the first cork (in launch order) of a shot with no contact went. */
+  const exitOf = (a: ActiveShot): ShotExit => {
+    const e = a.exits[0];
+    if (!e) return 'unknown';
+    if (e.reason === 'timeLimit') return 'time';
+    if (e.reason !== 'outOfBounds') return 'unknown';
+    const b = layout.activeBounds;
+    // Which wall of the active box the cork crossed: the largest overshoot relative to the half size, side → vertical → depth on ties.
+    const over = (v: number, c: number, h: number) => (Math.abs(v - c) - h) / h;
+    const ox = over(e.position.x, b.center.x, b.halfExtents.x);
+    const oy = over(e.position.y, b.center.y, b.halfExtents.y);
+    const oz = over(e.position.z, b.center.z, b.halfExtents.z);
+    const m = Math.max(ox, oy, oz);
+    if (ox === m) return e.position.x < b.center.x ? 'left' : 'right';
+    if (oy === m) return e.position.y < b.center.y ? 'down' : 'up';
+    return e.position.z < b.center.z ? 'back' : 'front';
   };
 
   /** Expanded rules: remember a post-flight request; ids and final order are fixed at the barrier. */
@@ -799,6 +911,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       simTimeSec: a.elapsed,
       ...(a.expanded && a.barrierId ? { barrierId: a.barrierId, appliedTransforms: a.applied, deferredTransforms: a.deferred } : {}),
       ...(a.expanded?.rewards ? { rewardContacts: { targetHit: a.targetHit, chimeAfterReflection: a.chimeAfterReflection, seesawInstances: [...a.seesaw], piggyDeposit: a.piggyDeposit } } : {}),
+      ...(facedCells ? { facts: shotFacts(a) } : {}),
     };
     outcomes.clear();
     removeRewardTarget();
@@ -1158,6 +1271,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         return REWARD_CHIME_SURFACE_ID;
       case 'rewardPiggy':
         return REWARD_PIGGY_SURFACE_ID;
+      case 'reflector':
+        return t.r.part ? `shopkeeper:${t.r.part}` : REFLECTOR_SURFACE_PREFIX + t.r.reflectorId;
       case 'prize':
         return t.id;
     }
@@ -1210,6 +1325,8 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       chimeAfterReflection: false,
       piggyDeposit: false,
       seesaw: [],
+      contactLog: [],
+      exits: [],
     };
     active = a;
     if (context.expanded?.rewardTarget) addRewardTarget(context.expanded.rewardTarget);

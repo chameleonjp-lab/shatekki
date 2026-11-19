@@ -206,6 +206,7 @@ const MULT_FIELDS: Readonly<Record<string, string>> = {
   loadPeriodMult: 'loadPeriodMult',
   radiusMult: 'radiusMult',
   splitSpreadMult: 'splitSpreadMult',
+  powerZoneWidthMult: 'powerZoneWidthMult',
 };
 
 function validateOperation(
@@ -243,6 +244,11 @@ function validateOperation(
             continue;
           }
           const r = limits ? rangeOf(limits, MULT_FIELDS[k]!) : null;
+          // r007 only: a version without the range cannot use the power-zone width.
+          if (k === 'powerZoneWidthMult' && !r) {
+            err(id, 'powerZoneWidthMult needs profile.limits.powerZoneWidthMult');
+            continue;
+          }
           if (r && (v < r.min || v > r.max)) err(id, `${k}=${v} is outside the profile range ${r.min}..${r.max}`);
         } else if (k === 'bulletType') {
           if (v !== null && !BULLET_TYPES.includes(v as string)) err(id, `unknown bulletType: ${String(v)}`);

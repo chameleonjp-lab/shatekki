@@ -21,12 +21,12 @@ import type { RewardConfig, RewardRunState } from './rewards';
 // ------------------------------------------------------------------ bundle
 
 /** Selection name of a rule bundle. Not a save/rules version: saves use catalog.rulesVersion. */
-export type GameplayBundleKey = 'official-v1' | 'expanded-proposed' | 'expanded-trial' | 'expanded-full' | 'expanded-save-trial' | 'expanded-placement-trial' | 'expanded-next';
+export type GameplayBundleKey = 'official-v1' | 'expanded-proposed' | 'expanded-trial' | 'expanded-full' | 'expanded-save-trial' | 'expanded-placement-trial' | 'expanded-next' | 'expanded-aim-first';
 /**
  * expanded-proposed = rules-v2-proposed-r001 (kept for comparison), expanded-trial = r002 (first
  * playable rewards: A1, A5), expanded-full = r003 (all ten). Internal builds only.
  */
-export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next'];
+export const GAMEPLAY_BUNDLE_KEYS: readonly GameplayBundleKey[] = ['official-v1', 'expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next', 'expanded-aim-first'];
 /** The bundle every public entry point uses unless a build-time switch for internal testing says otherwise. */
 export const DEFAULT_GAMEPLAY_BUNDLE_KEY: GameplayBundleKey = 'official-v1';
 
@@ -37,6 +37,11 @@ export interface GameplayBehavior {
   readonly transformPolicy: TransformPolicy;
   readonly clock: 'frame' | 'fixed';
   readonly presentation: 'confirmed-static' | 'confirmed-motions';
+  /**
+   * r007: aim first (move and aim freely, then "撃つ" opens the power gauge and "発射" fires).
+   * Absent = the position → loading → aiming order of r001-r006.
+   */
+  readonly controls?: 'aim-first';
 }
 
 /** One consistent set of rules handed to start, restore, physics, view and persistence alike. */
@@ -122,6 +127,11 @@ export interface ShotModifiers {
   readonly extraReflections: number;
   /** Corks created at the muzzle. 2/3 corks share the damage and push of one. */
   readonly launch: { readonly count: LaunchCount; readonly spreadRad: number };
+  /**
+   * r007: the power gauge's perfect / good / normal zones are this many times as wide (same centre).
+   * Absent = 1 (every version before r007 and BASE_SHOT_MODIFIERS).
+   */
+  readonly powerZoneWidthMult?: number;
 }
 
 export const BASE_SHOT_MODIFIERS: ShotModifiers = Object.freeze({
@@ -200,6 +210,35 @@ export interface ExpansionLimits {
   readonly radiusMult: { readonly min: number; readonly max: number };
   readonly reflections: { readonly min: number; readonly max: number };
   readonly splitSpreadMult: { readonly min: number; readonly max: number };
+  /** r007 only: range of the power-zone width multiplier. */
+  readonly powerZoneWidthMult?: { readonly min: number; readonly max: number };
+}
+
+/** r007 "aim first" values (prototype, plan 2026-11-19). */
+export interface AimFirstConfig {
+  /** One tap of ◀/▶ (m). */
+  readonly moveStep: number;
+  /** A press held this long (ms) starts gliding. */
+  readonly holdDelayMs: number;
+  /** Glide speed while held (m/s). */
+  readonly holdSpeed: number;
+  /** Shopkeeper part effects on the first hit of each part in a run. */
+  readonly parts: {
+    readonly hatAmmo: number;
+    readonly feetPowerZoneWidthMult: number;
+  };
+  /** "店主と話す": once per run. */
+  readonly talk: {
+    readonly ammo: number;
+    readonly ammoPowerZoneWidthMult: number;
+  };
+  /** Speech bubbles (view only): first after this much calm aiming time, then every interval. */
+  readonly speech: {
+    readonly firstSec: number;
+    readonly intervalSec: number;
+    readonly showSec: number;
+    readonly recentWindow: number;
+  };
 }
 
 export interface ExpansionProfile {
@@ -207,12 +246,15 @@ export interface ExpansionProfile {
   readonly rulesVersion: string;
   readonly valueStatus: ValueStatus;
   readonly slotCount: 36;
-  readonly cellCount: 36;
+  /** 36 (layout v2) or 100 (layout v3, r007). */
+  readonly cellCount: 36 | 100;
   readonly pairSetBonusScore: number;
   readonly tierTargets: Readonly<Record<'easy' | 'normal' | 'hard', number>>;
   readonly limits: ExpansionLimits;
   /** Post-#19 ammo rewards (A1-A10). Absent = none (r001). */
   readonly rewards?: RewardConfig;
+  /** r007 only. Its presence switches the run to the aim-first controls, shopkeeper effects and talk. */
+  readonly aimFirst?: AimFirstConfig;
 }
 
 /** The checked definitions added on top of the 100 prizes. Built by src/catalog/expanded-config.ts. */
@@ -282,6 +324,54 @@ export interface ExpansionRunState {
   readonly rng: ExpansionRngState;
   /** Present only when the rules version has rewards (r002+). */
   readonly rewards?: RewardRunState;
+  /** Present only in r007 (profile.aimFirst). */
+  readonly aimFirst?: AimFirstRunState;
+}
+
+/** A two-prize set the shopkeeper points out (body hit or "組み合わせのヒント"). */
+export interface SetHint {
+  /** null when no unfinished pair can be completed from the current shelf. */
+  readonly setId: SetId | null;
+  /** Kinds of that set still missing (one or both), in set order. */
+  readonly missingTypeIds: readonly PrizeTypeId[];
+}
+
+export type TalkChoice = 'hint' | 'ammo';
+
+/** The one "店主と話す" result of a run, confirmed together with its save. */
+export interface TalkOutcome {
+  readonly choice: TalkChoice;
+  /** Shots fired before the talk (the talk happened between this shot and the next). */
+  readonly afterShot: number;
+  readonly ammoRequested: number;
+  readonly ammoGranted: number;
+  /** 'ammo': the narrower power zone reserved for the next real shot. */
+  readonly powerZoneWidthMult: number | null;
+  readonly hint: SetHint | null;
+}
+
+export interface AimFirstRunState {
+  /** Number of position / aim saves so far (operation id runId/aim/<seq>). */
+  readonly aimSeq: number;
+  /** null until the player chose once. */
+  readonly talk: TalkOutcome | null;
+}
+
+/** What a shopkeeper part did on its first hit in this run (r007). */
+export interface PartOutcome {
+  readonly part: ShopkeeperPart;
+  /** First-hit points of the part (from the ledger rule); 0 when the part was hit before. */
+  readonly firstPoints: number;
+  readonly first: boolean;
+  readonly effect: 'ammo' | 'setHint' | 'powerZone' | 'none';
+  readonly ammoRequested: number;
+  readonly ammoGranted: number;
+  /** 'powerZone': the multiplier still reserved for the next shot after every later effect (null = overwritten or game over). */
+  readonly powerZoneWidthMult: number | null;
+  /** 'setHint': chosen after the shelf was refilled. */
+  readonly hint: SetHint | null;
+  /** Why the effect did not act ('alreadyHit', 'noAmmoRoom', 'overwritten', 'runEnded'). */
+  readonly reason: string | null;
 }
 
 // --------------------------------------------- flight-end barrier and plan
@@ -389,6 +479,8 @@ export interface EffectPlan {
   readonly projection: EffectProjection;
   /** True once nothing else may be added (no question, or the answer was planned). */
   readonly complete: boolean;
+  /** r007: the first-hit part effects planned after cells and devices, before the answer. */
+  readonly parts?: readonly PartOutcome[];
 }
 
 /** The only answer command. Extra fields (effect id, points, target) are rejected by parseCommand. */

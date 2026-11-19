@@ -89,6 +89,9 @@ describe('parseCommand: UI input is narrowed and cannot carry results', () => {
       { type: 'SKIP_PRESENTATION' },
       { type: 'ANSWER_SHOPKEEPER', shotId: 's03', questionId: 'Q017', choice: 'B' },
       { type: 'ORDER', accept: true },
+      { type: 'OPEN_GAUGE' },
+      { type: 'CANCEL_GAUGE' },
+      { type: 'CHOOSE_SHOPKEEPER_TALK', choice: 'hint' },
     ];
     const parsed = samples.map((s) => parseCommand(s));
     expect(parsed.every((p) => p.ok)).toBe(true);
