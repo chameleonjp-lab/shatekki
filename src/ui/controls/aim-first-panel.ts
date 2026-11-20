@@ -42,6 +42,21 @@ export interface AimFirstPanelHandle {
 
 const TIERS: readonly LoadTier[] = ['normal', 'good', 'perfect'];
 
+/**
+ * The tier the label names for a bar value: the narrowest zone that holds it (the zones are nested
+ * around the sweet spot, so the narrowest is the strongest; a boundary belongs to the stronger
+ * tier, as in the classifier FIRE uses). Before T05 this took the widest zone and said "normal"
+ * inside the good and perfect bands.
+ */
+export function gaugeTierAt(zones: readonly { tier: LoadTier; min: number; max: number }[], bar: number): LoadTier {
+  let best: { tier: LoadTier; min: number; max: number } | null = null;
+  for (const z of zones) {
+    if (z.tier === 'weak' || bar < z.min - 1e-9 || bar > z.max + 1e-9) continue;
+    if (!best || z.max - z.min < best.max - best.min) best = z;
+  }
+  return best?.tier ?? 'weak';
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = doc.createElement(tag);
   e.className = cls;
@@ -369,9 +384,9 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       marker.hidden = bar === null;
       if (bar !== null) marker.style.left = `${(bar * 100).toFixed(1)}%`;
       if (loading && bar !== null && af) {
-        const z = [...af.zones].filter((x) => x.tier !== 'weak').reverse().find((x) => bar >= x.min - 1e-9 && bar <= x.max + 1e-9);
-        gaugeLabel.textContent = `${t('af.gauge.label')}: ${t(`af.tier.${z?.tier ?? 'weak'}`)}${zoneMult !== 1 ? ` · ${t('af.gauge.width', { m: zoneMult })}` : ''}`;
-        gaugeLabel.dataset.tier = z?.tier ?? 'weak';
+        const tier = gaugeTierAt(af.zones, bar);
+        gaugeLabel.textContent = `${t('af.gauge.label')}: ${t(`af.tier.${tier}`)}${zoneMult !== 1 ? ` · ${t('af.gauge.width', { m: zoneMult })}` : ''}`;
+        gaugeLabel.dataset.tier = tier;
       }
       pad.hidden = !(aiming || loading);
       pad.dataset.locked = String(!aiming || saving);

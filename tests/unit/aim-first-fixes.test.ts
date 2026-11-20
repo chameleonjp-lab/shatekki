@@ -65,3 +65,19 @@ describe('02 power-zone effects are named as such in r007 only', () => {
     expect(R6.expansion!.effects.get('FX012' as never)!.operation).toEqual({ kind: 'shotModifiers', set: { swayMult: 0.75 } });
   });
 });
+
+describe('the gauge label names the same tier that FIRE uses', () => {
+  it('for every bar value and zone width, gaugeTierAt equals classifyLoadWithWidth', async () => {
+    const { gaugeTierAt } = await import('../../src/ui/controls/aim-first-panel');
+    const { powerZones, classifyLoadWithWidth } = await import('../../src/core/aim-first');
+    const { getGameplayBundle } = await import('../../src/catalog/gameplay-config');
+    const { tuning } = getGameplayBundle('expanded-aim-first');
+    for (const m of [0.85, 1, 1.25]) {
+      const zones = powerZones(tuning, m);
+      for (let i = 0; i <= 1000; i++) {
+        const bar = i / 1000;
+        expect(gaugeTierAt(zones, bar), `bar ${bar} ×${m}`).toBe(classifyLoadWithWidth(bar, tuning, m).tier);
+      }
+    }
+  });
+});
