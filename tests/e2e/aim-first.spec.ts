@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import type { PersistedRecord } from '../../src/contracts/persistence';
-import { BOOTH_LAYOUT_V3, type ExpandedRunState, type GameplayBundle, type TuningConfig } from '../../src/contracts';
+import { BOOTH_LAYOUT_V3, isAmmoBalanced, type ExpandedRunState, type GameplayBundle, type TuningConfig } from '../../src/contracts';
 import { aimThrough } from '../helpers/aim-v3';
 
 // r007 internal candidate, local build only (npm run build:aim-first, port 4180).
@@ -130,15 +130,35 @@ test('aim first: tap and hold to move, drag to aim, 撃つ then 発射 uses one 
   await settle(page);
   await expect(page.getByTestId('shot-card')).toBeVisible();
   await shot(page, info, '04-card');
-  const after = await savedAim(page);
-  expect(after).toEqual(before);
+  // The shot spent exactly one cork (HUD showed 9 immediately after FIRE), but
+  // post-flight cells, shopkeeper answers and rewards can legitimately add or
+  // remove corks before settlement. Verify the confirmed result, not a fixed 9.
+  const confirmed = await record(page);
+  const settled = confirmed.state as ExpandedRunState;
+  expect({ x: settled.standX, yaw: settled.aim.yaw, pitch: settled.aim.pitch }).toEqual(before);
+  expect(settled.shotsFired).toBe(1);
+  expect(settled.ledger).toHaveLength(1);
+  expect(isAmmoBalanced(settled, RELEASE_TUNING.initialAmmo)).toBe(true);
+  expect(confirmed.lastSummary?.ammoAfter).toBe(settled.ammo);
+
+  // Resuming must restore that exact settlement: neither the shot nor any
+  // bonus/penalty, score, completed set or presentation may be applied twice.
   await page.reload();
   await page.getByTestId('btn-resume-run').click();
   await page.getByTestId('btn-resume').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
-  const s = (await record(page)).state as ExpandedRunState;
+  const resumed = await record(page);
+  const s = resumed.state as ExpandedRunState;
   expect({ x: s.standX, yaw: s.aim.yaw, pitch: s.aim.pitch }).toEqual(before);
-  expect(s.ammo).toBe(9);
+  expect(s.shotsFired).toBe(settled.shotsFired);
+  expect(s.ammo).toBe(settled.ammo);
+  expect(s.bonusAmmoTotal).toBe(settled.bonusAmmoTotal);
+  expect(s.ammoLostTotal).toBe(settled.ammoLostTotal);
+  expect(s.score).toBe(settled.score);
+  expect(s.ledger).toEqual(settled.ledger);
+  expect(s.completedSets).toEqual(settled.completedSets);
+  expect(resumed.lastSummary).toEqual(confirmed.lastSummary);
+  expect(isAmmoBalanced(s, RELEASE_TUNING.initialAmmo)).toBe(true);
 });
 
 test('talk: closing, rotating and reloading never use it; the ammo choice is saved once and survives a reload', async ({ page }, info) => {
