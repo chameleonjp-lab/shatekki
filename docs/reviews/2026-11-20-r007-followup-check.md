@@ -140,5 +140,5 @@ T02・T03・T08 の札は3寸法で重なりません。札以外の組み合わ
 | 開始状態と実射（node） | `tests/integration/aim-first-scenarios.test.ts` | 8件、通過 |
 | 店主・うちわの円・前腕 | `tests/integration/aim-first-shopkeeper.test.ts` | 17件、通過 |
 | 釣り合い | `tests/integration/t09-balance-compare.test.ts` | 1件（3版×24回）、通過 |
-| 場面・重なり・負荷（ブラウザ）、15言語、既存の r007 画面試験 | `tests/e2e/aim-first-scenes.spec.ts`、`tests/e2e/aim-first-locales.spec.ts`、`tests/e2e/aim-first.spec.ts` | 3寸法・2並列で 57件通過、30件は対象外（15言語は 375×600 だけで実行するため） |
+| 場面・重なり・負荷（ブラウザ）、15言語、既存の r007 画面試験 | `tests/e2e/aim-first-scenes.spec.ts`、`tests/e2e/aim-first-locales.spec.ts`、`tests/e2e/aim-first.spec.ts` | 手元で3寸法・2並列 57件通過（15言語は 375×600 の画面だけで読み込む）。GitHub Actions の全件実行（`c5df377`）も通過 |
 | CI の規則 | `tests/ci/plan.test.mjs` | 158件、通過 |
