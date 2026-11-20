@@ -355,6 +355,25 @@ export interface AimFirstRunState {
   readonly aimSeq: number;
   /** null until the player chose once. */
   readonly talk: TalkOutcome | null;
+  /**
+   * What is reserved for the next real shot and where it came from, only the settings still in
+   * force after every later effect (overwritten or reset ones are gone). Cleared by FIRE.
+   * Absent in saves made before it existed (read as none).
+   */
+  readonly nextNotes?: readonly NextNote[];
+}
+
+/** One reserved next-shot setting and its source (a cell, a gadget, the answer, a part, the talk). */
+export interface NextNote {
+  readonly source: 'cell' | 'device' | 'answer' | 'part' | 'talk';
+  /** The effect behind it (cells, gadgets with an effect id, answers); null for a part or the talk. */
+  readonly effectId: EffectId | null;
+  /** The part that set it ('feet'), for source 'part'. */
+  readonly part?: ShopkeeperPart;
+  /** The shot-modifier fields or 'hint' it set, as still in force. */
+  readonly fields: readonly string[];
+  /** The power-zone width it leaves, when that is one of its fields. */
+  readonly powerZoneWidthMult?: number;
 }
 
 /** What a shopkeeper part did on its first hit in this run (r007). */

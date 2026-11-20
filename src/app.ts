@@ -533,6 +533,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       dispatch: (cmd) => uiCommand(cmd as GameCommand),
       commitAim: () => void controller?.commitAim(),
       revertAim: () => controller?.revertAim(),
+      noteText: (n) => nextNoteText(n),
       currentAim: () => controller?.current.aim ?? { yaw: 0, pitch: 0 },
       currentStandX: () => controller?.current.standX ?? 0,
       onRetry: () => void leaveResult(true),
@@ -571,6 +572,19 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     afCard = kit.mountAimFirstCard(overlay, expText);
     const handle = afPanel;
     return { cancelGestures: () => handle.cancelGestures(), update: () => undefined, dispose: () => handle.dispose() };
+  };
+
+  /** One reserved next-shot setting with its source, the same words on the HUD mark and the shot card. */
+  const nextNoteText = (n: import('./contracts').NextNote): string => {
+    const src = n.source === 'cell' ? i18n.t('fxres.src.cell') : n.source === 'answer' ? i18n.t('fxres.src.answer') : n.source === 'device' ? i18n.t('fxres.src.device')
+      : n.source === 'talk' ? expText('af.talk.title') : expText('af.speaker') + '・' + expText(`af.part.${n.part ?? 'feet'}`);
+    const what = n.effectId ? expText(`exp.fx.${n.effectId}.name`) : n.powerZoneWidthMult !== undefined ? expText('af.gauge.width', { m: n.powerZoneWidthMult }) : '';
+    return what ? expText('af.next.note', { src, what }) : src;
+  };
+
+  const nextLineOf = (s: RunState | undefined): string => {
+    const notes = s && isExpandedRunState(s) ? s.expansion.aimFirst?.nextNotes ?? [] : [];
+    return notes.length > 0 ? `${expText('af.next.mark')}: ${notes.map(nextNoteText).join(' / ')}` : '';
   };
 
   /** Words for a saved talk result (hint names or the corks received). */
@@ -668,7 +682,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
                 const fx = expandedUi.effectResultsModel(event.summary, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity });
                 const effectLines = [...fx.lines.map((l) => (l.name ? `${l.name}: ${l.text}` : l.text)), ...(fx.deferred ? [fx.deferred] : [])];
                 const model = expandedUi.aimFirstCardModel(
-                  { summary: event.summary, freshSets: event.freshSets, ammoBeforeShot: event.ammoBeforeShot, effectLines },
+                  { summary: event.summary, freshSets: event.freshSets, ammoBeforeShot: event.ammoBeforeShot, effectLines, nextLine: nextLineOf(controller?.current) },
                   { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id) },
                 );
                 afCard.show(model, { quiet: event.replayed || event.reducedMotion });
@@ -1211,11 +1225,29 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       const col = screens.querySelector<HTMLElement>('.scr-result .scr-col');
       const ended = atomic?.record?.state ?? shownEnded ?? controller?.current ?? null;
       const talk = ended && isExpandedRunState(ended) ? ended.expansion.aimFirst?.talk ?? null : null;
-      const parts = atomic?.record?.lastSummary?.parts ?? controller?.snapshot().lastSummary?.parts ?? [];
-      if (col && (talk || parts.length > 0)) {
+      const lastSummary = atomic?.record?.lastSummary ?? controller?.snapshot().lastSummary ?? null;
+      const parts = lastSummary?.parts ?? [];
+      if (col && (talk || lastSummary)) {
         const sec = doc.createElement('section');
         sec.className = 'sec af-result';
         sec.dataset.testid = 'result-aim-first';
+        if (lastSummary) {
+          // 07: the last shot as it was confirmed and saved (read back, never recomputed)
+          const h = doc.createElement('h3');
+          h.textContent = expText('af.result.last');
+          const tx = { t: expText, prizeName: (id: string) => prizeName(i18n.locale, id), setName: (id: SetId) => setDisplayName(i18n.locale, String(id), expText) || String(id) };
+          const fx = expandedUi.effectResultsModel(lastSummary, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity });
+          const model = expandedUi.aimFirstCardModel({ summary: lastSummary, freshSets: atomic?.record?.lastFreshSets ?? [], ammoBeforeShot: atomic?.record?.ammoBeforeShot ?? 0, effectLines: fx.lines.map((l) => (l.name ? `${l.name}: ${l.text}` : l.text)) }, tx);
+          const box = doc.createElement('div');
+          box.className = 'af-result-last';
+          box.dataset.testid = 'result-last-shot';
+          const delta = lastSummary.ledger.scoreAfter - lastSummary.ledger.scoreBefore;
+          const score = doc.createElement('p');
+          score.className = 'af-result-score';
+          score.textContent = `${expText('af.result.delta', { p: delta >= 0 ? `+${delta}` : String(delta) })} · ${expText('af.result.total', { score: lastSummary.ledger.scoreAfter })}`;
+          box.append(...expandedUi.cardBody(doc, model, expText), score);
+          sec.append(h, box);
+        }
         if (talk) {
           const p = doc.createElement('p');
           p.dataset.testid = 'result-talk';

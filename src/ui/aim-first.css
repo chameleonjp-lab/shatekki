@@ -212,3 +212,9 @@
 /* ---- r007: wall cell counts under the 3×12 overview */
 .booth-map-walls { font-size: 9px; line-height: 1.25; margin-top: 2px; white-space: normal; opacity: 0.95; }
 .booth-map-walls[hidden] { display: none; }
+.af-card-next { margin: 4px 0 0; padding: 2px 6px; border-radius: 6px; font-size: 0.8rem; font-weight: 800; background: rgba(255, 211, 107, 0.18); border: 1px solid rgba(255, 211, 107, 0.6); color: #ffe9a8; }
+.af-card[data-kind='set'] .af-card-next { color: #6b3f22; }
+/* 08: long cards scroll inside themselves; the total stays the first line */
+.af-card { max-height: min(48dvh, 380px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.af-card-ammo-rows { margin: 2px 0 0; padding: 0 0 0 1.1em; font-size: 0.8rem; }
+.af-card-ammo-row { margin: 1px 0; }

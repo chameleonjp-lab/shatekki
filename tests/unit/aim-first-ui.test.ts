@@ -79,6 +79,7 @@ function panel() {
   const reverts = vi.fn();
   const h = mountAimFirstControls(e.root as unknown as HTMLElement, {
     revertAim: reverts,
+    noteText: (n) => `${n.source}:${n.effectId ?? n.powerZoneWidthMult}`,
     dispatch: (c) => {
       sent.push(c as Record<string, unknown>);
       if ((c as { type: string }).type === 'SET_POSITION') x = (c as { x: number }).x;
@@ -392,15 +393,39 @@ describe('r007 shot card (from the confirmed summary only)', () => {
     expect(m.headline).toBe('af.set.many{"n":2}');
     expect(m.sets).toEqual([{ setId: 'PAIR001', name: '[PAIR001]', points: 50, fresh: true }, { setId: 'S010', name: '[S010]', points: 100, fresh: false }]);
     expect(m.total).toBe('af.set.total{"score":270}');
-    expect(m.ammo[0]).toBe('af.ammo.gained{"n":3}');
+    expect(m.ammo[0]).toBe('af.ammo.total{"sum":"+3","n":5}');
   });
 
   it('the last cork that continues is the big moment when no set formed; a cap is shown with its reason', () => {
     const cont = aimFirstCardModel({ summary: summary({ ammoAfter: 2, bonusAmmoGranted: 2 }), freshSets: [], ammoBeforeShot: 1 }, TX);
     expect(cont.kind).toBe('continue');
     const capped = aimFirstCardModel({ summary: summary({ ammoAfter: 0, runEnded: true, parts: [{ part: 'hat', first: true, firstPoints: 30, effect: 'ammo', ammoRequested: 1, ammoGranted: 0, powerZoneWidthMult: null, hint: null, reason: 'noAmmoRoom' }] }), freshSets: [], ammoBeforeShot: 1 }, TX);
-    expect(capped.ammo).toContain('af.ammo.capped');
+    expect(capped.ammo[0]).toBe('af.ammo.total{"sum":"+0","n":0}');
+    expect(capped.ammo[1]).toContain('af.ammo.rowCap');
     expect(capped.headline).toContain('af.part.points');
     expect(capped.headline).toContain('af.part.hat.cap');
+  });
+});
+
+describe('08 several ammo sources in one shot', () => {
+  it('total and corks left first, then each source with its real amount; +1 and a +0 at the cap side by side, and a loss', () => {
+    const s = summary({
+      bonusAmmoGranted: 1,
+      ammoAfter: 4,
+      effects: [
+        { requestId: 'a' as never, source: { kind: 'cell', cellId: 'c' as never }, effectId: 'FX001' as never, outcome: 'applied', reason: null, ammoDelta: 1, ammoRequested: 1, targets: [] },
+        { requestId: 'b' as never, source: { kind: 'device', deviceId: 'dev-ammo-1' as never, deviceKind: 'ammo' }, effectId: null, outcome: 'notApplicable', reason: 'noAmmoRoom', ammoDelta: 0, ammoRequested: 2, targets: [] },
+        { requestId: 'c' as never, source: { kind: 'answer', questionId: 'Q001' as never, choice: 'A' }, effectId: 'FX021' as never, outcome: 'applied', reason: null, ammoDelta: -1, targets: [] },
+      ],
+      rewards: [{ id: 'A7', key: 'k', shotNumber: 1, offered: 1, granted: 0 } as never],
+    });
+    const m = aimFirstCardModel({ summary: s, freshSets: [], ammoBeforeShot: 5 }, TX);
+    expect(m.ammo[0]).toBe('af.ammo.total{"sum":"+1 −1","n":4}');
+    expect(m.ammo.slice(1)).toEqual([
+      'af.ammo.row{"who":"fxres.src.cell「exp.fx.FX001.name」","n":1}',
+      'af.ammo.rowCap{"who":"fxres.src.device"}',
+      'af.ammo.rowLost{"who":"fxres.src.answer「exp.fx.FX021.name」","n":1}',
+      'af.ammo.rowCap{"who":"reward.name.A7"}',
+    ]);
   });
 });

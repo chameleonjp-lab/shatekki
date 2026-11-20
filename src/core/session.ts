@@ -298,6 +298,10 @@ function validateAimFirstState(a: unknown, exp: ExpansionCatalog, shots: number,
   if (!cfg) return a === undefined ? null : 'aim-first state in a version without it';
   if (!isObj(a) || !isInt(a.aimSeq)) return 'invalid aim-first state';
   if (phase === 'position') return 'aim-first run in the position phase';
+  if (a.nextNotes !== undefined) {
+    if (!Array.isArray(a.nextNotes) || !a.nextNotes.every((n) => isObj(n) && ['cell', 'device', 'answer', 'part', 'talk'].includes(n.source as string) && Array.isArray(n.fields))) return 'invalid next-shot notes';
+    if (a.nextNotes.length > 0 && phase !== 'aiming' && phase !== 'loading') return 'next-shot notes outside aiming';
+  }
   const t = a.talk;
   if (t === null) return null;
   if (!isObj(t) || (t.choice !== 'hint' && t.choice !== 'ammo') || !isInt(t.afterShot) || t.afterShot > shots) return 'invalid talk';

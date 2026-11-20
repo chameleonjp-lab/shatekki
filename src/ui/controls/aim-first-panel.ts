@@ -13,6 +13,7 @@
  * a new press can fire, and key auto-repeat never fires.
  */
 import type { AimAngles, ControllerSnapshotLike, LoadTier } from './aim-first-types';
+import type { NextNote } from '../../contracts';
 import { AIM_SENSITIVITY } from './panel';
 import './controls.css';
 import '../aim-first.css';
@@ -23,6 +24,8 @@ export interface AimFirstPanelDeps {
   commitAim(): void;
   /** Drop the interrupted move/aim: back to the last position and aim whose save succeeded. */
   revertAim(): void;
+  /** Words for one reserved next-shot setting and its source. */
+  noteText(note: NextNote): string;
   currentAim(): AimAngles;
   currentStandX(): number;
   onRetry(): void;
@@ -341,8 +344,12 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       score.textContent = `${s.score} ${t('hud.score')}`;
       const af = snap.view.aimFirst;
       const zoneMult = af?.powerZoneWidthMult ?? 1;
-      nextMark.hidden = zoneMult === 1;
-      nextMark.textContent = zoneMult === 1 ? '' : `${t('af.next.mark')}: ${t('af.gauge.width', { m: zoneMult })}`;
+      // every setting still reserved for the next real shot, with its source (overwritten ones are gone)
+      const notes = s.expansion?.aimFirst?.nextNotes ?? [];
+      const words = notes.length > 0 ? notes.map((n) => deps.noteText(n)) : zoneMult !== 1 ? [t('af.gauge.width', { m: zoneMult })] : [];
+      const markText = words.length > 0 ? `${t('af.next.mark')}: ${words.join(' / ')}` : '';
+      nextMark.hidden = words.length === 0;
+      if (nextMark.textContent !== markText) nextMark.textContent = markText;
       const talk = af?.talk;
       talkBtn.hidden = !talk || talk.used !== null || mode === 'ended' || mode === 'abandoned';
       talkBtn.disabled = !talk || talk.blocked !== null || saving;
