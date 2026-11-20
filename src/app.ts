@@ -611,7 +611,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     else if (r.start !== null) {
       speechBubble.show(expandedUi.speechText(i18n.locale, r.start), expText('af.speaker'), head);
       cue('speech');
-    }
+    } else speechBubble.follow(head);
   };
 
   const mountPanel = () => {

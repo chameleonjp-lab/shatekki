@@ -223,3 +223,9 @@
 .af-card-members { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
 .af-card-member { display: inline-flex; flex-direction: column; align-items: center; width: 64px; font-size: 0.68rem; line-height: 1.2; text-align: center; }
 .af-card-member .rwd-portrait { width: 44px; height: 44px; }
+/* 12: a line that would meet the shot card waits just under it */
+.af-speech[data-anchor='below'] {
+  top: var(--below);
+  left: clamp(8px, calc(var(--x) - 200px), calc(100vw - 8px - min(64vw, 260px)));
+}
+.af-speech[data-anchor='below'] .af-speech-who { display: inline; }
