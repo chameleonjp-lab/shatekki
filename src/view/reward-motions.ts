@@ -8,6 +8,11 @@ type ConfirmedShot = Extract<ConfirmedPresentation, { kind: 'shot' }>;
 interface RewardMotionDeps {
   cue(cue: UiCue['cue'], extra?: { count: number }): void;
   card(input: ShotMomentInput, shot: ConfirmedShot): void;
+  /**
+   * r007: any set completed in the shot (first or again) is the one big moment, ahead of
+   * "continue from the last cork" and "several at once"; one main sound only.
+   */
+  readonly setsFirst?: boolean;
 }
 
 /** One presenter per game. No clock, input callbacks, storage or score dependencies. */
@@ -59,8 +64,9 @@ export function mountRewardMotions(root: HTMLElement, deps: RewardMotionDeps) {
       };
       deps.card(card, input);
       if (input.replayed) return;
-      const moment = shotMoment(card);
-      const sound = momentCue(moment, card.collected);
+      const anySet = deps.setsFirst === true && card.completedSets.length > 0;
+      const moment = anySet ? { ...shotMoment(card), big: 'setFirst' as const } : shotMoment(card);
+      const sound: { readonly cue: UiCue['cue']; readonly count?: number } | null = anySet ? { cue: card.freshSets.length > 0 ? 'setDiscovered' : 'setComplete' } : momentCue(moment, card.collected);
       if (sound?.count !== undefined) deps.cue(sound.cue, { count: sound.count });
       else if (sound) deps.cue(sound.cue);
       else if (card.rewards.some(r => r.id === 'A2')) deps.cue('windChime');

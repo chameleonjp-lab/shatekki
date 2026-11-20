@@ -388,10 +388,16 @@ describe('r007 shot card (from the confirmed summary only)', () => {
       effects: [{ requestId: 'x' as never, source: { kind: 'cell', cellId: 'c' as never }, effectId: 'FX001' as never, outcome: 'applied', reason: null, ammoDelta: 1, ammoRequested: 1, targets: [] }],
       ledger: { shotId: 's01' as never, scoreBefore: 100, prizePoints: 20, trickPoints: 0, setPoints: 150, firstHitPoints: 0, nominalPenalty: 0, appliedPenalty: 0, scoreAfter: 270, items: [{ kind: 'set', refId: 'PAIR001', points: 50 }, { kind: 'set', refId: 'S010', points: 100 }] },
     });
-    const m = aimFirstCardModel({ summary: s, freshSets: ['PAIR001'] as never, ammoBeforeShot: 3 }, TX);
+    const members: Record<string, string[]> = { PAIR001: ['P001', 'P002'], S010: ['P002', 'P003', 'P004'] };
+    const m = aimFirstCardModel({ summary: s, freshSets: ['PAIR001'] as never, ammoBeforeShot: 3 }, { ...TX, setMembers: (id) => members[id] ?? [] });
     expect(m.kind).toBe('set');
     expect(m.headline).toBe('af.set.many{"n":2}');
-    expect(m.sets).toEqual([{ setId: 'PAIR001', name: '[PAIR001]', points: 50, fresh: true }, { setId: 'S010', name: '[S010]', points: 100, fresh: false }]);
+    // 09: each set lists its own members (picture and name), 2 for a pair and 3 for a trio
+    const mem = (ids: string[]) => ids.map((typeId) => ({ typeId, name: `<${typeId}>` }));
+    expect(m.sets).toEqual([
+      { setId: 'PAIR001', name: '[PAIR001]', points: 50, fresh: true, members: mem(members.PAIR001!) },
+      { setId: 'S010', name: '[S010]', points: 100, fresh: false, members: mem(members.S010!) },
+    ]);
     expect(m.total).toBe('af.set.total{"score":270}');
     expect(m.ammo[0]).toBe('af.ammo.total{"sum":"+3","n":5}');
   });

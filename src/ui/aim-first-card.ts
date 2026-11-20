@@ -12,6 +12,8 @@ export interface AimFirstCardText {
   t(key: string, params?: Readonly<Record<string, string | number>>): string;
   prizeName(typeId: string): string;
   setName(id: SetId): string;
+  /** Member kinds of a set, in set order (pictures and names on the card). */
+  setMembers?(id: SetId): readonly string[];
 }
 
 export interface AimFirstCardInput {
@@ -30,7 +32,7 @@ export interface AimFirstCardModel {
   readonly kind: CardKind;
   /** The big line: "セット完成", "最後の一発から続行", "3個まとめて獲得" or the short line. */
   readonly headline: string;
-  readonly sets: readonly { readonly setId: SetId; readonly name: string; readonly points: number; readonly fresh: boolean }[];
+  readonly sets: readonly { readonly setId: SetId; readonly name: string; readonly points: number; readonly fresh: boolean; readonly members: readonly { readonly typeId: string; readonly name: string }[] }[];
   /** "合計 180点" (sets only). */
   readonly total: string | null;
   /** Real ammo facts: "弾 ＋2（実際に増えた数）", "弾 −1", "補給は上限のため ＋0", "残り 5 発". */
@@ -90,7 +92,13 @@ export function aimFirstCardModel(input: AimFirstCardInput, tx: AimFirstCardText
   const { t } = tx;
   const setPoints = new Map(s.ledger.items.filter((i) => i.kind === 'set').map((i) => [i.refId, i.points]));
   const fresh = new Set(input.freshSets);
-  const sets = s.newlyCompletedSets.map((id) => ({ setId: id, name: tx.setName(id), points: setPoints.get(id) ?? 0, fresh: fresh.has(id) }));
+  const sets = s.newlyCompletedSets.map((id) => ({
+    setId: id,
+    name: tx.setName(id),
+    points: setPoints.get(id) ?? 0,
+    fresh: fresh.has(id),
+    members: (tx.setMembers?.(id) ?? []).map((typeId) => ({ typeId, name: tx.prizeName(typeId) })),
+  }));
   const delta = s.ledger.scoreAfter - s.ledger.scoreBefore;
 
   // ammo: total and what is left first, then every source with its real amount and why a +0 happened
@@ -140,7 +148,7 @@ export function aimFirstCardModel(input: AimFirstCardInput, tx: AimFirstCardText
 }
 
 /** The card's lines as elements, shared by the in-game card and the result screen (07). */
-export function cardBody(doc: Document, m: AimFirstCardModel, t: AimFirstCardText['t']): HTMLElement[] {
+export function cardBody(doc: Document, m: AimFirstCardModel, t: AimFirstCardText['t'], portrait?: (doc: Document, typeId: string) => HTMLElement): HTMLElement[] {
   const mk = (tag: string, cls: string, text?: string) => {
     const e = doc.createElement(tag);
     e.className = cls;
@@ -155,6 +163,16 @@ export function cardBody(doc: Document, m: AimFirstCardModel, t: AimFirstCardTex
       row.dataset.set = s.setId;
       if (s.fresh) row.appendChild(mk('span', 'af-card-seal', t('af.set.first')));
       row.append(mk('span', 'af-card-set-name', s.name), mk('span', 'af-card-set-points', t('af.set.points', { p: s.points })));
+      if (s.members.length > 0 && portrait) {
+        // each member's picture and name, so the set can be read without the book
+        const members = mk('div', 'af-card-members');
+        for (const m2 of s.members) {
+          const tile = mk('span', 'af-card-member');
+          tile.append(portrait(doc, m2.typeId), mk('span', 'af-card-member-name', m2.name));
+          members.appendChild(tile);
+        }
+        row.appendChild(members);
+      }
       parts.push(row);
     }
     if (m.total) parts.push(mk('div', 'af-card-total', m.total));
@@ -194,7 +212,7 @@ export interface AimFirstCardHandle {
 }
 
 /** Shows for a while; the next shot or a tap hides it. Never blocks the controls. */
-export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t']): AimFirstCardHandle {
+export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t'], portrait?: (doc: Document, typeId: string) => HTMLElement): AimFirstCardHandle {
   const doc = root.ownerDocument;
   const win = doc.defaultView!;
   const card = doc.createElement('section');
@@ -218,13 +236,53 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t']): 
   };
   card.addEventListener('pointerdown', hold);
   card.addEventListener('scroll', hold);
+  /**
+   * T05: the card goes between what is shown at the top (ammo, score, next-shot mark, overview map)
+   * and the controls, measured on screen, so it covers none of them at 375×600..402×874. When the
+   * gap is too small for a readable card, the map (a guide, not a number) may be covered first.
+   */
+  const MIN_CARD = 140;
+  const bottomOf = (sel: string) => {
+    let b = 0;
+    for (const e of doc.querySelectorAll<HTMLElement>(sel)) {
+      if (e.hidden || e === card || card.contains(e)) continue;
+      const r = e.getBoundingClientRect();
+      if (r.height > 0 && r.width > 0) b = Math.max(b, r.bottom);
+    }
+    return b;
+  };
+  const place = () => {
+    const controls = doc.querySelector<HTMLElement>('[data-testid="controls"]');
+    const limit = controls && controls.getBoundingClientRect().height > 0 ? controls.getBoundingClientRect().top : win.innerHeight;
+    const numbers = bottomOf('[data-testid="hud"] > *');
+    const withMap = Math.max(numbers, bottomOf('[data-testid="booth-map"]'));
+    const top = (limit - withMap - 12 >= MIN_CARD ? withMap : numbers) + 6;
+    card.style.top = `${Math.round(top)}px`;
+    card.style.maxHeight = `${Math.max(MIN_CARD, Math.round(limit - top - 6))}px`;
+  };
+  // The controls grow back when aiming resumes after the shot, and the top rows change with the
+  // next-shot mark: keep the card in the gap while it is open.
+  let watched = false;
+  const RO = (win as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+  const observer = RO ? new RO(() => { if (!card.hidden) place(); }) : null;
+  const watch = () => {
+    if (watched || !observer) return;
+    const targets = [...doc.querySelectorAll<HTMLElement>('[data-testid="controls"], [data-testid="hud"], [data-testid="booth-map"]')];
+    if (targets.length === 0) return;
+    for (const e of targets) observer.observe(e);
+    watched = true;
+  };
+  const onResize = () => { if (!card.hidden) place(); };
+  win.addEventListener('resize', onResize);
   return {
     show(m, opts) {
-      const parts = cardBody(doc, m, t);
+      const parts = cardBody(doc, m, t, portrait);
       card.dataset.kind = m.kind;
       card.dataset.quiet = String(opts.quiet);
       card.replaceChildren(...parts);
       card.hidden = false;
+      watch();
+      place();
       if (timer !== null) win.clearTimeout(timer);
       const rows = m.ammo.length + m.lines.length + m.parts.length + m.sets.length;
       timer = win.setTimeout(hide, (m.kind === 'set' ? 5200 : 3200) + Math.max(0, rows - 3) * 700);
@@ -232,6 +290,8 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t']): 
     hide,
     destroy() {
       hide();
+      observer?.disconnect();
+      win.removeEventListener('resize', onResize);
       card.remove();
     },
   };

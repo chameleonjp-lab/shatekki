@@ -218,3 +218,8 @@
 .af-card { max-height: min(48dvh, 380px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .af-card-ammo-rows { margin: 2px 0 0; padding: 0 0 0 1.1em; font-size: 0.8rem; }
 .af-card-ammo-row { margin: 1px 0; }
+/* 09: set members with their pictures on the washi card */
+.af-card-set { flex-wrap: wrap; }
+.af-card-members { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.af-card-member { display: inline-flex; flex-direction: column; align-items: center; width: 64px; font-size: 0.68rem; line-height: 1.2; text-align: center; }
+.af-card-member .rwd-portrait { width: 44px; height: 44px; }

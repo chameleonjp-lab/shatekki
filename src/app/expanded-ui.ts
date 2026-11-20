@@ -22,3 +22,4 @@ export { afText, speechText, isAfKey, SPEECH_LINES } from '../i18n/stall-speech'
 export { speechConditions } from '../ui/speech-conditions';
 export { effectKeyOverrides } from '../i18n/effect-keys';
 export { aimFirstTranslator } from './aim-first-text';
+export { prizePortrait } from '../view/prize-portrait';

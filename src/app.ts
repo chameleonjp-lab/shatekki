@@ -569,7 +569,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     });
     speechBubble = kit.mountSpeechBubble(overlay);
     speech = new kit.SpeechScheduler(controller?.current.seed ?? 0, aimFirstCfg!.speech, kit.SPEECH_LINES);
-    afCard = kit.mountAimFirstCard(overlay, expText);
+    afCard = kit.mountAimFirstCard(overlay, expText, kit.prizePortrait);
     const handle = afPanel;
     return { cancelGestures: () => handle.cancelGestures(), update: () => undefined, dispose: () => handle.dispose() };
   };
@@ -675,6 +675,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         });
         if (illustratedRewards) {
           rewardMotions = expandedUi.mountRewardMotions(ui, {
+            setsFirst: !!aimFirstCfg,
             cue,
             card: (input, event) => {
               if (afCard && expandedUi) {
@@ -683,10 +684,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
                 const effectLines = [...fx.lines.map((l) => (l.name ? `${l.name}: ${l.text}` : l.text)), ...(fx.deferred ? [fx.deferred] : [])];
                 const model = expandedUi.aimFirstCardModel(
                   { summary: event.summary, freshSets: event.freshSets, ammoBeforeShot: event.ammoBeforeShot, effectLines, nextLine: nextLineOf(controller?.current) },
-                  { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id) },
+                  { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id), setMembers: (id) => catalog.sets.get(id)?.requiredTypeIds ?? [] },
                 );
                 afCard.show(model, { quiet: event.replayed || event.reducedMotion });
-                if (!event.replayed && model.kind === 'set' && event.freshSets.length === 0) cue('setComplete');
                 return;
               }
               effectResults?.show(event.summary);
@@ -1235,7 +1235,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           // 07: the last shot as it was confirmed and saved (read back, never recomputed)
           const h = doc.createElement('h3');
           h.textContent = expText('af.result.last');
-          const tx = { t: expText, prizeName: (id: string) => prizeName(i18n.locale, id), setName: (id: SetId) => setDisplayName(i18n.locale, String(id), expText) || String(id) };
+          const tx = { t: expText, prizeName: (id: string) => prizeName(i18n.locale, id), setName: (id: SetId) => setDisplayName(i18n.locale, String(id), expText) || String(id), setMembers: (id: SetId) => catalog.sets.get(id)?.requiredTypeIds ?? [] };
           const fx = expandedUi.effectResultsModel(lastSummary, { t: expText, line: (key) => expandedUi.expandedLine(i18n.locale, key) }, { maxLines: Infinity });
           const model = expandedUi.aimFirstCardModel({ summary: lastSummary, freshSets: atomic?.record?.lastFreshSets ?? [], ammoBeforeShot: atomic?.record?.ammoBeforeShot ?? 0, effectLines: fx.lines.map((l) => (l.name ? `${l.name}: ${l.text}` : l.text)) }, tx);
           const box = doc.createElement('div');
@@ -1245,7 +1245,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           const score = doc.createElement('p');
           score.className = 'af-result-score';
           score.textContent = `${expText('af.result.delta', { p: delta >= 0 ? `+${delta}` : String(delta) })} · ${expText('af.result.total', { score: lastSummary.ledger.scoreAfter })}`;
-          box.append(...expandedUi.cardBody(doc, model, expText), score);
+          box.append(...expandedUi.cardBody(doc, model, expText, expandedUi.prizePortrait), score);
           sec.append(h, box);
         }
         if (talk) {
