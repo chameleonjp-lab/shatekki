@@ -6,13 +6,13 @@ import { aimAndFire, expectCardClear, scene } from '../helpers/aim-first-play';
 
 // T08: the longest card (two sets at once) from a real shot, in each of the 15 languages, on the
 // shortest screen (375×600). Text comes from each language (no key shown raw), the card stays clear
-// of the ammo, the score, the controls and the speech bubble. 14 of 15 are machine translations
+// of the ammo, the score, the controls and the speech bubble. Runs only in short-portrait-chromium
+// (playwright.config.ts ignores this file in the other projects). 14 of 15 are machine translations
 // not yet reviewed by native speakers; this checks fit and presence, not the wording.
 test.use({ baseURL: 'http://127.0.0.1:4180' });
 
 for (const locale of LOCALES) {
-  test(`T08 two-set card fits in ${locale}`, async ({ browser }, info) => {
-    test.skip(info.project.name !== 'short-portrait-chromium', 'measured once, on the shortest screen');
+  test(`T08 two-set card fits in ${locale}`, async ({ browser }) => {
     test.setTimeout(90_000);
     const ctx = await browser.newContext({ baseURL: 'http://127.0.0.1:4180', locale, viewport: { width: 375, height: 600 }, isMobile: true, hasTouch: true });
     const page = await ctx.newPage();

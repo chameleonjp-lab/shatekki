@@ -70,6 +70,8 @@ export default defineConfig({
   projects: [
     {
       name: 'iphone-portrait-chromium',
+      // T08 measures the 15 languages once, on the shortest screen (short-portrait-chromium).
+      testIgnore: '**/aim-first-locales.spec.ts',
       use: {
         browserName: 'chromium',
         viewport: { width: 402, height: 874 },
@@ -82,6 +84,7 @@ export default defineConfig({
     {
       name: 'compact-portrait-chromium',
       testMatch: ['**/next-long-text.spec.ts', '**/reward-motions.spec.ts', '**/aim-first*.spec.ts', '**/stall-speech.spec.ts'],
+      testIgnore: '**/aim-first-locales.spec.ts',
       use: {
         browserName: 'chromium',
         viewport: { width: 402, height: 700 },
