@@ -36,6 +36,23 @@ export async function drag(page: Page, dyaw: number, dpitch: number) {
 }
 
 /**
+ * Pause the page clock a moment from now. On a slow machine the moment can pass before the call
+ * arrives ("Cannot fast-forward to the past"); then ask again with a longer lead. Nothing is
+ * pressed while the clock jumps, and the gauge is still closed.
+ */
+async function holdClock(page: Page) {
+  for (const lead of [200, 1000, 3000]) {
+    try {
+      await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + lead));
+      return;
+    } catch (e) {
+      if (!/fast-forward to the past/.test(String(e))) throw e;
+    }
+  }
+  throw new Error('could not hold the page clock');
+}
+
+/**
  * Drag to the scene's aim (a second short drag takes up the pixel rounding), then 撃つ → 発射.
  * The page clock (installed by the caller before the page loads) is held while the gauge runs, so
  * "発射" is pressed 0.6 s after "撃つ" as in the node check, whatever the machine's load; the
@@ -48,7 +65,7 @@ export async function aimAndFire(page: Page, sc: Scene) {
   await drag(page, sc.aim.yaw - saved.yaw, sc.aim.pitch - saved.pitch);
   await expect.poll(async () => (await readRecordedRun(page)).state.aim).toEqual(expect.objectContaining({ yaw: expect.closeTo(sc.aim.yaw, 4) }));
   const btn = page.getByTestId('btn-fire');
-  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 200));
+  await holdClock(page);
   await btn.tap();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
   for (let i = 0; i < 6; i++) await page.clock.runFor(100);
