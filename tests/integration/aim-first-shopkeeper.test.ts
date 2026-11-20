@@ -7,6 +7,7 @@ import { answerShopkeeper, planFlightEnd } from '../../src/core/effect-plan';
 import { resolveExpandedShot } from '../../src/core/expanded-settlement';
 import { spawnPrize } from '../../src/core/replenish';
 import { powerZoneWidthFor } from '../../src/core/aim-first';
+import { validateRunState } from '../../src/core/session';
 import { createShotWorld } from '../../src/sim/world';
 import {
   aimDirection,
@@ -175,6 +176,40 @@ describe('4a: the humanoid shopkeeper, parts, fan and tray in the real world', (
     }
   });
 
+  it('T04: the fan is round where it is drawn (a square corner is not the fan) and the forearm counts as the body', async () => {
+    expect(fan.shape).toBe('disc');
+    // a point in the panel's own frame, turned into the world (yaw -0.62 about y)
+    const onPanel = (u: number, v: number): Vec3 => ({ x: fan.center.x + u * Math.cos(-0.62), y: fan.center.y + v, z: fan.center.z - u * Math.sin(-0.62) });
+    const corner = await controller(fixedRun(41));
+    try {
+      // 0.105 along both edges: inside the old 0.12 square, outside the 0.12 circle (0.148 from the middle)
+      shootAt(corner.c, 2.4, onPanel(0.105, 0.105));
+      finish(corner.c, corner.settled);
+      expect(corner.impacts.some((i) => i.target.kind === 'shopkeeper' && i.target.part === 'fan')).toBe(false);
+    } finally {
+      corner.world.dispose();
+    }
+    const inside = await controller(fixedRun(42));
+    try {
+      shootAt(inside.c, 2.4, onPanel(0.06, 0.06)); // 0.085 from the middle: on the disc
+      finish(inside.c, inside.settled);
+      expect(inside.impacts[0]?.target).toMatchObject({ kind: 'shopkeeper', part: 'fan' });
+    } finally {
+      inside.world.dispose();
+    }
+    const arm = L.shopkeeper.filter((p) => p.part === 'body')[1]!.box;
+    const fore = await controller(fixedRun(43));
+    try {
+      // below the fan's lower edge, on the forearm's front face
+      shootAt(fore.c, 2.65, { x: arm.center.x, y: arm.center.y - arm.halfExtents.y + 0.02, z: arm.center.z + arm.halfExtents.z });
+      const { summary } = finish(fore.c, fore.settled);
+      expect(fore.impacts[0]?.target).toMatchObject({ kind: 'shopkeeper', part: 'body' });
+      expect(summary.touchedFirstHitTargets).toEqual(['shopkeeper:body']);
+    } finally {
+      fore.world.dispose();
+    }
+  });
+
   it('tray: the reflected cork knocks a bottom-row prize down; no shopkeeper points and no question', async () => {
     const { c, world, settled, impacts } = await controller(fixedRun(5));
     try {
@@ -304,5 +339,34 @@ describe('4b: one shot, every part once, in a fixed order', () => {
     const { summary } = settleWith(s, ['feet'], ['shopkeeper:feet'], 'A', forcing('FX021'));
     expect(summary.runEnded).toBe(true);
     expect(summary.parts![0]).toMatchObject({ powerZoneWidthMult: null, reason: 'runEnded' });
+  });
+});
+
+describe('06 next-shot notes: source and effect of what is still reserved', () => {
+  const notes = (s: RunState) => (s as ExpandedRunState).expansion.aimFirst?.nextNotes ?? [];
+  it('feet then a damage answer: both remain, each with its source', () => {
+    const s = inFlight(fixedRun(20, { ammo: 5, shotsFired: 5 }));
+    const { state } = settleWith(s, ['feet'], ['shopkeeper:feet'], 'A', forcing('FX004'));
+    expect(notes(state)).toEqual([
+      { source: 'part', effectId: null, part: 'feet', fields: ['powerZoneWidthMult'], powerZoneWidthMult: 1.25 },
+      { source: 'answer', effectId: 'FX004', fields: ['damageMult'] },
+    ]);
+  });
+  it('an answer that overwrites the width replaces the feet note; a reset (FX082) leaves none', () => {
+    const s = inFlight(fixedRun(21, { ammo: 5, shotsFired: 5 }));
+    expect(notes(settleWith(s, ['feet'], ['shopkeeper:feet'], 'A', forcing('FX036')).state)).toEqual([{ source: 'answer', effectId: 'FX036', fields: ['powerZoneWidthMult'], powerZoneWidthMult: 0.7 }]);
+    expect(notes(settleWith(s, ['feet'], ['shopkeeper:feet'], 'A', forcing('FX082')).state)).toEqual([]);
+  });
+  it('the game end shows nothing as kept; the talk note goes into the shot that really fires, once', () => {
+    const last = inFlight(fixedRun(22, { ammo: 1, shotsFired: 19, bonusAmmoTotal: 10 }));
+    expect(notes(settleWith(last, ['feet'], ['shopkeeper:feet'], 'A', forcing('FX004')).state)).toEqual([]);
+    const talked = CORE_RULES.reduceGame(fixedRun(23, { ammo: 5, shotsFired: 5 }), { type: 'CHOOSE_SHOPKEEPER_TALK', choice: 'ammo' }, CTX) as ExpandedRunState;
+    expect(notes(talked)).toEqual([{ source: 'talk', effectId: null, fields: ['powerZoneWidthMult'], powerZoneWidthMult: 0.85 }]);
+    const cancelled = CORE_RULES.reduceGame(CORE_RULES.reduceGame(talked, { type: 'OPEN_GAUGE' }, CTX), { type: 'CANCEL_GAUGE' }, CTX);
+    expect(notes(cancelled)).toEqual(notes(talked));
+    expect(notes(inFlight(talked))).toEqual([]);
+    // a real new run (the fixtures above only fake the shot count) passes the save check with the note
+    const fresh = CORE_RULES.reduceGame(fixedRun(24), { type: 'CHOOSE_SHOPKEEPER_TALK', choice: 'ammo' }, CTX);
+    expect(validateRunState(fresh, catalog, tuning, L, EXP)).toBeNull();
   });
 });

@@ -51,7 +51,9 @@ export function insideShape(shape: CollisionShape, x: number, y: number, z: numb
 function everyVertexInside(g: THREE.BufferGeometry, shape: CollisionShape, sxz: number, s: number): boolean {
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
-    if (!insideShape(shape, p.getX(i) * sxz * s, p.getY(i) * s, p.getZ(i) * sxz * s, 0)) return false;
+    // 1e-7 (positions are 32-bit floats): a top vertex placed exactly on the collider's top must not count as outside through a
+    // rounding error; otherwise the search below squeezes the model's width to zero.
+    if (!insideShape(shape, p.getX(i) * sxz * s, p.getY(i) * s, p.getZ(i) * sxz * s, 1e-7)) return false;
   }
   return true;
 }

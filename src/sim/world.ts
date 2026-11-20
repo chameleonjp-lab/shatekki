@@ -110,6 +110,8 @@ type StaticTarget =
 type Target = StaticTarget | { readonly t: 'prize'; readonly id: PrizeInstanceId };
 
 const SURFACE_FRICTION: Readonly<Record<SurfaceMaterial, number>> = { wood: 0.5, cloth: 0.8, paper: 0.6, metal: 0.35, plastic: 0.45 };
+/** Layout v3: the surfaces whose reflection readies the A2 chime (walls and shelf boards). */
+const CHIME_REFLECTORS = /^(left-wall|right-wall|back-wall|shelf-\d+)$/;
 /** Falling = moving down faster than this (m/s). */
 const FALL_SPEED = 0.4;
 const NEAR_EDGE_M = 0.04;
@@ -190,6 +192,17 @@ const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y,
 export const REWARD_TARGET_SURFACE_ID = 'reward-target';
 export const REWARD_CHIME_SURFACE_ID = 'reward-chime';
 export const REWARD_PIGGY_SURFACE_ID = 'reward-piggy';
+/** A quarter turn about x: maps local +y onto +z (a cylinder's axis onto a panel's thickness). */
+const QUAT_Y_TO_Z = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 } as const;
+function quatMul(a: { x: number; y: number; z: number; w: number }, b: { x: number; y: number; z: number; w: number }) {
+  return {
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+  };
+}
+
 /** Layout v3: surface id of a reflector that is not a shopkeeper part ('reflector-tray'). */
 export const REFLECTOR_SURFACE_PREFIX = 'reflector-';
 
@@ -254,10 +267,14 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   for (const c of cellGeoms) addStatic(c.box, SURFACE_FRICTION.wood, { t: 'cell', cellId: c.cellId });
   // Layout v3: the fan and the tray are oriented panels; what is drawn is what a cork can touch.
   for (const r of layout.reflectors ?? []) {
+    // A disc is a cylinder whose axis (Rapier's local y) is turned onto the panel's own z.
+    const desc =
+      r.shape === 'disc'
+        ? RAPIER.ColliderDesc.cylinder(r.halfExtents.z, r.halfExtents.x).setRotation(quatMul(r.rotation, QUAT_Y_TO_Z))
+        : RAPIER.ColliderDesc.cuboid(r.halfExtents.x, r.halfExtents.y, r.halfExtents.z).setRotation(r.rotation);
     const c = world.createCollider(
-      RAPIER.ColliderDesc.cuboid(r.halfExtents.x, r.halfExtents.y, r.halfExtents.z)
+      desc
         .setTranslation(r.center.x, r.center.y, r.center.z)
-        .setRotation(r.rotation)
         .setFriction(SURFACE_FRICTION[r.material])
         .setRestitution(0),
       fixedBody,
@@ -607,7 +624,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     p.position = add(p.position, scale(n, NUDGE));
     if (!continuing) p.reflections += 1;
     // A2: a real reflection off a wall, a board or a back-wall cell (a continuing contact is not one).
-    if (!continuing && (target.t === 'surface' || target.t === 'cell')) p.chimeReady = true;
+    // r007 (layout v3) counts only the walls, the boards and the cells: the ceiling, the floor, the counter
+    // and the tray's stand are not "a wall, a board or a cell" (requirements A2). r006 keeps its rule.
+    if (!continuing && (target.t === 'cell' || (target.t === 'surface' && (!facedCells || CHIME_REFLECTORS.test(target.id))))) p.chimeReady = true;
     // A4: a cork that went into the slot stays in the bank.
     if (target.t === 'rewardPiggy' && !continuing) {
       endProjectile(a, p, 'stopped');

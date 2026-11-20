@@ -93,6 +93,8 @@ export class SpeechScheduler {
 export interface SpeechBubbleHandle {
   /** Show a line near the shopkeeper's head (x, y in CSS px) or, when off screen, at the top with the speaker. */
   show(text: string, speaker: string, at: { readonly x: number; readonly y: number } | null): void;
+  /** 12: keep the shown line by the head as the view moves (no-op while hidden). */
+  follow(at: { readonly x: number; readonly y: number } | null): void;
   hide(): void;
   destroy(): void;
 }
@@ -112,20 +114,50 @@ export function mountSpeechBubble(root: HTMLElement): SpeechBubbleHandle {
   text.className = 'af-speech-text';
   el.append(who, text);
   root.appendChild(el);
+  const meets = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  let lastKey = '';
+  const place = (at: { readonly x: number; readonly y: number } | null) => {
+    const x = at ? Math.round(at.x) : 0;
+    const y = at ? Math.round(at.y) : 0;
+    el.dataset.anchor = at ? 'head' : 'top';
+    el.style.visibility = '';
+    el.style.removeProperty('--below');
+    if (at) {
+      // keep inside the stage and above the head (never over the reticle centre or the controls)
+      el.style.setProperty('--x', `${x}px`);
+      el.style.setProperty('--y', `${y}px`);
+    } else {
+      el.style.removeProperty('--x');
+      el.style.removeProperty('--y');
+    }
+    // 12: the shot card comes first. A bubble that would meet it goes just under it, and waits
+    // (invisible, still counted as shown) when there is no room above the controls.
+    const card = doc.querySelector<HTMLElement>('[data-testid="shot-card"]');
+    if (!card || card.hidden) return;
+    const c = card.getBoundingClientRect();
+    if (c.height === 0 || !meets(el.getBoundingClientRect(), c)) return;
+    el.dataset.anchor = 'below';
+    if (!at) el.style.setProperty('--x', `${Math.round((doc.defaultView?.innerWidth ?? 0) / 2 + 100)}px`);
+    el.style.setProperty('--below', `${Math.round(c.bottom + 8)}px`);
+    const controls = doc.querySelector<HTMLElement>('[data-testid="controls"]')?.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    if (controls && controls.height > 0 && b.bottom > controls.top) el.style.visibility = 'hidden';
+  };
   return {
     show(line, speaker, at) {
       text.textContent = line;
       who.textContent = speaker;
       el.hidden = false;
-      el.dataset.anchor = at ? 'head' : 'top';
-      if (at) {
-        // keep inside the stage and above the head (never over the reticle centre or the controls)
-        el.style.setProperty('--x', `${Math.round(at.x)}px`);
-        el.style.setProperty('--y', `${Math.round(at.y)}px`);
-      } else {
-        el.style.removeProperty('--x');
-        el.style.removeProperty('--y');
-      }
+      lastKey = '';
+      place(at);
+    },
+    follow(at) {
+      if (el.hidden) return;
+      const card = doc.querySelector<HTMLElement>('[data-testid="shot-card"]');
+      const key = `${at ? `${Math.round(at.x)},${Math.round(at.y)}` : 'top'}|${card && !card.hidden ? `${card.style.top}/${card.offsetHeight}` : '-'}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      place(at);
     },
     hide() {
       el.hidden = true;

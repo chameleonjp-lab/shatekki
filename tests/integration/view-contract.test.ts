@@ -327,6 +327,23 @@ describe('view: 100 prize recipes', () => {
     expect(total).toBeLessThan(100000);
   });
 
+  it('every catalog prize keeps its width and depth in its own collider (no model squeezed to a line)', async () => {
+    // Found by T02: 14 cylinder prizes (P003, P075, ...) were built with zero width when the
+    // top vertex sat a rounding error above the collider; they were invisible on the shelf and
+    // blank in the prize pictures.
+    const { RELEASE_CATALOG } = await import('../../src/catalog/release-config');
+    const thin: string[] = [];
+    for (const [id, prize] of RELEASE_CATALOG.prizes) {
+      const shape = prize.shape;
+      const geo = buildPrizeGeometry(prize.modelKey, shape, prize.material);
+      geo.computeBoundingBox();
+      const size = geo.boundingBox!.getSize(new THREE.Vector3());
+      const r = shape.kind === 'box' ? Math.min(shape.halfExtents.x, shape.halfExtents.z) : shape.radius;
+      if (Math.max(size.x, size.z) < 0.2 * r) thin.push(`${id} ${size.x.toFixed(4)}x${size.z.toFixed(4)}`);
+    }
+    expect(thin).toEqual([]);
+  });
+
   it('bottom-aligns flat-bottomed shapes so prizes sit on the shelf', () => {
     for (const id of ['P001', 'P029', 'P056']) {
       const shape = SHAPES.smallBox as Extract<CollisionShape, { kind: 'box' }>;

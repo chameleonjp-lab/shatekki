@@ -280,6 +280,8 @@ export function createEffects(deps: EffectsDeps): Effects {
   const v3 = layout.slotModel === 'v3-36';
   const reactions = new Map<ShopkeeperPart, Reaction>();
   for (const g of layout.shopkeeper) {
+    // a second box of a part (the v3 forearm, 'body') keeps the first box's pivot
+    if (reactions.has(g.part)) continue;
     const mesh = deps.shopkeeperParts.get(g.part);
     const c = g.box.center;
     const h = g.box.halfExtents;

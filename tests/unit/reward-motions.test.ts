@@ -65,3 +65,26 @@ describe('confirmed reward presentation', () => {
     }
   });
 });
+
+describe('09 r007: any set is the one big moment and its sound plays once', () => {
+  const r7 = () => {
+    const root = fakeRoot(), cue = vi.fn(), card = vi.fn();
+    return { root, cue, card, ...mountRewardMotions(root as never, { cue, card, setsFirst: true }) };
+  };
+  it('a re-completed set on the last cork with several prizes: one setComplete cue, the discovery motion, no continue or take sound', () => {
+    const v = r7();
+    v.presentRewardMotion(shot({ newlyCompletedSets: ['PAIR001'] as never[] }));
+    expect(v.cue.mock.calls).toEqual([['setComplete']]);
+    expect(v.root.find(e => e.dataset.motion === 'discovery')).toBeTruthy();
+    expect(v.root.all(e => e.dataset.token === 'cork')).toHaveLength(0);
+  });
+  it('a first discovery keeps its own sound; a replay plays nothing again', () => {
+    const v = r7();
+    const ev = shot({ newlyCompletedSets: ['PAIR001', 'S010'] as never[] }, ['S010']);
+    v.presentRewardMotion(ev);
+    v.presentRewardMotion(ev);
+    v.presentRewardMotion({ ...ev, shotId: 's9', replayed: true } as ConfirmedPresentation);
+    expect(v.cue.mock.calls).toEqual([['setDiscovered']]);
+    expect(v.card).toHaveBeenCalledTimes(2);
+  });
+});

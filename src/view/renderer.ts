@@ -104,6 +104,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     : null;
   const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
 
+  const reduceMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
   return {
     graph,
     render(frame: SimulationFrame, view: ViewState): void {
@@ -112,6 +113,14 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height, view.aimFirst?.aim), width / height);
       last = updateAim(graph, view);
       if (expandedView) expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }));
+      // r007: the shopkeeper's nod/blink, and a wrist flick when the cork hits the fan (view only;
+      // the hit volumes never move). Wall time, so it also lives between shots.
+      const keeper = graph.booth.keeperMotion;
+      if (keeper) {
+        const now = performance.now() / 1000;
+        if (frame.events.some((e) => e.type === 'impact' && e.target.kind === 'shopkeeper' && e.target.part === 'fan')) keeper.flick(now);
+        if (!reduceMotion.matches) keeper.idle(now);
+      }
       fx.handleEvents(frame.events, frame.simTimeSec);
       fx.update(frame.simTimeSec);
       webgl.render(graph.scene, camera);

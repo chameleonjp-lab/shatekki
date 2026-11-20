@@ -76,7 +76,10 @@ function panel() {
   const sent: Record<string, unknown>[] = [];
   let x = 0;
   const commits = vi.fn();
+  const reverts = vi.fn();
   const h = mountAimFirstControls(e.root as unknown as HTMLElement, {
+    revertAim: reverts,
+    noteText: (n) => `${n.source}:${n.effectId ?? n.powerZoneWidthMult}`,
     dispatch: (c) => {
       sent.push(c as Record<string, unknown>);
       if ((c as { type: string }).type === 'SET_POSITION') x = (c as { x: number }).x;
@@ -92,7 +95,7 @@ function panel() {
   });
   h.update(snap('aiming'), false);
   const el = (id: string) => (e.root as unknown as FakeElement).byTestId(id);
-  return { ...e, h, sent, commits, el, x: () => x, setX: (v: number) => (x = v) };
+  return { ...e, h, sent, commits, reverts, el, x: () => x, setX: (v: number) => (x = v) };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -122,11 +125,11 @@ describe('r007 controls: move, aim, 撃つ → 発射', () => {
     vi.advanceTimersByTime(300);
     p.win.run(4000);
     expect(p.x()).toBe(-2.65);
-    p.el('btn-left').dispatch('pointercancel', { pointerId: 3 });
+    p.el('btn-left').dispatch('pointerup', { pointerId: 3 });
     expect(p.commits).toHaveBeenCalledTimes(2);
   });
 
-  it('a second finger, a blur and hiding the page never leave a hold running', () => {
+  it('a second finger, a blur and hiding the page never leave a hold running, and drop it without saving', () => {
     const p = panel();
     p.el('btn-right').dispatch('pointerdown', { pointerId: 1 });
     p.el('btn-left').dispatch('pointerdown', { pointerId: 2 }); // ignored: one gesture at a time
@@ -135,7 +138,42 @@ describe('r007 controls: move, aim, 撃つ → 発射', () => {
     p.win.run(1000);
     expect(p.x()).toBe(0);
     expect(p.sent.filter((c) => c.type === 'SET_POSITION')).toEqual([]);
+    expect(p.commits).not.toHaveBeenCalled();
+    expect(p.reverts).toHaveBeenCalledTimes(1);
+  });
+
+  it('03: an interrupted glide or drag (cancel, early capture loss, pause) is dropped, never saved; a normal release saves once', () => {
+    const p = panel();
+    // glide then the browser cancels the pointer
+    p.el('btn-right').dispatch('pointerdown', { pointerId: 1 });
+    vi.advanceTimersByTime(300);
+    p.win.run(500);
+    p.el('btn-right').dispatch('pointercancel', { pointerId: 1 });
+    expect(p.reverts).toHaveBeenCalledTimes(1);
+    // a drag whose capture is lost before the release
+    const pad = p.el('aim-pad');
+    pad.dispatch('pointerdown', { pointerId: 2, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 2, clientX: 40, clientY: 0 });
+    pad.dispatch('lostpointercapture', { pointerId: 2 });
+    expect(p.reverts).toHaveBeenCalledTimes(2);
+    // a drag interrupted by the pause button
+    pad.dispatch('pointerdown', { pointerId: 3, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 3, clientX: 40, clientY: 0 });
+    p.el('btn-pause').dispatch('click');
+    expect(p.reverts).toHaveBeenCalledTimes(3);
+    expect(p.commits).not.toHaveBeenCalled();
+    // a normal release saves once; the capture loss that follows it changes nothing
+    pad.dispatch('pointerdown', { pointerId: 4, clientX: 0, clientY: 0 });
+    pad.dispatch('pointermove', { pointerId: 4, clientX: 40, clientY: 0 });
+    pad.dispatch('pointerup', { pointerId: 4 });
+    pad.dispatch('lostpointercapture', { pointerId: 4 });
     expect(p.commits).toHaveBeenCalledTimes(1);
+    expect(p.reverts).toHaveBeenCalledTimes(3);
+    p.el('btn-left').dispatch('pointerdown', { pointerId: 5 });
+    p.el('btn-left').dispatch('pointerup', { pointerId: 5 });
+    p.el('btn-left').dispatch('lostpointercapture', { pointerId: 5 });
+    expect(p.commits).toHaveBeenCalledTimes(2);
+    expect(p.reverts).toHaveBeenCalledTimes(3);
   });
 
   it('the first press opens the gauge; it must be released before a new press fires; key repeat never fires', () => {
@@ -350,20 +388,50 @@ describe('r007 shot card (from the confirmed summary only)', () => {
       effects: [{ requestId: 'x' as never, source: { kind: 'cell', cellId: 'c' as never }, effectId: 'FX001' as never, outcome: 'applied', reason: null, ammoDelta: 1, ammoRequested: 1, targets: [] }],
       ledger: { shotId: 's01' as never, scoreBefore: 100, prizePoints: 20, trickPoints: 0, setPoints: 150, firstHitPoints: 0, nominalPenalty: 0, appliedPenalty: 0, scoreAfter: 270, items: [{ kind: 'set', refId: 'PAIR001', points: 50 }, { kind: 'set', refId: 'S010', points: 100 }] },
     });
-    const m = aimFirstCardModel({ summary: s, freshSets: ['PAIR001'] as never, ammoBeforeShot: 3 }, TX);
+    const members: Record<string, string[]> = { PAIR001: ['P001', 'P002'], S010: ['P002', 'P003', 'P004'] };
+    const m = aimFirstCardModel({ summary: s, freshSets: ['PAIR001'] as never, ammoBeforeShot: 3 }, { ...TX, setMembers: (id) => members[id] ?? [] });
     expect(m.kind).toBe('set');
     expect(m.headline).toBe('af.set.many{"n":2}');
-    expect(m.sets).toEqual([{ setId: 'PAIR001', name: '[PAIR001]', points: 50, fresh: true }, { setId: 'S010', name: '[S010]', points: 100, fresh: false }]);
+    // 09: each set lists its own members (picture and name), 2 for a pair and 3 for a trio
+    const mem = (ids: string[]) => ids.map((typeId) => ({ typeId, name: `<${typeId}>` }));
+    expect(m.sets).toEqual([
+      { setId: 'PAIR001', name: '[PAIR001]', points: 50, fresh: true, members: mem(members.PAIR001!) },
+      { setId: 'S010', name: '[S010]', points: 100, fresh: false, members: mem(members.S010!) },
+    ]);
     expect(m.total).toBe('af.set.total{"score":270}');
-    expect(m.ammo[0]).toBe('af.ammo.gained{"n":3}');
+    expect(m.ammo[0]).toBe('af.ammo.total{"sum":"+3","n":5}');
   });
 
   it('the last cork that continues is the big moment when no set formed; a cap is shown with its reason', () => {
     const cont = aimFirstCardModel({ summary: summary({ ammoAfter: 2, bonusAmmoGranted: 2 }), freshSets: [], ammoBeforeShot: 1 }, TX);
     expect(cont.kind).toBe('continue');
     const capped = aimFirstCardModel({ summary: summary({ ammoAfter: 0, runEnded: true, parts: [{ part: 'hat', first: true, firstPoints: 30, effect: 'ammo', ammoRequested: 1, ammoGranted: 0, powerZoneWidthMult: null, hint: null, reason: 'noAmmoRoom' }] }), freshSets: [], ammoBeforeShot: 1 }, TX);
-    expect(capped.ammo).toContain('af.ammo.capped');
+    expect(capped.ammo[0]).toBe('af.ammo.total{"sum":"+0","n":0}');
+    expect(capped.ammo[1]).toContain('af.ammo.rowCap');
     expect(capped.headline).toContain('af.part.points');
     expect(capped.headline).toContain('af.part.hat.cap');
+  });
+});
+
+describe('08 several ammo sources in one shot', () => {
+  it('total and corks left first, then each source with its real amount; +1 and a +0 at the cap side by side, and a loss', () => {
+    const s = summary({
+      bonusAmmoGranted: 1,
+      ammoAfter: 4,
+      effects: [
+        { requestId: 'a' as never, source: { kind: 'cell', cellId: 'c' as never }, effectId: 'FX001' as never, outcome: 'applied', reason: null, ammoDelta: 1, ammoRequested: 1, targets: [] },
+        { requestId: 'b' as never, source: { kind: 'device', deviceId: 'dev-ammo-1' as never, deviceKind: 'ammo' }, effectId: null, outcome: 'notApplicable', reason: 'noAmmoRoom', ammoDelta: 0, ammoRequested: 2, targets: [] },
+        { requestId: 'c' as never, source: { kind: 'answer', questionId: 'Q001' as never, choice: 'A' }, effectId: 'FX021' as never, outcome: 'applied', reason: null, ammoDelta: -1, targets: [] },
+      ],
+      rewards: [{ id: 'A7', key: 'k', shotNumber: 1, offered: 1, granted: 0 } as never],
+    });
+    const m = aimFirstCardModel({ summary: s, freshSets: [], ammoBeforeShot: 5 }, TX);
+    expect(m.ammo[0]).toBe('af.ammo.total{"sum":"+1 −1","n":4}');
+    expect(m.ammo.slice(1)).toEqual([
+      'af.ammo.row{"who":"fxres.src.cell「exp.fx.FX001.name」","n":1}',
+      'af.ammo.rowCap{"who":"fxres.src.device"}',
+      'af.ammo.rowLost{"who":"fxres.src.answer「exp.fx.FX021.name」","n":1}',
+      'af.ammo.rowCap{"who":"reward.name.A7"}',
+    ]);
   });
 });

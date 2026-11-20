@@ -13,6 +13,7 @@
  * a new press can fire, and key auto-repeat never fires.
  */
 import type { AimAngles, ControllerSnapshotLike, LoadTier } from './aim-first-types';
+import type { NextNote } from '../../contracts';
 import { AIM_SENSITIVITY } from './panel';
 import './controls.css';
 import '../aim-first.css';
@@ -21,6 +22,10 @@ export interface AimFirstPanelDeps {
   dispatch(command: unknown): boolean | Promise<boolean>;
   /** Save the finished move/aim (r007 numbered save). */
   commitAim(): void;
+  /** Drop the interrupted move/aim: back to the last position and aim whose save succeeded. */
+  revertAim(): void;
+  /** Words for one reserved next-shot setting and its source. */
+  noteText(note: NextNote): string;
   currentAim(): AimAngles;
   currentStandX(): number;
   onRetry(): void;
@@ -36,6 +41,21 @@ export interface AimFirstPanelHandle {
 }
 
 const TIERS: readonly LoadTier[] = ['normal', 'good', 'perfect'];
+
+/**
+ * The tier the label names for a bar value: the narrowest zone that holds it (the zones are nested
+ * around the sweet spot, so the narrowest is the strongest; a boundary belongs to the stronger
+ * tier, as in the classifier FIRE uses). Before T05 this took the widest zone and said "normal"
+ * inside the good and perfect bands.
+ */
+export function gaugeTierAt(zones: readonly { tier: LoadTier; min: number; max: number }[], bar: number): LoadTier {
+  let best: { tier: LoadTier; min: number; max: number } | null = null;
+  for (const z of zones) {
+    if (z.tier === 'weak' || bar < z.min - 1e-9 || bar > z.max + 1e-9) continue;
+    if (!best || z.max - z.min < best.max - best.min) best = z;
+  }
+  return best?.tier ?? 'weak';
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = doc.createElement(tag);
@@ -166,8 +186,12 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     }
     raf = win.requestAnimationFrame(glide);
   };
-  /** End the hold. `asTap`: released before the hold delay, so the one step is added now. */
-  const endHold = (asTap: boolean) => {
+  /**
+   * End the hold. `asTap`: released before the hold delay, so the one step is added now.
+   * `interrupted`: cancelled, capture lost, blur, hidden, rotated or paused: nothing of this
+   * gesture is kept (the last saved position comes back) and nothing is saved.
+   */
+  const endHold = (asTap: boolean, interrupted = false) => {
     if (holdDir === 0) return;
     const dir = holdDir;
     const wasGliding = gliding;
@@ -177,6 +201,10 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     holdTimer = null;
     win.cancelAnimationFrame(raf);
     if (gesture?.kind === 'move') gesture = null;
+    if (interrupted) {
+      deps.revertAim();
+      return;
+    }
     if (asTap && !wasGliding && canMove()) void deps.dispatch({ type: 'SET_POSITION', x: clampX(deps.currentStandX() + dir * deps.move.step) });
     deps.commitAim();
   };
@@ -201,7 +229,8 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     });
     for (const type of ['pointercancel', 'lostpointercapture']) {
       on(b, type, (e: PointerEvent) => {
-        if (gesture?.kind === 'move' && gesture.pointerId === e.pointerId) endHold(false);
+        // after a normal release the gesture is already over, so a late capture loss changes nothing
+        if (gesture?.kind === 'move' && gesture.pointerId === e.pointerId) endHold(false, true);
       });
     }
     // keyboard: one step per press, never the auto-repeat
@@ -213,13 +242,9 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       }
     });
   }
-  on(win, 'blur', () => endHold(false));
+  on(win, 'blur', () => interruptGestures());
   on(doc, 'visibilitychange', () => {
-    if (doc.visibilityState === 'hidden') {
-      endHold(false);
-      endDrag();
-      gesture = null;
-    }
+    if (doc.visibilityState === 'hidden') interruptGestures();
   });
 
   // ---- aim pad (relative drag)
@@ -246,13 +271,25 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
     const a = deps.currentAim();
     void deps.dispatch({ type: 'AIM', yaw: a.yaw + dx * AIM_SENSITIVITY, pitch: a.pitch - dy * AIM_SENSITIVITY });
   });
-  const endDrag = (e?: PointerEvent) => {
+  const endDrag = (e?: PointerEvent, interrupted = false) => {
     if (gesture?.kind !== 'aim' || (e && gesture.pointerId !== e.pointerId)) return;
     gesture = null;
-    if (dragged) deps.commitAim();
+    const moved = dragged;
     dragged = false;
+    if (interrupted) {
+      if (moved) deps.revertAim();
+    } else if (moved) deps.commitAim();
   };
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) on(pad, type, (e: PointerEvent) => endDrag(e));
+  on(pad, 'pointerup', (e: PointerEvent) => endDrag(e));
+  // a cancelled pointer or a capture lost before the release drops the drag
+  on(pad, 'pointercancel', (e: PointerEvent) => endDrag(e, true));
+  on(pad, 'lostpointercapture', (e: PointerEvent) => endDrag(e, true));
+  /** Drop whatever move or drag is under way (blur, hidden, rotation, pause, a panel opening). */
+  function interruptGestures(): void {
+    endHold(false, true);
+    endDrag(undefined, true);
+    gesture = null;
+  }
 
   // ---- 撃つ / 発射 on press; the opening press must be released first
   let openedBy: number | null = null;
@@ -290,17 +327,15 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
   on(skipBtn, 'click', () => void deps.dispatch({ type: 'SKIP_PRESENTATION' }));
   on(resumeBtn, 'click', () => void deps.dispatch({ type: 'RESUME', reason: 'manual' }));
   on(pauseBtn, 'click', () => {
-    endHold(false);
+    interruptGestures();
     void deps.dispatch({ type: 'PAUSE', reason: 'manual' });
   });
   on(retryBtn, 'click', () => deps.onRetry());
   on(panel, 'touchmove', (e: TouchEvent) => e.preventDefault(), { passive: false });
 
-  /** End held moves and drags (saved once). `keepPress`: the press that opened the gauge is still down. */
+  /** Drop held moves and drags (never saved). `keepPress`: the press that opened the gauge is still down. */
   const cancelGestures = (keepPress = false) => {
-    endHold(false);
-    endDrag();
-    gesture = null;
+    interruptGestures();
     if (!keepPress) openedBy = null;
   };
 
@@ -312,7 +347,7 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       const paused = snap.view.paused;
       const next = paused && s.phase !== 'ended' && s.phase !== 'abandoned' ? 'paused' : s.phase;
       if (next !== mode) {
-        // leaving aiming ends any held move or drag (and saves it)
+        // leaving aiming (pause, rotation, a question) drops any held move or drag
         if (mode === 'aiming') cancelGestures(next === 'loading');
         if (next !== 'loading') openedBy = null;
       }
@@ -324,8 +359,12 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       score.textContent = `${s.score} ${t('hud.score')}`;
       const af = snap.view.aimFirst;
       const zoneMult = af?.powerZoneWidthMult ?? 1;
-      nextMark.hidden = zoneMult === 1;
-      nextMark.textContent = zoneMult === 1 ? '' : `${t('af.next.mark')}: ${t('af.gauge.width', { m: zoneMult })}`;
+      // every setting still reserved for the next real shot, with its source (overwritten ones are gone)
+      const notes = s.expansion?.aimFirst?.nextNotes ?? [];
+      const words = notes.length > 0 ? notes.map((n) => deps.noteText(n)) : zoneMult !== 1 ? [t('af.gauge.width', { m: zoneMult })] : [];
+      const markText = words.length > 0 ? `${t('af.next.mark')}: ${words.join(' / ')}` : '';
+      nextMark.hidden = words.length === 0;
+      if (nextMark.textContent !== markText) nextMark.textContent = markText;
       const talk = af?.talk;
       talkBtn.hidden = !talk || talk.used !== null || mode === 'ended' || mode === 'abandoned';
       talkBtn.disabled = !talk || talk.blocked !== null || saving;
@@ -345,9 +384,9 @@ export function mountAimFirstControls(root: HTMLElement, deps: AimFirstPanelDeps
       marker.hidden = bar === null;
       if (bar !== null) marker.style.left = `${(bar * 100).toFixed(1)}%`;
       if (loading && bar !== null && af) {
-        const z = [...af.zones].filter((x) => x.tier !== 'weak').reverse().find((x) => bar >= x.min - 1e-9 && bar <= x.max + 1e-9);
-        gaugeLabel.textContent = `${t('af.gauge.label')}: ${t(`af.tier.${z?.tier ?? 'weak'}`)}${zoneMult !== 1 ? ` · ${t('af.gauge.width', { m: zoneMult })}` : ''}`;
-        gaugeLabel.dataset.tier = z?.tier ?? 'weak';
+        const tier = gaugeTierAt(af.zones, bar);
+        gaugeLabel.textContent = `${t('af.gauge.label')}: ${t(`af.tier.${tier}`)}${zoneMult !== 1 ? ` · ${t('af.gauge.width', { m: zoneMult })}` : ''}`;
+        gaugeLabel.dataset.tier = tier;
       }
       pad.hidden = !(aiming || loading);
       pad.dataset.locked = String(!aiming || saving);

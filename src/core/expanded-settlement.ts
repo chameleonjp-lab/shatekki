@@ -18,7 +18,7 @@ import { seriesDef } from './series';
 import type { SettlementResult } from './settlement';
 import type { ExpandedPlanContext } from './effect-plan';
 import { rewardConfigOf, settleRewards } from './rewards';
-import { setHintFor } from './aim-first';
+import { nextNotesFor, setHintFor } from './aim-first';
 import type { PartOutcome } from '../contracts';
 
 export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: ExpandedPlanContext): SettlementResult {
@@ -146,6 +146,11 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     );
     // r007 goes straight back to aiming at the same position and aim.
     next = { ...base, phase: aimFirst ? 'aiming' : 'position', shelf: r.shelf, draw: r.draw };
+    if (aimFirst && next.expansion.aimFirst) {
+      // what this shot reserved for the next one, by source, as still in force after every effect
+      const notes = nextNotesFor([], plan.processed, plan.parts ?? [], next.expansion.next, ctx.expansion);
+      next = { ...next, expansion: { ...next.expansion, aimFirst: { ...next.expansion.aimFirst, nextNotes: notes } } };
+    }
   }
   if (!isAmmoBalanced(next, tuning.initialAmmo)) throw new Error('resolveExpandedShot: ammo invariant broken (shotsFired + ammo + ammoLostTotal !== initialAmmo + bonusAmmoTotal)');
 

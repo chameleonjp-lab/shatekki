@@ -4,6 +4,12 @@
 
 [要件と採用案](docs/changes/2026-11-19-aim-first-stall-requirements.md)・[描写仕様](docs/design/2026-11-19-aim-first-stall-art.md)・[店主の台詞100種](docs/design/2026-11-19-shopkeeper-lines.md)・[実装計画](docs/superpowers/plans/2026-11-19-aim-first-stall.md)。左右ボタンで動き、狙いを決めてから威力を選んで撃つ。100枚の効果マス、当たった位置の粒、セット成立の得点札、店主の部位別効果と会話を次期内部候補の工程に含めた。[検証で反映した変更](docs/reviews/2026-11-19-aim-first-stall-review.md)
 
+## 照準先行の内部候補 r007 を遊ぶ（試作値・正式採用前）
+
+Node 22 以上で `npm ci`、`npm run build:aim-first`、`npm run preview:aim-first` を順に実行し、http://localhost:4180/ を開きます。ホームの識別子は `rules-v2-proposed-r007` です。公開用9枠・r006 とは別の回・別の自己ベスト・別の図鑑として保存し、ランキングには送りません。
+
+遊び方は5つの手順です。◀▶で立ち位置を決め、下の枠をなぞって狙い、「撃つ」でゲージを開き、帯を見て「発射」を押し、札で結果を読みます。[11月20日の後続対応の計画](docs/superpowers/plans/2026-11-20-r007-followup.md) ／ [確認結果](docs/reviews/2026-11-20-r007-followup-check.md) ／ [敵対的レビュー](docs/reviews/2026-11-20-r007-followup-adversarial-review.md)
+
 ## 36枠の内部候補を遊ぶ
 
 Node 22 以上で `npm ci`、`npm run build:next`、`npm run preview:next` を順に実行し、http://localhost:4178/ を開きます。ホームの識別子は `rules-v2-proposed-r006` です。公開用9枠と内部候補は独立した回として保存します。

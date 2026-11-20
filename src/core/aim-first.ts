@@ -13,6 +13,11 @@
  * set hint shared by the talk and the body hit.
  */
 import type {
+  EffectOperation,
+  NextNote,
+  PartOutcome,
+  PlannedEffect,
+  ShotReservation,
   BoothLayout,
   ExpandedRunState,
   ExpansionCatalog,
@@ -149,8 +154,8 @@ export function reduceAimFirst(state: RunState, command: GameCommand, ctx: AimFi
         ammo: state.ammo - 1,
         shotsFired: shotNumber,
         inFlight: { shotId: request.shotId, shotNumber, request, stage: 'flight' },
-        // The reservation (power zone included) is used by this shot only.
-        expansion: { ...exp, active: exp.next, next: { modifiers: BASE_SHOT_MODIFIERS, hint: null } },
+        // The reservation (power zone included) is used by this shot only; its notes go with it.
+        expansion: { ...exp, active: exp.next, next: { modifiers: BASE_SHOT_MODIFIERS, hint: null }, aimFirst: { ...exp.aimFirst, nextNotes: [] } },
       };
     }
     case 'CHOOSE_SHOPKEEPER_TALK':
@@ -211,7 +216,11 @@ export function chooseTalk(state: RunState, choice: TalkChoice, ctx: AimFirstCon
     ...state,
     ammo: state.ammo + granted,
     bonusAmmoTotal: state.bonusAmmoTotal + granted,
-    expansion: { ...exp, next: { ...exp.next, modifiers }, aimFirst: { ...exp.aimFirst, talk } },
+    expansion: {
+      ...exp,
+      next: { ...exp.next, modifiers },
+      aimFirst: { ...exp.aimFirst, talk, nextNotes: [...(exp.aimFirst.nextNotes ?? []).filter((n) => !n.fields.includes('powerZoneWidthMult')), { source: 'talk', effectId: null, fields: ['powerZoneWidthMult'], ...(modifiers.powerZoneWidthMult !== undefined ? { powerZoneWidthMult: modifiers.powerZoneWidthMult } : {}) }] },
+    },
   };
 }
 
@@ -240,3 +249,55 @@ export function setHintFor(state: Pick<RunState, 'shelf' | 'collectedTypeIds' | 
 
 /** Initial aim-first part of the expansion state. */
 export const INITIAL_AIM_FIRST = Object.freeze({ aimSeq: 0, talk: null });
+
+// ------------------------------------------------------------ next-shot notes
+
+/** The fields an operation sets on the next-shot reservation ('hint' for hints). */
+function fieldsOf(op: EffectOperation): readonly string[] | 'reset' | null {
+  if (op.kind === 'shotModifiers') return Object.keys(op.set);
+  if (op.kind === 'hint') return ['hint'];
+  if (op.kind === 'resetShotModifiers') return 'reset';
+  return null;
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The sources of what is still reserved, newest first wins a field: an effect whose fields were all
+ * overwritten later, or reset (FX082), is dropped. `before` are notes already standing (the talk).
+ */
+export function nextNotesFor(
+  before: readonly NextNote[],
+  processed: readonly PlannedEffect[],
+  parts: readonly PartOutcome[],
+  final: ShotReservation,
+  expansion: ExpansionCatalog,
+): NextNote[] {
+  type Cand = Omit<NextNote, 'fields'> & { readonly fields: readonly string[] | 'reset' };
+  const cands: Cand[] = [...before.map((n) => ({ ...n }))];
+  for (const e of processed) {
+    if (e.outcome !== 'applied' || e.effectId === null) continue;
+    const def = expansion.effects.get(e.effectId);
+    const f = def ? fieldsOf(def.operation) : null;
+    if (!f) continue;
+    const source = e.source.kind === 'answer' ? 'answer' : e.source.kind === 'device' ? 'device' : 'cell';
+    cands.push({ source, effectId: e.effectId, fields: f });
+  }
+  // a part acts after the cells and devices and before the answer: put it in that place
+  const answerAt = cands.findIndex((c) => c.source === 'answer');
+  const feet = parts.filter((p) => p.first && p.effect === 'powerZone').map((p): Cand => ({ source: 'part', effectId: null, part: p.part, fields: ['powerZoneWidthMult'] }));
+  if (feet.length) cands.splice(answerAt < 0 ? cands.length : answerAt, 0, ...feet);
+  const claimed = new Set<string>();
+  const out: NextNote[] = [];
+  const valueOf = (k: string): unknown => (k === 'hint' ? final.hint : (final.modifiers as unknown as Record<string, unknown>)[k]);
+  for (let i = cands.length - 1; i >= 0; i--) {
+    const c = cands[i]!;
+    if (c.fields === 'reset') break; // everything before a reset is gone
+    const keep = c.fields.filter((k) => !claimed.has(k) && valueOf(k) !== undefined && !sameValue(valueOf(k), k === 'hint' ? null : (BASE_SHOT_MODIFIERS as unknown as Record<string, unknown>)[k]));
+    for (const k of c.fields) claimed.add(k);
+    if (keep.length === 0) continue;
+    const w = keep.includes('powerZoneWidthMult') ? final.modifiers.powerZoneWidthMult : undefined;
+    out.unshift({ source: c.source, effectId: c.effectId, ...(c.part ? { part: c.part } : {}), fields: keep, ...(w !== undefined ? { powerZoneWidthMult: w } : {}) });
+  }
+  return out;
+}

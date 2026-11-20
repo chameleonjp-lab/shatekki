@@ -62,6 +62,7 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
   };
   const cam = b.layout.camera;
   let questions = 0;
+  let missShots = 0;
   let maxCorks = 0;
   const started = performance.now();
   for (let guard = 0; c.current.phase !== 'ended' && guard < 25; guard++) {
@@ -139,7 +140,9 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
       maxCorks = Math.max(maxCorks, world.frame().projectiles.length);
     }
     if (c.current.phase === 'resolving') throw new Error('a shot never settled');
-    if (observeShot) observeShot({ beforeFire, afterShot: c.current, gameTick, summary: c.snapshot().lastSummary! });
+    const last = c.snapshot().lastSummary!;
+    if (last.collected.length === 0) missShots += 1;
+    if (observeShot) observeShot({ beforeFire, afterShot: c.current, gameTick, summary: last });
   }
   const end = c.current;
   if (end.phase !== 'ended') throw new Error(`incomplete run: ${b.key}/${seed}`);
@@ -166,6 +169,9 @@ export async function playRun(b: GameplayBundle, seed: number, observeShot?: (sh
     ammoLost: end.ammoLostTotal ?? 0,
     questions,
     cellsUsed: end.expansion?.cells.filter((x) => x.used).length ?? 0,
+    /** T09: shots that won no prize, and the used cells by wall (layout v3 faces; 'back' otherwise). */
+    missShots,
+    usedCellIds: end.expansion?.cells.filter((x) => x.used).map((x) => x.cellId as string) ?? [],
     transformIntents: intents,
     transformsApplied: applied,
     transformsDeferredAtShotEnd: deferredAtShot,
