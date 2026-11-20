@@ -176,6 +176,40 @@ describe('4a: the humanoid shopkeeper, parts, fan and tray in the real world', (
     }
   });
 
+  it('T04: the fan is round where it is drawn (a square corner is not the fan) and the forearm counts as the body', async () => {
+    expect(fan.shape).toBe('disc');
+    // a point in the panel's own frame, turned into the world (yaw -0.62 about y)
+    const onPanel = (u: number, v: number): Vec3 => ({ x: fan.center.x + u * Math.cos(-0.62), y: fan.center.y + v, z: fan.center.z - u * Math.sin(-0.62) });
+    const corner = await controller(fixedRun(41));
+    try {
+      // 0.105 along both edges: inside the old 0.12 square, outside the 0.12 circle (0.148 from the middle)
+      shootAt(corner.c, 2.4, onPanel(0.105, 0.105));
+      finish(corner.c, corner.settled);
+      expect(corner.impacts.some((i) => i.target.kind === 'shopkeeper' && i.target.part === 'fan')).toBe(false);
+    } finally {
+      corner.world.dispose();
+    }
+    const inside = await controller(fixedRun(42));
+    try {
+      shootAt(inside.c, 2.4, onPanel(0.06, 0.06)); // 0.085 from the middle: on the disc
+      finish(inside.c, inside.settled);
+      expect(inside.impacts[0]?.target).toMatchObject({ kind: 'shopkeeper', part: 'fan' });
+    } finally {
+      inside.world.dispose();
+    }
+    const arm = L.shopkeeper.filter((p) => p.part === 'body')[1]!.box;
+    const fore = await controller(fixedRun(43));
+    try {
+      // below the fan's lower edge, on the forearm's front face
+      shootAt(fore.c, 2.65, { x: arm.center.x, y: arm.center.y - arm.halfExtents.y + 0.02, z: arm.center.z + arm.halfExtents.z });
+      const { summary } = finish(fore.c, fore.settled);
+      expect(fore.impacts[0]?.target).toMatchObject({ kind: 'shopkeeper', part: 'body' });
+      expect(summary.touchedFirstHitTargets).toEqual(['shopkeeper:body']);
+    } finally {
+      fore.world.dispose();
+    }
+  });
+
   it('tray: the reflected cork knocks a bottom-row prize down; no shopkeeper points and no question', async () => {
     const { c, world, settled, impacts } = await controller(fixedRun(5));
     try {

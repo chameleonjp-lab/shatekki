@@ -26,6 +26,8 @@ export interface BoothBuild {
   readonly devices: ReadonlyMap<string, THREE.Object3D>;
   readonly hidden: ReadonlyMap<string, THREE.Object3D>;
   readonly shopkeeper: ReadonlyMap<string, THREE.Mesh>;
+  /** Layout v3 only: the shopkeeper's idle nod/blink and the wrist flick after a fan hit (view only). */
+  readonly keeperMotion: { idle(timeSec: number): void; flick(timeSec: number): void } | null;
   readonly lights: readonly THREE.Light[];
   /** Re-grows the invisible collision proxies to a new cork radius (expanded rules: FX083/FX084). */
   setPickInflate(inflate: number): void;
@@ -342,7 +344,8 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
     group.add(m);
   }
   // Layout v3 (r007): the humanoid shopkeeper with the fan and tray panels of the layout.
-  const keeper = layout.reflectors ? buildShopkeeperV3(layout.shopkeeper, layout.reflectors, lit) : buildShopkeeper(layout.shopkeeper, lit);
+  const keeperV3 = layout.reflectors ? buildShopkeeperV3(layout.shopkeeper, layout.reflectors, lit) : null;
+  const keeper = keeperV3 ?? buildShopkeeper(layout.shopkeeper, lit);
   group.add(keeper.group);
 
   const proxies = new THREE.Group();
@@ -366,8 +369,13 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
     const sx = r.halfExtents.x * 2;
     const sy = r.halfExtents.y * 2;
     const sz = r.halfExtents.z * 2;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx + 2 * pickInflate, sy + 2 * pickInflate, sz + 2 * pickInflate), proxyMat);
-    m.userData = { size: [sx, sy, sz] };
+    // a disc (the round fan) is picked as the same circle the cork meets
+    const geo =
+      r.shape === 'disc'
+        ? new THREE.CylinderGeometry(r.halfExtents.x + pickInflate, r.halfExtents.x + pickInflate, sz + 2 * pickInflate, 24).rotateX(Math.PI / 2)
+        : new THREE.BoxGeometry(sx + 2 * pickInflate, sy + 2 * pickInflate, sz + 2 * pickInflate);
+    const m = new THREE.Mesh(geo, proxyMat);
+    m.userData = { size: [sx, sy, sz], disc: r.shape === 'disc' };
     m.position.set(r.center.x, r.center.y, r.center.z);
     m.quaternion.set(r.rotation.x, r.rotation.y, r.rotation.z, r.rotation.w);
     m.name = r.part ? `proxy:shopkeeper-${r.part}` : `proxy:reflector-${r.reflectorId}`;
@@ -390,6 +398,7 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
     devices,
     hidden,
     shopkeeper: keeper.parts,
+    keeperMotion: keeperV3,
     lights: [hemi, key, glowLight],
     setPickInflate(inflate: number) {
       for (const child of proxies.children) {
@@ -397,7 +406,9 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
         const size = m.userData.size as V3 | undefined;
         if (!size) continue;
         m.geometry.dispose();
-        m.geometry = new THREE.BoxGeometry(size[0] + 2 * inflate, size[1] + 2 * inflate, size[2] + 2 * inflate);
+        m.geometry = m.userData.disc
+          ? new THREE.CylinderGeometry(size[0] / 2 + inflate, size[0] / 2 + inflate, size[2] + 2 * inflate, 24).rotateX(Math.PI / 2)
+          : new THREE.BoxGeometry(size[0] + 2 * inflate, size[1] + 2 * inflate, size[2] + 2 * inflate);
       }
     },
     dispose() {

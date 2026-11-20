@@ -123,6 +123,8 @@ const SHOPKEEPER: readonly ShopkeeperPartGeometry[] = [
   // Legs, torso, arms at the sides and the head: one 'body' volume, as before.
   { part: 'body', box: box(SK_X, 0.86, SK_Z, 0.15, 0.74, 0.09) },
   { part: 'hat', box: box(SK_X, 1.67, SK_Z, 0.14, 0.06, 0.14) },
+  // T04: the right forearm that reaches out to the fan. Drawn where it is, and counts as 'body'.
+  { part: 'body', box: box(2.655, 1.2, -2.2, 0.03, 0.07, 0.05) },
 ];
 
 /** Unit quaternion for a rotation of `a` radians about the unit axis (x, y, z). */
@@ -161,7 +163,8 @@ function reflector(reflectorId: ReflectorGeometry['reflectorId'], part: Reflecto
  * Measured with real shots in tests/integration/aim-first-shopkeeper.test.ts.
  */
 export const V3_REFLECTORS: readonly ReflectorGeometry[] = [
-  reflector('fan', 'fan', { x: 2.62, y: 1.3, z: -2.12 }, { x: 0.12, y: 0.12, z: 0.008 }, -0.62, 0, 'paper', 0.9),
+  // T04: the round fan is a disc, the same circle that is drawn (radius 0.12).
+  { ...reflector('fan', 'fan', { x: 2.62, y: 1.3, z: -2.12 }, { x: 0.12, y: 0.12, z: 0.008 }, -0.62, 0, 'paper', 0.9), shape: 'disc' as const },
   reflector('tray', null, { x: 2.7, y: 1.0, z: -1.98 }, { x: 0.13, y: 0.1, z: 0.01 }, -0.66, 0, 'wood', 0.9),
 ];
 

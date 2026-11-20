@@ -114,6 +114,11 @@ export interface ReflectorGeometry {
   readonly material: SurfaceMaterial;
   /** Bounce factor used instead of the material's (front and back alike). */
   readonly bounce: number;
+  /**
+   * 'disc' (r007 fan, T04): a round panel of radius halfExtents.x and half thickness halfExtents.z,
+   * the same circle that is drawn. Omitted: a box of halfExtents.
+   */
+  readonly shape?: 'disc';
 }
 
 /** 'v1-9': rules-v1 three-by-three shelf. 'v2-36': three rows × twelve columns with background cells. */

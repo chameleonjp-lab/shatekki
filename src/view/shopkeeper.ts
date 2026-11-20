@@ -14,7 +14,7 @@ import { C } from './assets/prize-recipes';
 const SKIN = 0xf2c9a0;
 const INDIGO = 0x27406c;
 
-type Builder = (k: Kit, g: ShopkeeperPartGeometry) => void;
+type Builder = (k: Kit, g: ShopkeeperPartGeometry, head?: Kit, eyes?: Kit) => void;
 
 const BUILDERS: Record<ShopkeeperPart, Builder> = {
   feet: (k, g) => {
@@ -113,7 +113,7 @@ const V3_BUILDERS: Record<'feet' | 'body' | 'hat', Builder> = {
       k.box(C.red, 0.1, 0.012, 0.016, [c.x + s * 0.065, c.y + 0.03, c.z + 0.06]); // strap
     }
   },
-  body: (k, g) => {
+  body: (k, g, head, eyes) => {
     const { center: c, halfExtents: h } = g.box;
     const y0 = c.y - h.y; // 0.12
     const front = c.z + h.z; // the face toward the player
@@ -132,32 +132,32 @@ const V3_BUILDERS: Record<'feet' | 'body' | 'hat', Builder> = {
     k.box(APRON, 0.012, 0.18, 0.012, [c.x + 0.09, y0 + 0.75, front - 0.016], [0, 0, -0.5]);
     k.cyl(C.white, 0.035, 0.035, 0.01, [c.x, y0 + 0.98, front - 0.01], ROT_X, 10); // crest
     k.cyl(C.red, 0.022, 0.022, 0.012, [c.x, y0 + 0.98, front - 0.008], ROT_X, 10);
-    // right arm (player's left) down toward the fan handle; left arm raised to guide toward the shelf
-    k.box(HAPPI, 0.06, 0.24, 0.07, [c.x - 0.135, y0 + 1.03, c.z + 0.01], [0.35, 0, 0.12]); // sleeve
-    k.sph(C.cream, 0.026, [c.x - 0.14, y0 + 0.9, c.z + 0.06], [1, 1.1, 1]); // wrist
-    k.sph(0xf0c49c, 0.03, [c.x - 0.142, y0 + 0.87, front - 0.005], [0.9, 1, 1.1]); // hand round the handle
+    // right upper arm down to the elbow (the forearm to the fan is its own hit box); left arm raised to guide
+    k.box(HAPPI, 0.058, 0.17, 0.07, [c.x - 0.13, y0 + 1.08, c.z + 0.02], [0.1, 0, 0.08]); // upper sleeve
     k.box(HAPPI, 0.06, 0.2, 0.07, [c.x + 0.125, y0 + 1.12, c.z], [0, 0, -0.5]); // upper arm out
     k.box(HAPPI, 0.055, 0.17, 0.065, [c.x + 0.125, y0 + 1.28, c.z + 0.02], [0.2, 0, 0.25]); // forearm up
     k.sph(0xf0c49c, 0.028, [c.x + 0.105, y0 + 1.37, c.z + 0.035], [0.9, 1.15, 0.8]); // open hand
     for (let i = 0; i < 4; i++) k.box(0xf0c49c, 0.008, 0.03, 0.012, [c.x + 0.09 + i * 0.01, y0 + 1.405, c.z + 0.035]); // fingers
     // neck and head: round cheeks, nose bridge, upper eyelids, mouth, ears, hair
-    k.cyl(0xe8b98e, 0.035, 0.04, 0.06, [c.x, y0 + 1.2, c.z], undefined, 8);
+    k.cyl(0xe8b98e, 0.035, 0.04, 0.06, [c.x, y0 + 1.2, c.z], undefined, 8); // the neck stays with the body
+    const hk = head ?? k;
+    const ek = eyes ?? hk;
     const hy = y0 + 1.33;
-    k.sph(0xf2c9a0, 0.092, [c.x, hy, c.z], [1, 1.05, 0.95], undefined, true);
-    k.sph(0xf2c9a0, 0.04, [c.x - 0.05, hy - 0.035, c.z + 0.055], [1, 0.85, 0.7]); // cheeks
-    k.sph(0xf2c9a0, 0.04, [c.x + 0.05, hy - 0.035, c.z + 0.055], [1, 0.85, 0.7]);
-    k.sph(0xf7a3a0, 0.016, [c.x - 0.055, hy - 0.035, c.z + 0.083], [1, 0.6, 0.3]);
-    k.sph(0xf7a3a0, 0.016, [c.x + 0.055, hy - 0.035, c.z + 0.083], [1, 0.6, 0.3]);
-    k.box(0xe9b88e, 0.016, 0.045, 0.02, [c.x, hy - 0.005, c.z + 0.09]); // nose bridge
-    k.sph(0xe9b08a, 0.014, [c.x, hy - 0.03, c.z + 0.097]); // nose tip
+    hk.sph(0xf2c9a0, 0.092, [c.x, hy, c.z], [1, 1.05, 0.95], undefined, true);
+    hk.sph(0xf2c9a0, 0.04, [c.x - 0.05, hy - 0.035, c.z + 0.055], [1, 0.85, 0.7]); // cheeks
+    hk.sph(0xf2c9a0, 0.04, [c.x + 0.05, hy - 0.035, c.z + 0.055], [1, 0.85, 0.7]);
+    hk.sph(0xf7a3a0, 0.016, [c.x - 0.055, hy - 0.035, c.z + 0.083], [1, 0.6, 0.3]);
+    hk.sph(0xf7a3a0, 0.016, [c.x + 0.055, hy - 0.035, c.z + 0.083], [1, 0.6, 0.3]);
+    hk.box(0xe9b88e, 0.016, 0.045, 0.02, [c.x, hy - 0.005, c.z + 0.09]); // nose bridge
+    hk.sph(0xe9b08a, 0.014, [c.x, hy - 0.03, c.z + 0.097]); // nose tip
     for (const s of [-1, 1]) {
-      k.sph(C.black, 0.0095, [c.x + s * 0.034, hy + 0.012, c.z + 0.086]); // eyes
-      k.box(HAIR, 0.026, 0.006, 0.008, [c.x + s * 0.034, hy + 0.024, c.z + 0.088], [0, 0, s * -0.12]); // upper eyelids
-      k.box(HAIR, 0.03, 0.008, 0.008, [c.x + s * 0.036, hy + 0.045, c.z + 0.084], [0, 0, s * -0.2]); // brows
-      k.sph(0xeab48a, 0.022, [c.x + s * 0.09, hy, c.z], [0.5, 1, 0.8]); // ears
+      ek.sph(C.black, 0.0095, [c.x + s * 0.034, hy + 0.012, c.z + 0.086]); // eyes
+      hk.box(HAIR, 0.026, 0.006, 0.008, [c.x + s * 0.034, hy + 0.024, c.z + 0.088], [0, 0, s * -0.12]); // upper eyelids
+      hk.box(HAIR, 0.03, 0.008, 0.008, [c.x + s * 0.036, hy + 0.045, c.z + 0.084], [0, 0, s * -0.2]); // brows
+      hk.sph(0xeab48a, 0.022, [c.x + s * 0.09, hy, c.z], [0.5, 1, 0.8]); // ears
     }
-    k.tor(0x9a3a2a, 0.022, 0.0045, [c.x, hy - 0.062, c.z + 0.081], [0, 0, Math.PI * 1.12], Math.PI * 0.76); // smile
-    k.sph(HAIR, 0.094, [c.x, hy + 0.025, c.z - 0.012], [1.02, 0.8, 0.95]); // hair under the cap
+    hk.tor(0x9a3a2a, 0.022, 0.0045, [c.x, hy - 0.062, c.z + 0.081], [0, 0, Math.PI * 1.12], Math.PI * 0.76); // smile
+    hk.sph(HAIR, 0.094, [c.x, hy + 0.025, c.z - 0.012], [1.02, 0.8, 0.95]); // hair under the cap
   },
   hat: (k, g) => {
     const { center: c, halfExtents: h } = g.box;
@@ -180,7 +180,7 @@ function buildFanPanel(k: Kit, r: ReflectorGeometry): void {
   k.box(FAN_ARROW, 0.01, 0.1, 0.003, [0, -0.01, d / 2 + 0.002]);
   k.box(0x6b3f22, 0.06, 0.006, 0.003, [-R * 0.55, -R * 0.55, d / 2 + 0.002], [0, 0, 0.6]);
   for (let i = -2; i <= 2; i++) k.box(C.lightBrown, 0.004, R * 1.8, 0.003, [i * 0.03, 0, -d / 2 - 0.001], [0, 0, i * 0.18]); // ribs on the back
-  k.box(C.lightBrown, 0.018, 0.12, 0.014, [0, -R - 0.05, 0]); // handle
+  k.box(C.lightBrown, 0.018, 0.05, 0.014, [0, -R - 0.02, 0]); // handle stub, held by the hand
 }
 
 function buildTrayPanel(k: Kit, r: ReflectorGeometry): void {
@@ -198,18 +198,60 @@ export interface ShopkeeperV3Build extends ShopkeeperBuild {
   readonly tray: THREE.Mesh | null;
 }
 
+export interface ShopkeeperV3Build extends ShopkeeperBuild {
+  readonly tray: THREE.Mesh | null;
+  /** View only: a nod, blinks and the wrist after a fan hit. Never moves a hit volume. */
+  idle(timeSec: number): void;
+  /** The fan was hit: the wrist gives a small flick (the fan panel and its collider stay put). */
+  flick(timeSec: number): void;
+}
+
+/** The right forearm inside its own 'body' hit box, the hand at the fan's handle. */
+function buildForearm(k: Kit, g: ShopkeeperPartGeometry): void {
+  const { center: c, halfExtents: h } = g.box;
+  k.cyl(HAPPI, 0.026, 0.03, h.z * 1.7, [c.x, c.y, c.z - h.z * 0.1], [Math.PI / 2 - 0.25, 0, 0], 8); // sleeve to the wrist
+  k.sph(C.cream, 0.022, [c.x - 0.004, c.y - 0.012, c.z + h.z * 0.65], [1, 1.1, 1]); // wrist
+  k.sph(0xf0c49c, 0.026, [c.x - 0.008, c.y - 0.03, c.z + h.z * 0.95], [0.9, 1, 1.1]); // hand round the handle
+}
+
 export function buildShopkeeperV3(parts: readonly ShopkeeperPartGeometry[], reflectors: readonly ReflectorGeometry[], material: THREE.Material): ShopkeeperV3Build {
   const group = new THREE.Group();
   group.name = 'shopkeeper';
   const map = new Map<ShopkeeperPart, THREE.Mesh>();
+  const add = (k: Kit, name: string) => {
+    const mesh = new THREE.Mesh(mergeParts(k.parts), material);
+    mesh.name = name;
+    group.add(mesh);
+    return mesh;
+  };
+  let headMesh: THREE.Mesh | null = null;
+  let eyesMesh: THREE.Mesh | null = null;
+  let headPivot = new THREE.Vector3();
+  let wrist: THREE.Mesh | null = null;
+  let wristPivot = new THREE.Vector3();
   for (const g of parts) {
     if (g.part === 'fan') continue;
+    if (map.has(g.part)) {
+      // a second box of the same part: the right forearm reaching to the fan
+      const k = new Kit();
+      buildForearm(k, g);
+      wrist = add(k, 'shopkeeper:forearm');
+      wristPivot = new THREE.Vector3(g.box.center.x, g.box.center.y, g.box.center.z - g.box.halfExtents.z);
+      continue;
+    }
     const k = new Kit();
+    if (g.part === 'body') {
+      const hk = new Kit();
+      const ek = new Kit();
+      V3_BUILDERS.body(k, g, hk, ek);
+      map.set('body', add(k, 'shopkeeper:body'));
+      headMesh = add(hk, 'shopkeeper:head');
+      eyesMesh = add(ek, 'shopkeeper:eyes');
+      headPivot = new THREE.Vector3(g.box.center.x, g.box.center.y - g.box.halfExtents.y + 1.24, g.box.center.z);
+      continue;
+    }
     V3_BUILDERS[g.part](k, g);
-    const mesh = new THREE.Mesh(mergeParts(k.parts), material);
-    mesh.name = `shopkeeper:${g.part}`;
-    group.add(mesh);
-    map.set(g.part, mesh);
+    map.set(g.part, add(k, `shopkeeper:${g.part}`));
   }
   let tray: THREE.Mesh | null = null;
   for (const r of reflectors) {
@@ -224,5 +266,36 @@ export function buildShopkeeperV3(parts: readonly ShopkeeperPartGeometry[], refl
     if (r.reflectorId === 'fan') map.set('fan', mesh);
     else tray = mesh;
   }
-  return { group, parts: map, tray };
+  let flickAt = -Infinity;
+  const q = new THREE.Quaternion();
+  const v = new THREE.Vector3();
+  const axisX = new THREE.Vector3(1, 0, 0);
+  const rotateAbout = (m: THREE.Mesh, pivot: THREE.Vector3, angle: number) => {
+    q.setFromAxisAngle(axisX, angle);
+    m.quaternion.copy(q);
+    v.copy(pivot).applyQuaternion(q);
+    m.position.set(pivot.x - v.x, pivot.y - v.y, pivot.z - v.z);
+  };
+  return {
+    group,
+    parts: map,
+    tray,
+    flick(t) {
+      flickAt = t;
+    },
+    idle(t) {
+      // a short nod every 7 s and a blink every 4.3 s; small enough to stay inside the body box
+      const nodPhase = (t % 7) / 7;
+      const nod = nodPhase < 0.08 ? Math.sin((nodPhase / 0.08) * Math.PI) * 0.12 : 0;
+      if (headMesh) rotateAbout(headMesh, headPivot, nod);
+      if (eyesMesh) {
+        rotateAbout(eyesMesh, headPivot, nod);
+        eyesMesh.scale.set(1, t % 4.3 < 0.12 ? 0.15 : 1, 1);
+      }
+      if (wrist) {
+        const age = t - flickAt;
+        rotateAbout(wrist, wristPivot, age >= 0 && age < 0.5 ? Math.sin(age * 25) * 0.18 * (1 - age / 0.5) : 0);
+      }
+    },
+  };
 }
