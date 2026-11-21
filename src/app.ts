@@ -242,7 +242,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
   // created/resumed from a user gesture; failures never stop the game.
-  const festivalPreview = bundle.key === 'expanded-aim-first';
+  const festivalPreview = bundle.key === 'expanded-aim-first' || bundle.key === 'expanded-festival';
   const audio = createAudioEngine({ festival: festivalPreview, listener: () => ({ ...layout.camera.eye, x: controller?.current.standX ?? layout.camera.eye.x }) });
   let audioSettings: AudioSettings = settingsStore.load().audio;
   const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) => {
@@ -688,11 +688,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
                   { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id), setMembers: (id) => catalog.sets.get(id)?.requiredTypeIds ?? [] },
                 );
                 const bankShot = event.summary.prizeOutcomes.some(prize => prize.collected && prize.hits.some(hit => hit.reflectionIndex > 0));
-                const replay = !event.replayed && bankShot
+                const challenges = event.summary.festivalChallenges ?? [];
+                const quiet = event.replayed || event.reducedMotion;
+                const replay = !event.replayed && (bankShot || challenges.includes('fan-tray'))
                   ? renderer?.shotReplay?.latest(event.summary.runId, event.summary.shotId)
                   : null;
                 afCard.show(model, {
-                  quiet: event.replayed || event.reducedMotion,
+                  quiet,
+                  challenges: challenges.length ? expandedUi.festivalChallengeCard(doc, challenges, i18n.locale, quiet) : null,
                   path: replay ? expandedUi.miniShotPath(doc, replay, i18n.locale, event.reducedMotion) : null,
                 });
                 return;
@@ -1272,6 +1275,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           const score = doc.createElement('p');
           score.className = 'af-result-score';
           score.textContent = `${expText('af.result.delta', { p: delta >= 0 ? `+${delta}` : String(delta) })} · ${expText('af.result.total', { score: lastSummary.ledger.scoreAfter })}`;
+          const challenges = lastSummary.festivalChallenges ?? [];
+          if (challenges.length) box.append(expandedUi.festivalChallengeCard(doc, challenges, i18n.locale, true));
           box.append(...expandedUi.cardBody(doc, model, expText, expandedUi.prizePortrait), score);
           sec.append(h, box);
         }

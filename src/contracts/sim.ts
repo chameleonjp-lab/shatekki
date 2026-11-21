@@ -69,6 +69,8 @@ export interface ShotRecord {
   readonly rewardContacts?: RewardContacts;
   /** Layout v3 (r007): contact facts and the exit of a cork that touched nothing. */
   readonly facts?: import('./events').ShotFacts;
+  /** Real corks that reflected off the front of the fan and then off the tray. */
+  readonly fanTrayProjectiles?: readonly ProjectileId[];
 }
 
 export interface SimulationStep {
@@ -99,6 +101,7 @@ export interface ShotContext {
     readonly rewardTarget?: RewardTargetGeometry | null;
     /** True when the rules version has rewards: the record then carries rewardContacts. */
     readonly rewards?: boolean;
+    readonly festivalChallenges?: true;
   };
 }
 

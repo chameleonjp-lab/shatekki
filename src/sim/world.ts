@@ -65,7 +65,7 @@ import type {
   Vec3,
 } from '../contracts';
 import { REWARD_TARGET_HALF_THICKNESS, ballisticForModifiers, cellAtFacePoint, mintId, neighbourCells } from '../contracts';
-import type { ReflectorGeometry, RepresentativeContact, ShotExit, ShotFacts } from '../contracts';
+import type { ProjectileId, ReflectorGeometry, RepresentativeContact, ShotExit, ShotFacts } from '../contracts';
 import { MAX_POWER_MULTIPLIER, nextPowerMultiplier, splitVelocities, transformedHp } from '../core/gimmicks';
 import { prizeAabb } from '../core/shapes';
 import {
@@ -176,6 +176,8 @@ interface ActiveShot {
   seesaw: PrizeInstanceId[];
   /** Layout v3: first contact per target in order (for the shot's facts), and corks that left. */
   contactLog: { readonly key: string; readonly contact: RepresentativeContact; readonly order: number }[];
+  /** Only r008 tracks this sequence, separately for each cork. */
+  festivalReflectors: Map<ProjectileId, 'fan' | 'fan-tray'> | null;
   exits: { readonly reason: ProjectileEndReason; readonly position: Vec3; readonly velocity: Vec3; readonly generation: number; readonly index: number }[];
 }
 
@@ -580,13 +582,19 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
         (target.t === 'device' && !a.usedDevices.has(target.deviceId)) ||
         (target.t === 'cell' && a.usableCells.has(target.cellId) && !a.activatedCells.has(target.cellId));
       const impactTarget = targetImpact(target, activated);
+      const face = target.t === 'reflector' ? reflectorFace(target.r, n) : undefined;
+      if (a.festivalReflectors && target.t === 'reflector') {
+        const previous = a.festivalReflectors.get(p.id);
+        if (target.r.part === 'fan' && face === 'front' && !previous) a.festivalReflectors.set(p.id, 'fan');
+        if (target.r.reflectorId === 'tray' && previous === 'fan') a.festivalReflectors.set(p.id, 'fan-tray');
+      }
       emit((eventId, shotId) => ({
         type: 'impact',
         eventId,
         runId: a.runId,
         shotId,
         projectileId: p.id,
-        target: target.t === 'reflector' && impactTarget.kind === 'shopkeeper' ? { ...impactTarget, face: reflectorFace(target.r, n) } : impactTarget,
+        target: face && impactTarget.kind === 'shopkeeper' ? { ...impactTarget, face } : impactTarget,
         point,
         normal: n,
         speed,
@@ -932,6 +940,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       ...(a.expanded && a.barrierId ? { barrierId: a.barrierId, appliedTransforms: a.applied, deferredTransforms: a.deferred } : {}),
       ...(a.expanded?.rewards ? { rewardContacts: { targetHit: a.targetHit, chimeAfterReflection: a.chimeAfterReflection, seesawInstances: [...a.seesaw], piggyDeposit: a.piggyDeposit } } : {}),
       ...(facedCells ? { facts: shotFacts(a) } : {}),
+      ...(a.festivalReflectors ? { fanTrayProjectiles: [...a.festivalReflectors].flatMap(([id, seq]) => seq === 'fan-tray' ? [id] : []) } : {}),
     };
     outcomes.clear();
     removeRewardTarget();
@@ -1346,6 +1355,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       piggyDeposit: false,
       seesaw: [],
       contactLog: [],
+      festivalReflectors: context.expanded?.festivalChallenges ? new Map() : null,
       exits: [],
     };
     active = a;

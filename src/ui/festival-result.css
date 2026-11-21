@@ -16,6 +16,8 @@
 }
 .festival-path polyline.branch { stroke: #69dfff; }
 .festival-path circle { fill: #ff606e; stroke: #fff3b8; stroke-width: 1px; }
+.festival-path circle.fan { fill: #74e9ff; }
+.festival-path circle.tray { fill: #ffd04e; }
 .festival-highlight,
 .sec.festival-highlight {
   background: radial-gradient(ellipse at 50% 0%, #793527 0%, #371621 72%);

@@ -4,6 +4,8 @@ import { projectToScreen } from './expanded-view';
 import '../ui/shot-festival.css';
 
 const LIMIT = 64;
+const THREE_SHELF_COLORS = [0xff496f, 0xffc956, 0x639aff].map(color => new THREE.Color(color));
+const WAVE_COLOR = new THREE.Color(0xff9e38);
 const MARK_COLOR = { prize: '#ffeab1', fan: '#8af4ff', tray: '#ffd05a', drop: '#ffc361' };
 
 type Mark = keyof typeof MARK_COLOR;
@@ -28,7 +30,7 @@ export function createShotFestival(
 
   const geometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const material = new THREE.MeshBasicMaterial({
-    color: 0xff9e38, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
   });
   const wave = new THREE.InstancedMesh(geometry, material, layout.tiers.length);
   wave.name = 'festival-shelf-wave';
@@ -50,6 +52,7 @@ export function createShotFestival(
   let active: ShotId | null = null;
   let waveBorn = -Infinity;
   let waveTier = 0;
+  let threeShelfWave = false;
   let dropCount = 0;
   let confirmed = false;
   let borderAnimation: Animation | null = null;
@@ -65,6 +68,7 @@ export function createShotFestival(
     tiers.clear();
     seen.clear();
     waveBorn = -Infinity;
+    threeShelfWave = false;
     wave.visible = false;
     dropCount = 0;
     confirmed = false;
@@ -170,15 +174,17 @@ export function createShotFestival(
     material.opacity = .42 * (1 - progress);
     wave.count = 0;
     for (const [index, tier] of layout.tiers.entries()) {
-      if (dropCount < 3 && index !== waveTier) continue;
-      const span = tier.halfWidth * (dropCount > 1 ? 1 : .45);
-      const width = Math.max(.08, Math.sin(progress * Math.PI) * span);
-      const x = -span + width / 2 + progress * (2 * span - width);
-      matrix.makeScale(width, 1, Math.min(tier.depth, .08));
+      if (!threeShelfWave && dropCount < 3 && index !== waveTier) continue;
+      const span = tier.halfWidth * (threeShelfWave || dropCount > 1 ? 1 : .45);
+      const width = Math.max(.08, threeShelfWave ? 2 * span * (1 - progress) : Math.sin(progress * Math.PI) * span);
+      const x = threeShelfWave ? 0 : -span + width / 2 + progress * (2 * span - width);
+      matrix.makeScale(width, 1, Math.min(tier.depth, threeShelfWave ? .18 : .08));
       matrix.setPosition(x, tier.topY + .006, tier.centerZ);
+      wave.setColorAt(wave.count, threeShelfWave ? THREE_SHELF_COLORS[index] ?? WAVE_COLOR : WAVE_COLOR);
       wave.setMatrixAt(wave.count++, matrix);
     }
     if (wave.count > 0) wave.instanceMatrix.needsUpdate = true;
+    if (wave.instanceColor) wave.instanceColor.needsUpdate = true;
   }
 
   return {
@@ -244,6 +250,10 @@ export function createShotFestival(
       const tier = sets >= 2 || chain >= 4 ? 4 : freshSets > 0 || continued || chain === 3 ? 3 : sets || chain === 2 ? 2 : 0;
       if (tier) celebration(tier, quiet);
       if (quiet) return; // The confirmed score and the card remain immediately visible.
+      if (summary.festivalChallenges?.includes('three-shelves')) {
+        threeShelfWave = true;
+        waveBorn = performance.now() / 1_000;
+      }
       if (tier >= 3) lampWaveStart = performance.now() / 1_000;
       if (sets >= 2) fireworks();
       if (continued) {

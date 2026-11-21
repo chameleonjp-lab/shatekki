@@ -1,8 +1,13 @@
 import type { ProjectileId, RunId, ShotId, ShotSummary, SimulationFrame, Vec3 } from '../contracts';
 
+interface ReplayContact {
+  readonly position: Vec3;
+  readonly kind: 'fan' | 'tray' | 'other';
+}
+
 interface ReplayTrack {
   readonly points: readonly Vec3[];
-  readonly contacts: readonly Vec3[];
+  readonly contacts: readonly ReplayContact[];
 }
 
 export interface ShotReplay {
@@ -20,7 +25,7 @@ const MAX_CONTACTS = 12;
 
 interface Track {
   points: { position: Vec3; anchor: boolean }[];
-  contacts: Vec3[];
+  contacts: ReplayContact[];
 }
 
 function sample(track: Track, position: Vec3, anchor: boolean): void {
@@ -73,7 +78,10 @@ export class ShotReplayRecorder {
         this.reflections++;
         const track = this.tracks.get(event.projectileId);
         if (track && track.contacts.length < MAX_CONTACTS) {
-          track.contacts.push({ ...event.point });
+          const { target } = event;
+          const kind = target.kind === 'shopkeeper' && target.part === 'fan' && target.face === 'front' ? 'fan'
+            : target.kind === 'surface' && target.surfaceId === 'reflector-tray' ? 'tray' : 'other';
+          track.contacts.push({ position: { ...event.point }, kind });
           sample(track, event.point, true);
         }
       } else if (event.type === 'projectileEnded') {

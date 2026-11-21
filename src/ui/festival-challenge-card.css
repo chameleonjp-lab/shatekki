@@ -1,0 +1,31 @@
+.festival-challenges {
+  list-style: none;
+  margin: 5px 0;
+  padding: 0;
+}
+.festival-challenges li {
+  margin: 3px 0;
+  padding: 5px;
+  border: 1px solid #ffdc77;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: 850;
+  color: #fff6c9;
+  text-shadow: 0 2px 2px #200f19;
+}
+.festival-challenges .three-shelves {
+  background: linear-gradient(180deg, #7d2642 0 32%, #70401a 34% 65%, #233965 67%);
+  box-shadow: inset 0 1px #f67b88, inset 0 -1px #71b9ff;
+}
+.festival-challenges .fan-tray {
+  background: linear-gradient(100deg, #144460, #28304e 44%, #643c15 56%, #854127);
+  box-shadow: inset 2px 0 #86eaff, inset -2px 0 #ffbd59;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .festival-challenges[data-quiet='false'] li { animation: festival-challenge-stamp .36s ease-out both; }
+}
+@keyframes festival-challenge-stamp {
+  0% { opacity: 0; transform: scale(.87); }
+  62% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}

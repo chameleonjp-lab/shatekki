@@ -24,6 +24,8 @@
     "preview:next": "vite preview --outDir dist-next --host 0.0.0.0 --port 4178 --strictPort",
     "build:aim-first": "VITE_SHATEKKI_BUNDLE=expanded-aim-first vite build --outDir dist-aim-first --emptyOutDir",
     "preview:aim-first": "vite preview --outDir dist-aim-first --host 0.0.0.0 --port 4180 --strictPort",
+    "build:festival": "VITE_SHATEKKI_BUNDLE=expanded-festival vite build --outDir dist-festival --emptyOutDir",
+    "preview:festival": "vite preview --outDir dist-festival --host 0.0.0.0 --port 4181 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "node scripts/run-vitest.mjs unit",
     "test:integration": "node scripts/run-vitest.mjs integration",

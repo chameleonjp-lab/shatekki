@@ -206,7 +206,7 @@ export function cardBody(doc: Document, m: AimFirstCardModel, t: AimFirstCardTex
 }
 
 export interface AimFirstCardHandle {
-  show(model: AimFirstCardModel, opts: { readonly quiet: boolean; readonly path?: HTMLElement | null }): void;
+  show(model: AimFirstCardModel, opts: { readonly quiet: boolean; readonly path?: HTMLElement | null; readonly challenges?: HTMLElement | null }): void;
   hide(): void;
   destroy(): void;
 }
@@ -283,6 +283,7 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t'], p
       card.dataset.quiet = String(opts.quiet);
       card.replaceChildren(...parts);
       if (opts.path) card.firstElementChild?.after(opts.path);
+      if (opts.challenges) card.firstElementChild?.after(opts.challenges);
       card.hidden = false;
       watch();
       place();

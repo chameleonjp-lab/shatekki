@@ -18,6 +18,7 @@ import { seriesDef } from './series';
 import type { SettlementResult } from './settlement';
 import type { ExpandedPlanContext } from './effect-plan';
 import { rewardConfigOf, settleRewards } from './rewards';
+import { festivalChallengesOf } from './festival-challenges';
 import { nextNotesFor, setHintFor } from './aim-first';
 import type { PartOutcome } from '../contracts';
 
@@ -154,6 +155,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
   }
   if (!isAmmoBalanced(next, tuning.initialAmmo)) throw new Error('resolveExpandedShot: ammo invariant broken (shotsFired + ammo + ammoLostTotal !== initialAmmo + bonusAmmoTotal)');
 
+  const challenges = ctx.expansion.profile.festivalChallenges ? festivalChallengesOf(record, state.shelf, ctx.layout) : [];
   const summary: ShotSummary = {
     runId: state.runId,
     shotId: record.shotId,
@@ -177,6 +179,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     ...(settled ? { rewards: rewardOutcomes } : {}),
     ...(plan.parts ? { parts: finalParts(plan.parts, next, runEnded, ctx) } : {}),
     ...(record.facts ? { facts: record.facts } : {}),
+    ...(challenges.length ? { festivalChallenges: challenges } : {}),
   };
   return { state: next, summary };
 }
