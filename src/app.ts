@@ -1211,6 +1211,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null, readOnly = false) => {
     clearScreen();
     setScreen('result');
+    afCard?.hide();
+    speechBubble?.hide();
     // A result reopened after a reload is read only: no sounds or celebration again (plan T2).
     if (!readOnly) {
       cue('resultShow');

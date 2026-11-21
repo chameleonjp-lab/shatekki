@@ -25,7 +25,7 @@ const WORDS: Record<Locale, readonly [path: string, highlight: string, replay: s
 const SVG = 'http://www.w3.org/2000/svg';
 const project = ({ x, y, z }: Vec3) => ({ x: x + .47 * z, y: -y + .31 * z });
 
-export function shotPath(doc: Document, replay: ShotReplay, label: string): SVGSVGElement {
+function shotPath(doc: Document, replay: ShotReplay, label: string, compact = false): SVGSVGElement {
   const svg = doc.createElementNS(SVG, 'svg');
   const tracks = replay.tracks.map(track => ({ points: track.points.map(project), contacts: track.contacts.map(project) }));
   const all = tracks.flatMap(track => track.points);
@@ -33,25 +33,28 @@ export function shotPath(doc: Document, replay: ShotReplay, label: string): SVGS
   const right = Math.max(...all.map(p => p.x));
   const top = Math.min(...all.map(p => p.y));
   const bottom = Math.max(...all.map(p => p.y));
-  // Add a readable margin even for nearly vertical or stationary shots.
-  const span = Math.max(right - left, bottom - top, 0.5);
-  const padding = span * .1;
+  const width = compact ? 240 : 280;
+  const height = compact ? 46 : 134;
+  const margin = compact ? 5 : 12;
+  const scale = Math.min((width - margin * 2) / Math.max(right - left, .1), (height - margin * 2) / Math.max(bottom - top, .1));
+  const toSvgX = (x: number) => width / 2 + (x - (left + right) / 2) * scale;
+  const toSvgY = (y: number) => height / 2 + (y - (top + bottom) / 2) * scale;
   svg.classList.add('festival-path');
-  svg.setAttribute('viewBox', [left - padding, top - padding, right - left + 2 * padding, bottom - top + 2 * padding].join(' '));
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', label);
   for (const [index, track] of tracks.entries()) {
     const line = doc.createElementNS(SVG, 'polyline');
-    line.setAttribute('points', track.points.map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' '));
+    line.setAttribute('points', track.points.map(p => `${toSvgX(p.x).toFixed(2)},${toSvgY(p.y).toFixed(2)}`).join(' '));
     line.setAttribute('pathLength', '1');
     line.style.setProperty('--branch', String(index));
     line.classList.add(index === 0 ? 'main' : 'branch');
     svg.append(line);
     for (const { x, y } of track.contacts) {
       const contact = doc.createElementNS(SVG, 'circle');
-      contact.setAttribute('cx', String(x));
-      contact.setAttribute('cy', String(y));
-      contact.setAttribute('r', String(span * .017));
+      contact.setAttribute('cx', String(toSvgX(x)));
+      contact.setAttribute('cy', String(toSvgY(y)));
+      contact.setAttribute('r', compact ? '2.2' : '3.1');
       svg.append(contact);
     }
   }
@@ -62,7 +65,7 @@ export function miniShotPath(doc: Document, replay: ShotReplay, locale: Locale, 
   const box = doc.createElement('div');
   box.className = 'festival-mini-path';
   box.dataset.testid = 'shot-mini-path';
-  const svg = shotPath(doc, replay, WORDS[locale][0]);
+  const svg = shotPath(doc, replay, WORDS[locale][0], true);
   if (!quiet) svg.classList.add('is-playing');
   box.append(svg);
   return box;
