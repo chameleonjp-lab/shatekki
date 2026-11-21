@@ -96,3 +96,11 @@
   mask-image: radial-gradient(circle, transparent 28%, #000 35%, #000 45%, transparent 68%);
   filter: drop-shadow(0 0 7px currentColor);
 }
+
+.shot-festival-fire-button {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 22px;
+  border: 3px solid #fff2aa;
+  box-shadow: 0 0 12px #ffb52b, inset 0 0 9px #ffdd87;
+}

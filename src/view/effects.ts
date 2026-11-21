@@ -41,6 +41,7 @@ export interface EffectsDeps {
   readonly layer: THREE.Group;
   /** The illustrated card already presents the confirmed collection, sets and chain. */
   readonly illustratedRewards?: boolean;
+  readonly festival?: boolean;
   readonly layout: BoothLayout;
   readonly shopkeeperParts: ReadonlyMap<string, THREE.Mesh>;
   /** The current mesh of a prize instance (for the transform pop), if it exists. */
@@ -246,6 +247,18 @@ export function createEffects(deps: EffectsDeps): Effects {
   layer.add(root);
 
   const pGeo = new THREE.OctahedronGeometry(1, 0);
+  const shards = deps.festival ? {
+    wood: new THREE.BoxGeometry(1.85, .38, .75),
+    metal: new THREE.BoxGeometry(.48, 2.8, .48),
+    glass: new THREE.TetrahedronGeometry(1.16),
+    cloth: new THREE.SphereGeometry(.78, 6, 4),
+  } : null;
+  const festivalShapes: Readonly<Record<string, THREE.BufferGeometry>> = shards ? {
+    wood: shards.wood, paper: shards.wood, metal: shards.metal, muzzle: shards.metal,
+    traySpark: shards.metal, glass: shards.glass, ceramic: shards.glass, cloth: shards.cloth,
+    clothPowder: shards.cloth, corkDust: shards.cloth, fanWind: shards.wood,
+  } : {};
+
   const rGeo = new THREE.RingGeometry(0.82, 1, 24);
   const bGeo = new THREE.BoxGeometry(1, 0.16, 0.16);
   const mkMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -354,6 +367,10 @@ export function createEffects(deps: EffectsDeps): Effects {
       p.size = pr.size * (0.8 + rnd() * 0.5);
       p.material.color.setHex(pr.color);
       p.mesh.position.set(x, y, z);
+      if (shards) {
+        p.mesh.geometry = festivalShapes[key] ?? pGeo;
+        p.mesh.rotation.set(rx * 3, ry * 3, rz * 3);
+      }
       p.mesh.scale.setScalar(p.size);
       p.mesh.visible = true;
     }
@@ -714,6 +731,7 @@ export function createEffects(deps: EffectsDeps): Effects {
       waiters.length = 0;
       layer.remove(root);
       pGeo.dispose();
+      if (shards) for (const geometry of Object.values(shards)) geometry.dispose();
       rGeo.dispose();
       bGeo.dispose();
       for (const p of particles) p.material.dispose();

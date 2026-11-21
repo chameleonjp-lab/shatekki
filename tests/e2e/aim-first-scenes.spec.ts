@@ -8,9 +8,10 @@ import { SETS, aimAndFire, expectCardClear, scene, settle } from '../helpers/aim
 // tests/fixtures/r007/scenarios.json.gz, checked by tests/integration/aim-first-scenarios.test.ts),
 // then the player's own drag to aim, "撃つ" and "発射". Flight, scoring, sets, saving and the
 // card all run as in a real game. Chromium with phone-sized viewports, not Safari, not a device.
-test.use({ baseURL: 'http://127.0.0.1:4180' });
+test.use({ baseURL: 'http://127.0.0.1:4180', screenshot: 'only-on-failure' });
 
 async function shot(page: Page, info: TestInfo, name: string) {
+  if (process.env.SHATEKKI_EVIDENCE !== '1') return;
   mkdirSync('test-results/aim-first', { recursive: true });
   await page.screenshot({ path: `test-results/aim-first/${info.project.name}-${name}.png` });
 }

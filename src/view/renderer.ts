@@ -106,6 +106,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const fx: Effects = createEffects({
     layer: graph.effectsLayer,
     illustratedRewards: deps.expanded?.illustratedRewards,
+    festival: deps.duskMaterials,
     layout,
     shopkeeperParts: graph.booth.shopkeeper,
     prizeObject: (id) => graph.prizes.get(id)?.mesh ?? null,
@@ -121,10 +122,13 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     : null;
   const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
 
-  const festival = deps.duskMaterials ? createShotFestival(canvas, graph.effectsLayer, layout) : null;
+  const festival = deps.duskMaterials
+    ? createShotFestival(canvas, graph.effectsLayer, layout, graph.booth.group.getObjectByName('booth:washi'))
+    : null;
   const reflections = new Map<string, number>();
   let festivalShot: ShotId | null = null;
   let perfect = false;
+  let kickStart = -Infinity;
   const reduceMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
   return {
     graph,
@@ -132,7 +136,8 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       festivalShot = shotId;
       perfect = isPerfect;
       reflections.clear();
-      festival?.begin(shotId);
+      kickStart = -Infinity;
+      festival?.begin(shotId, isPerfect && !reduceMotion.matches);
     },
     presentFestivalShot(summary, freshSets, ammoBefore, quiet) {
       festival?.settle(summary, freshSets, ammoBefore, quiet || reduceMotion.matches);
@@ -158,8 +163,11 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       }
       if (festival && festivalShot) {
         const quiet = reduceMotion.matches || view.paused;
+        const now = performance.now() / 1_000;
         for (const event of frame.events) {
-          if (event.shotId !== festivalShot || event.type !== 'impact') continue;
+          if (event.shotId !== festivalShot) continue;
+          if (event.type === 'projectileSpawned' && event.parentId === null && !Number.isFinite(kickStart)) kickStart = now;
+          if (event.type !== 'impact') continue;
           const old = reflections.get(event.projectileId) ?? 0;
           reflections.set(event.projectileId, Math.max(old, event.reflectionIndex + 1));
         }
@@ -172,7 +180,12 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
           else trace.material.color.setHex(bounces >= 2 || perfect ? 0xffcf54 : 0xdcf4ff);
           trace.scale.set(1.1 + .2 * Math.min(bounces, 3), 1.1, 1.2 + .45 * Math.min(bounces, 3));
         }
-        festival.render(frame, camera, width, height, performance.now() / 1_000, quiet);
+        const kick = (now - kickStart) / .12;
+        if (!quiet && view.phase === 'resolving' && kick >= 0 && kick < 1) {
+          graph.gun.visible = true;
+          graph.gun.translateZ(.045 * Math.sin(kick * Math.PI));
+        }
+        festival.render(frame, camera, width, height, now, quiet);
       }
       fx.handleEvents(frame.events, frame.simTimeSec, { festival: !!festival && !reduceMotion.matches && !view.paused, perfect });
       fx.update(frame.simTimeSec);

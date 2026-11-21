@@ -7,7 +7,7 @@ import { fireWithGauge } from '../helpers/aim-first-play';
 
 // r007 internal candidate, local build only (npm run build:aim-first, port 4180).
 // Chromium with phone-sized viewports: NOT Safari and NOT a real iPhone.
-test.use({ baseURL: 'http://127.0.0.1:4180' });
+test.use({ baseURL: 'http://127.0.0.1:4180', screenshot: 'only-on-failure' });
 
 // r007 keeps the rules-v1 cork and aim numbers; only the layout is v3 (the browser loader cannot import the JSON bundle).
 const RELEASE_TUNING = (JSON.parse(readFileSync('data/release-approved-v1.json', 'utf8')) as { tuning: TuningConfig }).tuning;
@@ -16,6 +16,7 @@ const B = { layout: BOOTH_LAYOUT_V3, tuning: RELEASE_TUNING } as unknown as Game
 const AIM_SENSITIVITY = 0.0022;
 
 async function shot(page: Page, info: TestInfo, name: string) {
+  if (process.env.SHATEKKI_EVIDENCE !== '1') return;
   const dir = 'test-results/aim-first';
   mkdirSync(dir, { recursive: true });
   await page.screenshot({ path: `${dir}/${info.project.name}-${name}.png` });
@@ -121,8 +122,7 @@ test('aim first: tap and hold to move, drag to aim, 撃つ then 発射 uses one 
   await page.getByTestId('btn-cancel-gauge').tap();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
   await expect(page.getByTestId('hud-ammo')).toContainText('10');
-  await fireWithGauge(page);
-  await expect(page.getByTestId('hud-ammo')).toContainText('9');
+  await fireWithGauge(page, () => expect(page.getByTestId('hud-ammo')).toHaveText('弾 9'));
   await settle(page);
   await expect(page.getByTestId('shot-card')).toBeVisible();
   await shot(page, info, '04-card');
@@ -209,8 +209,9 @@ test('the shopkeeper speaks after six calm seconds, and the bubble closes when t
   await start(page);
   const bubble = page.getByTestId('shopkeeper-speech');
   await expect(bubble).toBeHidden();
-  // Advance the six calm seconds in regular-sized intervals.
-  for (let i = 0; i < 8 && !(await bubble.isVisible()); i++) await page.clock.runFor(1_000);
+  // A 250 ms step is the cap for speech time. It keeps the six-second calm
+  // period without requiring hundreds of frames from a software renderer.
+  for (let i = 0; i < 32 && !(await bubble.isVisible()); i++) await page.clock.fastForward(250);
   await expect(bubble).toBeVisible();
   expect((await bubble.textContent())!.length).toBeGreaterThan(4);
   await shot(page, info, '07-speech');

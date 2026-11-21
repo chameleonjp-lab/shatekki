@@ -13,6 +13,7 @@ export function createShotFestival(
   canvas: HTMLCanvasElement,
   group: THREE.Group,
   layout: BoothLayout,
+  lanterns: THREE.Object3D | undefined,
 ) {
   const parent = canvas.parentElement;
   if (!parent) return null;
@@ -35,6 +36,12 @@ export function createShotFestival(
   wave.visible = false;
   group.add(wave);
   const matrix = new THREE.Matrix4();
+  const lanternMesh = lanterns instanceof THREE.Mesh ? lanterns : null;
+  const lampColors = lanternMesh?.geometry.getAttribute('color');
+  const lampPositions = lanternMesh?.geometry.getAttribute('position');
+  const baseLampColors = lampColors ? new Float32Array(lampColors.array) : null;
+  let lampWaveStart: number | null = null;
+  let lampsDirty = false;
 
   const drops = new Map<string, { x: number; y: number }>();
   const tiers = new Map<string, number>();
@@ -61,30 +68,69 @@ export function createShotFestival(
     wave.visible = false;
     dropCount = 0;
     confirmed = false;
+    lampWaveStart = null;
+    restoreLamps();
+  }
+
+  function restoreLamps() {
+    if (!lampsDirty || !lampColors || !baseLampColors) return;
+    lampColors.array.set(baseLampColors);
+    lampColors.needsUpdate = true;
+    lampsDirty = false;
+  }
+
+  function lightLanterns(now: number, quiet: boolean) {
+    if (lampWaveStart === null || quiet || !lampColors || !lampPositions || !baseLampColors) {
+      restoreLamps();
+      if (quiet) lampWaveStart = null;
+      return;
+    }
+    const age = now - lampWaveStart;
+    if (age >= .82) {
+      lampWaveStart = null;
+      restoreLamps();
+      return;
+    }
+    const center = -4 + (age / .82) * 8;
+    for (let i = 0; i < lampColors.count; i++) {
+      const sweep = .82 * Math.max(0, 1 - Math.abs(lampPositions.getX(i) - center) / 1.4);
+      const index = i * 3;
+      lampColors.setXYZ(i,
+        baseLampColors[index]! * (1 - sweep) + sweep,
+        baseLampColors[index + 1]! * (1 - sweep) + .72 * sweep,
+        baseLampColors[index + 2]! * (1 - sweep) + .34 * sweep,
+      );
+    }
+    lampColors.needsUpdate = true;
+    lampsDirty = true;
+  }
+
+  function animateDecoration(node: HTMLElement, frames: Keyframe[], timing: KeyframeAnimationOptions) {
+    if (animations.length >= 12) animations.shift()?.cancel();
+    overlay.append(node);
+    const animation = node.animate(frames, timing);
+    animations.push(animation);
+    const remove = () => {
+      node.remove();
+      const index = animations.indexOf(animation);
+      if (index >= 0) animations.splice(index, 1);
+    };
+    animation.onfinish = remove;
+    animation.oncancel = remove;
   }
 
   function token(text: string, kind: Mark, start: { x: number; y: number }, end?: { x: number; y: number }, delay = 0) {
-    if (animations.length >= 12) animations.shift()?.cancel();
     const el = doc.createElement('span');
     el.className = end ? 'shot-festival-token shot-festival-score' : 'shot-festival-token';
     el.style.color = MARK_COLOR[kind];
     el.textContent = text;
-    overlay.append(el);
     const motion = [
       { transform: `translate(${start.x}px,${start.y}px) translate(-50%,-50%) scale(.65)`, opacity: 0 },
       { transform: `translate(${start.x}px,${start.y - 9}px) translate(-50%,-50%) scale(1.18)`, opacity: 1, offset: .23 },
       ...(end ? [{ transform: `translate(${start.x}px,${end.y}px) translate(-50%,-50%) scale(.85)`, opacity: 1, offset: .73 }] : []),
       { transform: `translate(${end?.x ?? start.x}px,${end?.y ?? start.y - 36}px) translate(-50%,-50%) scale(${end ? '.5' : '1'})`, opacity: 0 },
     ];
-    const anim = el.animate(motion, { duration: end ? 560 : 330, delay, easing: 'ease-out', fill: 'both' });
-    animations.push(anim);
-    const remove = () => {
-      el.remove();
-      const i = animations.indexOf(anim);
-      if (i >= 0) animations.splice(i, 1);
-    };
-    anim.onfinish = remove;
-    anim.oncancel = remove;
+    animateDecoration(el, motion, { duration: end ? 560 : 330, delay, easing: 'ease-out', fill: 'both' });
   }
 
   function fireworks() {
@@ -100,20 +146,11 @@ export function createShotFestival(
       bloom.style.top = `${burst.y}%`;
       bloom.style.width = `${burst.size}px`;
       bloom.style.color = burst.color;
-      overlay.append(bloom);
-      const animation = bloom.animate([
+      animateDecoration(bloom, [
         { transform: 'translate(-50%,-50%) scale(.12)', opacity: 0 },
         { transform: 'translate(-50%,-50%) scale(.46)', opacity: 1, offset: .28 },
         { transform: 'translate(-50%,-50%) scale(1.18)', opacity: 0 },
       ], { duration: 580, delay: burst.delay, easing: 'ease-out', fill: 'both' });
-      animations.push(animation);
-      const remove = () => {
-        bloom.remove();
-        const i = animations.indexOf(animation);
-        if (i >= 0) animations.splice(i, 1);
-      };
-      animation.onfinish = remove;
-      animation.oncancel = remove;
     }
   }
 
@@ -145,12 +182,27 @@ export function createShotFestival(
   }
 
   return {
-    begin(shot: ShotId) {
+    begin(shot: ShotId, perfect: boolean) {
       clear();
       active = shot;
+      if (!perfect) return;
+      const button = parent.querySelector('[data-testid="btn-fire"]')?.getBoundingClientRect();
+      if (!button?.width || !button.height) return;
+      const bounds = overlay.getBoundingClientRect();
+      const flash = doc.createElement('div');
+      flash.className = 'shot-festival-fire-button';
+      flash.style.left = `${button.left - bounds.left}px`;
+      flash.style.top = `${button.top - bounds.top}px`;
+      flash.style.width = `${button.width}px`;
+      flash.style.height = `${button.height}px`;
+      animateDecoration(flash, [
+        { transform: 'scale(.94)', opacity: 1 },
+        { transform: 'scale(1.38)', opacity: 0 },
+      ], { duration: 310, easing: 'ease-out' });
     },
     render(frame: SimulationFrame, camera: THREE.Camera, width: number, height: number, now: number, quiet: boolean) {
       wave.visible = false;
+      lightLanterns(now, quiet);
       if (!active || (!frame.events.length && !frame.shotId && !Number.isFinite(waveBorn))) return;
       const position = (p: Vec3) => {
         const xy = projectToScreen(camera, p, width, height);
@@ -192,6 +244,7 @@ export function createShotFestival(
       const tier = sets >= 2 || chain >= 4 ? 4 : freshSets > 0 || continued || chain === 3 ? 3 : sets || chain === 2 ? 2 : 0;
       if (tier) celebration(tier, quiet);
       if (quiet) return; // The confirmed score and the card remain immediately visible.
+      if (tier >= 3) lampWaveStart = performance.now() / 1_000;
       if (sets >= 2) fireworks();
       if (continued) {
         const ammo = parent.querySelector<HTMLElement>('[data-testid="hud-ammo"]');

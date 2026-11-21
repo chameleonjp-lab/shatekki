@@ -72,7 +72,7 @@ export async function aimAndFire(page: Page, sc: Scene) {
  * clock. A trusted touch does not wait for two stable animation frames while
  * that clock is paused, and the final tap still goes through the real handler.
  */
-export async function fireWithGauge(page: Page) {
+export async function fireWithGauge(page: Page, checkSpentCork?: () => Promise<void>) {
   const btn = page.getByTestId('btn-fire');
   const tap = async () => {
     await expect(btn).toBeVisible();
@@ -93,6 +93,10 @@ export async function fireWithGauge(page: Page) {
     await page.clock.runFor(600);
     await expect(page.getByTestId('load-label')).toHaveAttribute('data-tier', /^(good|perfect)$/);
     await tap();
+    // The IndexedDB write may still be pending after the native tap. Keep the
+    // game clock paused until FIRE starts, then inspect the committed shot.
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'resolving', { timeout: 30_000 });
+    await checkSpentCork?.();
   } finally {
     await page.clock.resume();
   }
