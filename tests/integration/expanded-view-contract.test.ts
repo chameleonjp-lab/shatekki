@@ -4,6 +4,7 @@ import { getGameplayBundle } from '../../src/catalog/gameplay-config';
 import {
   BOOTH_LAYOUT,
   BOOTH_LAYOUT_V2,
+  BOOTH_LAYOUT_V3,
   CELL_IDS_V2,
   IDENTITY_QUAT,
   mintId,
@@ -163,6 +164,27 @@ describe('view v2: background cells', () => {
     };
     // the first cell (cell-r1-c01) is used in the second build; the first vertex belongs to its panel box
     expect(lum(colors, 0, 12)).toBeLessThan(lum(unusedColors, 0, 12));
+    cells.dispose();
+  });
+
+  it('flips a confirmed r007 cell without changing which cells are used', () => {
+    const cells = createBackgroundCells(BOOTH_LAYOUT_V3, true);
+    const [first, second] = BOOTH_LAYOUT_V3.backgroundCells!;
+    const id = first!.cellId;
+    cells.celebrate([id], 2);
+    cells.update([{ cellId: id, used: true, effectId: null }]);
+    cells.animate(2.17, false);
+    const plaque = cells.group.getObjectByName(`festival-cell:${id}`)!;
+    expect(plaque.rotation.y).toBeGreaterThan(0);
+    expect(cells.states().get(id)).toBe('used');
+    expect(cells.states().get(second!.cellId)).toBe('unused');
+
+    cells.animate(2.35, false);
+    expect(cells.group.getObjectByName(`festival-cell:${id}`)).toBeUndefined();
+    cells.celebrate([second!.cellId], 3);
+    cells.animate(3.1, true);
+    expect(cells.group.getObjectByName(`festival-cell:${second!.cellId}`)).toBeUndefined();
+    expect(cells.states().get(second!.cellId)).toBe('unused');
     cells.dispose();
   });
 

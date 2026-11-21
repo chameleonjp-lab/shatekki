@@ -12,7 +12,7 @@
  * Pure three.js (no WebGL): runs in Node. Presentation only.
  */
 import * as THREE from 'three';
-import type { BackgroundCellGeometry, BoothLayout, ExpansionViewState } from '../contracts';
+import type { BackgroundCellGeometry, BackgroundCellId, BoothLayout, ExpansionViewState } from '../contracts';
 import { Kit, mergeParts } from './assets/kit';
 
 export type CellVisual = 'unused' | 'used';
@@ -116,12 +116,16 @@ export interface BackgroundCellsView {
   update(cells: ExpansionViewState['cells'] | undefined): void;
   /** What is drawn for each cell right now. */
   states(): ReadonlyMap<string, CellVisual>;
+  /** Presentation of confirmed use only. Does not change the panel state or pick boxes. */
+  celebrate(ids: readonly BackgroundCellId[], now: number): void;
+  animate(now: number, quiet: boolean): void;
+  clearCelebration(): void;
   /** Number of cell panels drawn (36 in layout v2). */
   readonly cellCount: number;
   dispose(): void;
 }
 
-export function createBackgroundCells(layout: BoothLayout): BackgroundCellsView {
+export function createBackgroundCells(layout: BoothLayout, festival = false): BackgroundCellsView {
   const cells = layout.backgroundCells ?? [];
   const group = new THREE.Group();
   group.name = 'background-cells';
@@ -129,6 +133,20 @@ export function createBackgroundCells(layout: BoothLayout): BackgroundCellsView 
   const state = new Map<string, CellVisual>(cells.map((c) => [c.cellId as string, 'unused']));
   let mesh: THREE.Mesh | null = null;
   let signature = '';
+  const flips = new Map<BackgroundCellId, { pivot: THREE.Group; born: number }>();
+  const rim = festival ? new THREE.MeshBasicMaterial({
+    color: 0xffb356, transparent: true, opacity: .64, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+  }) : null;
+  const clearFlip = (id: BackgroundCellId) => {
+    const flip = flips.get(id);
+    if (!flip) return;
+    flip.pivot.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
+    group.remove(flip.pivot);
+    flips.delete(id);
+  };
+  const clearCelebration = () => {
+    for (const id of flips.keys()) clearFlip(id);
+  };
 
   const rebuild = (): void => {
     const k = new Kit();
@@ -148,6 +166,45 @@ export function createBackgroundCells(layout: BoothLayout): BackgroundCellsView 
     group,
     cellCount: cells.length,
     states: () => state,
+    celebrate(ids, now) {
+      if (!rim) return;
+      for (const id of ids) {
+        if (flips.size >= 4 || flips.has(id)) continue;
+        const cell = cells.find(c => c.cellId === id);
+        if (!cell) continue;
+        const { center: c, halfExtents: h } = cell.box;
+        const sideWall = Math.abs(cell.faceNormal.x) > .5;
+        const front = new Kit();
+        paintCell(front, cell, 'unused');
+        const plaque = new THREE.Mesh(mergeParts(front.parts), material);
+        plaque.geometry.translate(-c.x, -c.y, -c.z);
+        const glow = new THREE.Mesh(new THREE.PlaneGeometry((sideWall ? h.z : h.x) * 2.07, h.y * 2.04), rim);
+        if (sideWall) glow.rotateY(Math.PI / 2);
+        glow.position.set(cell.faceNormal.x * (h.x + DECAL * 2.2), 0, cell.faceNormal.z * (h.z + DECAL * 2.2));
+        const pivot = new THREE.Group();
+        pivot.name = `festival-cell:${id}`;
+        pivot.position.set(c.x + cell.faceNormal.x * .013, c.y, c.z + cell.faceNormal.z * .013);
+        pivot.add(plaque, glow);
+        group.add(pivot);
+        flips.set(id, { pivot, born: now + flips.size * .045 });
+      }
+    },
+    animate(now, quiet) {
+      if (quiet) {
+        clearCelebration();
+        return;
+      }
+      for (const [id, flip] of flips) {
+        const age = (now - flip.born) / .34;
+        if (age >= 1) clearFlip(id);
+        else {
+          const turn = Math.max(0, age);
+          flip.pivot.rotation.y = (1 - (1 - turn) ** 2) * (Math.PI / 2);
+          flip.pivot.scale.setScalar(1 - .2 * turn);
+        }
+      }
+    },
+    clearCelebration,
     update(input) {
       if (!input) return;
       let changed = false;
@@ -167,7 +224,9 @@ export function createBackgroundCells(layout: BoothLayout): BackgroundCellsView 
       rebuild();
     },
     dispose() {
+      clearCelebration();
       mesh?.geometry.dispose();
+      rim?.dispose();
       material.dispose();
       group.clear();
     },

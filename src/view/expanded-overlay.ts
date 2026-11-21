@@ -40,6 +40,10 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
   layer.setAttribute('data-exp-hud', '');
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4';
   host.appendChild(layer);
+  const curtains: HTMLElement[] = [];
+  const clearCurtains = () => {
+    for (const curtain of curtains.splice(0)) curtain.remove();
+  };
 
   // ------------------------------------------------------------ info column
   const info = doc.createElement('div');
@@ -94,7 +98,7 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
 
   const place = (e: HTMLElement, i: number, l: ScreenLabel, dy: string) => {
     const style = TONE_STYLE[l.tone] ?? TONE_STYLE.info!;
-    const key = `${l.id}|${l.turn ?? ''}|${l.accessibleName ?? ''}|${l.text}|${l.tone}|${l.color ?? ''}|${Math.round(l.x)}|${Math.round(l.y)}|${dy}`;
+    const key = `${l.id}|${l.compact ?? false}|${l.turn ?? ''}|${l.accessibleName ?? ''}|${l.text}|${l.tone}|${l.color ?? ''}|${Math.round(l.x)}|${Math.round(l.y)}|${dy}`;
     if (shown[i] === key) return;
     shown[i] = key;
     e.style.cssText =
@@ -112,6 +116,7 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
       for (const a of e.getAnimations?.() ?? []) a.cancel();
       e.dataset.labelId = l.id;
     }
+    e.className = l.compact ? 'festival-prize-tag' : '';
     e.textContent = l.text;
     if (l.turn && !turned.has(l.turn)) {
       turned.add(l.turn);
@@ -124,12 +129,35 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
   return {
     render(model) {
       if (!model) {
+        clearCurtains();
         for (const r of [outlineRow, noTargetRow, assortRow, hintRow, angleRow]) r.style.display = 'none';
         for (let i = 0; i < pool.length; i++) {
           if (shown[i] !== '') pool[i]!.style.display = 'none';
           shown[i] = '';
         }
         return;
+      }
+      if (model.curtain && !doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        clearCurtains();
+        for (const [index, y] of model.curtain.rows.entries()) {
+          const curtain = doc.createElement('div');
+          curtain.className = 'festival-assortment-curtain';
+          curtain.style.top = `${y - 18}px`;
+          curtain.style.setProperty('--festival-series', model.curtain.color);
+          curtain.setAttribute('aria-hidden', 'true');
+          layer.prepend(curtain);
+          curtains.push(curtain);
+          const run = curtain.animate([
+            { transform: 'translateX(-110%)', opacity: 0 },
+            { transform: 'translateX(-34%)', opacity: .7, offset: .35 },
+            { transform: 'translateX(75%)', opacity: 0 },
+          ], { duration: 510, delay: index * 60, easing: 'ease-in-out', fill: 'both' });
+          run.onfinish = () => {
+            curtain.remove();
+            const i = curtains.indexOf(curtain);
+            if (i >= 0) curtains.splice(i, 1);
+          };
+        }
       }
       // info column
       if (model.outline) {
@@ -178,6 +206,7 @@ export function createExpandedOverlay(host: HTMLElement): ExpandedOverlay | null
       }
     },
     dispose() {
+      clearCurtains();
       layer.remove();
     },
   };

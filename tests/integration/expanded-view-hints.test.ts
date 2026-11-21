@@ -17,6 +17,8 @@ import { applyCameraPose, applyFrame, cameraPose, createExpandedView, createScen
 import { createExpansionTranslator } from '../../src/i18n/expansion-text';
 import { translate } from '../../src/i18n';
 import { prizeName } from '../../src/i18n/content';
+import { createExpandedRun } from '../../src/core/expanded-run';
+import { rewardConfigOf, rewardViewState } from '../../src/core/rewards';
 
 const bundle = getGameplayBundle('expanded-proposed');
 const L = BOOTH_LAYOUT_V2;
@@ -110,6 +112,37 @@ describe('expanded view: cells, outline and hints from frame + view state only',
     expect(graph.cells!.states().get('cell-r1-c05')).toBe('unused');
     expect(m.assortment).toMatchObject({ color: '#EE6252', label: '夏祭り' });
     view.dispose();
+    graph.dispose();
+  });
+
+  it('limits r007 assortment labels to small, spaced tags and plays the row curtain only once', () => {
+    const b = getGameplayBundle('expanded-aim-first');
+    const expansion = b.expansion!;
+    const state = createExpandedRun({ runId: mintId.run('tag-fit'), seed: 3, tuning: b.tuning, playerName: null },
+      { ...b, expansion });
+    const rewards = rewardViewState(state, rewardConfigOf(expansion), b.layout, b.tuning);
+    const graph = createSceneGraph({ layout: b.layout, resolvePrize: id => b.catalog.prizes.get(id)! });
+    const display = createExpandedView({ graph, layout: b.layout, catalog: b.catalog, expansion, translate: tr,
+      prizeName: t => prizeName('ja', t), illustratedRewards: true, festival: true });
+    const cam = new THREE.PerspectiveCamera();
+    const short = { width: 375, height: 600 };
+    applyCameraPose(cam, cameraPose(b.layout, 0, short.width / short.height), short.width / short.height);
+    const crowded = Array.from({ length: 10 }, (_, i) => pf(i + 1, 1, (i - 4.5) * .035, 1.16, -1.9));
+    const f = frame(crowded);
+    const input = vs({ assortmentSeries: ser('SER03'), rewards });
+    applyFrame(graph, f);
+    const requestId = mintId.effectRequest(mintId.shot(1), 0);
+    display.showConfirmedTransforms(crowded.map(p => ({ instanceId: p.instanceId, requestId,
+      fromTypeId: 'P013' as PrizeTypeId, toTypeId: p.typeId })));
+    const first = display.update(f, input, cam, short)!;
+    const tags = first.rewardLabels.filter(label => label.id.startsWith('reward:tag:'));
+    expect(tags.length).toBeGreaterThan(0);
+    expect(tags.length).toBeLessThan(6);
+    expect(tags.every(tag => tag.compact && tag.text === '◆' && tag.accessibleName?.includes(prizeName('ja', crowded[0]!.typeId)))).toBe(true);
+    expect(first.curtain?.rows).toHaveLength(1);
+    expect(display.update(f, input, cam, short)!.curtain).toBeUndefined();
+    expect(display.update({ ...f, simTimeSec: 1.5 }, input, cam, short)!.rewardLabels.some(label => label.id.startsWith('reward:tag:'))).toBe(false);
+    display.dispose();
     graph.dispose();
   });
 

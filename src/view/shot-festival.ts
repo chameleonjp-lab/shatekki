@@ -274,6 +274,47 @@ export function createShotFestival(
         animations.push(anim);
       }
     },
+    showCellLinks(summary: ShotSummary, camera: THREE.Camera, width: number, height: number, prizePosition: (id: string) => Vec3 | undefined) {
+      const cells = layout.backgroundCells ?? [];
+      let drawn = 0;
+      for (const effect of summary.effects ?? []) {
+        if (drawn >= 4 || effect.source.kind !== 'cell' || effect.outcome !== 'applied') continue;
+        const { cellId } = effect.source;
+        const cell = cells.find(entry => entry.cellId === cellId);
+        if (!cell) continue;
+        const from = projectToScreen(camera, cell.box.center, width, height);
+        if (!from) continue;
+        const to = [];
+        if (effect.ammoDelta) {
+          const ammo = parent.querySelector('[data-testid="hud-ammo"]')?.getBoundingClientRect();
+          const view = overlay.getBoundingClientRect();
+          if (ammo?.width) to.push({ x: ammo.left + ammo.width * .5 - view.left, y: ammo.top + ammo.height * .5 - view.top });
+        }
+        for (const id of effect.targets) {
+          if (to.length >= 2) break;
+          const point = prizePosition(id);
+          const screen = point && projectToScreen(camera, point, width, height);
+          if (screen) to.push(screen);
+        }
+        for (const target of to) {
+          if (drawn >= 4) break;
+          const dx = target.x - from.x;
+          const dy = target.y - from.y;
+          const angle = Math.atan2(dy, dx);
+          const light = doc.createElement('div');
+          light.className = 'festival-cell-link';
+          light.style.left = `${from.x}px`;
+          light.style.top = `${from.y}px`;
+          light.style.width = `${Math.hypot(dx, dy)}px`;
+          light.style.color = effect.ammoDelta < 0 ? '#ff875c' : '#fff0a1';
+          animateDecoration(light, [
+            { transform: `rotate(${angle}rad) scaleX(.03)`, opacity: .45 },
+            { transform: `rotate(${angle}rad) scaleX(1)`, opacity: .85, offset: .62 },
+            { transform: `rotate(${angle}rad) scaleX(1)`, opacity: 0 },
+          ], { duration: 400, delay: drawn++ * 30, easing: 'ease-out', fill: 'both' });
+        }
+      }
+    },
     clear() {
       clear();
       active = null;

@@ -104,3 +104,26 @@
   border: 3px solid #fff2aa;
   box-shadow: 0 0 12px #ffb52b, inset 0 0 9px #ffdd87;
 }
+
+.festival-prize-tag {
+  border-radius: 4px !important;
+  border-color: #9b602c !important;
+  box-shadow: 0 1px 4px #2b1712b0, inset 0 0 0 1px #ffe5a8 !important;
+}
+
+.festival-assortment-curtain {
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  height: 36px;
+  border-block: 1px solid #ffe4a5;
+  background: linear-gradient(90deg, transparent, #34201545 13%, var(--festival-series) 85%, #fff1ba 100%);
+}
+
+.festival-cell-link {
+  position: absolute;
+  height: 2px;
+  transform-origin: left center;
+  background: linear-gradient(90deg, transparent, currentColor);
+  box-shadow: 0 0 8px currentColor;
+}
