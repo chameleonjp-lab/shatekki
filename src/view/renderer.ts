@@ -21,6 +21,7 @@ import { createExpandedView, type ExpandedView, type ExpandedViewModel } from '.
 import { createExpandedOverlay, type ExpandedOverlay } from './expanded-overlay';
 import { createStallEnvironment } from './materials/procedural-textures';
 import { createShotFestival } from './shot-festival';
+import { createFestivalGimmickView } from './festival-gimmicks';
 
 export interface ThreeRendererDeps {
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
@@ -127,6 +128,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const festival = deps.duskMaterials
     ? createShotFestival(canvas, graph.effectsLayer, layout, graph.booth.group.getObjectByName('booth:washi'))
     : null;
+  const gimmicks = deps.expanded?.expansion.profile.festivalChallenges ? createFestivalGimmickView(canvas) : null;
   const shotReplay = festival ? new ShotReplayRecorder() : null;
   const reflections = new Map<string, number>();
   let festivalShot: ShotId | null = null;
@@ -148,6 +150,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       shotReplay?.confirm(summary);
       const still = quiet || reduceMotion.matches;
       festival?.settle(summary, freshSets, ammoBefore, still);
+      gimmicks?.settle(summary, still);
       if (festival && !still) {
         const ids = (summary.effects ?? []).flatMap(effect => effect.source.kind === 'cell' &&
           effect.reason !== 'cellAlreadyUsed' && effect.reason !== 'unknownCell' ? [effect.source.cellId] : []);
@@ -163,6 +166,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       shotReplay?.clear();
       reflections.clear();
       festival?.clear();
+      gimmicks?.reset();
       graph.cells?.clearCelebration();
     },
     render(frame: SimulationFrame, view: ViewState): void {
@@ -171,6 +175,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       applyFrame(graph, frame);
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height, view.aimFirst?.aim), width / height);
       last = updateAim(graph, view);
+      gimmicks?.render(frame, view, camera, width, height, reduceMotion.matches || view.paused);
       if (expandedView) {
         const animationTime = festival && !view.paused && !reduceMotion.matches ? performance.now() / 1_000 : undefined;
         expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }, animationTime));
@@ -232,6 +237,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       disposed = true;
       fx.dispose();
       festival?.dispose();
+      gimmicks?.dispose();
       expandedOverlay?.dispose();
       expandedView?.dispose();
       domHud?.dispose();

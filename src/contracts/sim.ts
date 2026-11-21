@@ -71,6 +71,7 @@ export interface ShotRecord {
   readonly facts?: import('./events').ShotFacts;
   /** Real corks that reflected off the front of the fan and then off the tray. */
   readonly fanTrayProjectiles?: readonly ProjectileId[];
+  readonly festival?: import('./festival').FestivalShot;
 }
 
 export interface SimulationStep {
@@ -102,6 +103,7 @@ export interface ShotContext {
     /** True when the rules version has rewards: the record then carries rewardContacts. */
     readonly rewards?: boolean;
     readonly festivalChallenges?: true;
+    readonly festival?: { readonly progress: import('./festival').FestivalProgress; readonly seed: number };
   };
 }
 

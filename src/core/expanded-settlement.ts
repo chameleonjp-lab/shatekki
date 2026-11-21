@@ -19,6 +19,7 @@ import type { SettlementResult } from './settlement';
 import type { ExpandedPlanContext } from './effect-plan';
 import { rewardConfigOf, settleRewards } from './rewards';
 import { festivalChallengesOf } from './festival-challenges';
+import { festivalOf, festivalLedger } from './festival';
 import { nextNotesFor, setHintFor } from './aim-first';
 import type { PartOutcome } from '../contracts';
 
@@ -56,7 +57,9 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
   // legacy penalty plates: one ledger item per device, exactly the plan's penaltyPoints in total
   const penalties = plan.processed.filter((e) => e.source.kind === 'device' && e.source.deviceKind === 'penalty' && e.outcome === 'applied');
 
+  const festivalBefore = festivalOf(state, ctx.expansion)?.progress;
   const items: LedgerItem[] = [
+    ...(festivalBefore ? festivalLedger(festivalBefore, record.festival, record.shotId) : []),
     ...prizeItems(collectedNow, catalog),
     ...trickItems(collectedNow, record.prizeOutcomes, record.shotId, tuning),
     ...newSets.map((id): LedgerItem => ({ kind: 'set', refId: id, points: catalog.sets.get(id)!.bonusScore })),
@@ -87,8 +90,15 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
   // cells used this shot (also when their effect could not act); transforms still waiting; question taken
   const usedNow = new Map(plan.processed.filter((e) => e.source.kind === 'cell' && e.reason !== 'cellAlreadyUsed' && e.reason !== 'unknownCell').map((e) => [e.source.kind === 'cell' ? e.source.cellId : '', e.requestId]));
   const exp = state.expansion;
+  const observed = record.festival;
+  const progress = festivalBefore && (observed?.progress ?? festivalBefore);
+  const encore = progress?.encore === 'ready' ? 'spent'
+    : progress?.encore === 'idle' && !runEnded && settled?.rewards.order?.doneOnShot === flight.shotNumber ? 'offered'
+    : progress?.encore;
+  const festival = progress && encore ? { ...progress, encore } : undefined;
   const expansion: ExpandedRunState['expansion'] = {
     ...exp,
+    ...(festival ? { festival } : {}),
     cells: exp.cells.map((c) => (usedNow.has(c.cellId) && !c.used ? { ...c, used: true, usedOnShot: record.shotId, requestId: usedNow.get(c.cellId)! } : c)),
     questionCursor: plan.question ? plan.question.cursor + 1 : exp.questionCursor,
     // a reservation that survives to the next FIRE; the game end drops it (no corks left to use it)
@@ -180,6 +190,7 @@ export function resolveExpandedShot(state: RunState, record: ShotRecord, ctx: Ex
     ...(plan.parts ? { parts: finalParts(plan.parts, next, runEnded, ctx) } : {}),
     ...(record.facts ? { facts: record.facts } : {}),
     ...(challenges.length ? { festivalChallenges: challenges } : {}),
+    ...(festivalBefore && observed ? { festival: observed } : {}),
   };
   return { state: next, summary };
 }

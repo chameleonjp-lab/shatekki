@@ -29,3 +29,14 @@
   62% { opacity: 1; transform: scale(1.03); }
   100% { opacity: 1; transform: scale(1); }
 }
+.festival-challenges :is(.relay, .bell-open, .bell-prize, .giant-drop, .encore) {
+  background: linear-gradient(110deg, #582145, #7e3b24 44%, #55302b);
+  box-shadow: inset 0 0 15px #ffc95750, 0 0 12px #ff965634;
+}
+.festival-challenges :is(.red-white, .daruma) { background: linear-gradient(115deg, #98283d, #65213e 65%, #9e2a3e); }
+.festival-challenges :is(.domino, .fuse) {
+  background: radial-gradient(ellipse at center, #63428a, #2c204d);
+  color: #fff5c2;
+  font-size: 1.22em;
+  text-shadow: 0 0 8px #f9b9668f;
+}

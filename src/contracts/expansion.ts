@@ -308,6 +308,7 @@ export interface ExpansionRngState {
 }
 
 export interface ExpansionRunState {
+  readonly festival?: import('./festival').FestivalProgress;
   /** Exactly 36, in row/column order (cell-r1-c01 … cell-r3-c12). */
   readonly cells: readonly BackgroundCellState[];
   /** The 200 questions shuffled at run start. */

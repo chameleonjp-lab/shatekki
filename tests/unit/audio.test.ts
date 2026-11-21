@@ -314,6 +314,13 @@ describe('mapping covers every event and cue', () => {
     expect(dropCues).toEqual(['collectDrop', 'festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4', 'festival.drop.4']);
     for (const id of dropCues) reachable.add(id);
     for (const r of soundsForUiCue({ type: 'ui', cue: 'fire' }, true)) reachable.add(r.id);
+    const signal = { type: 'festival', eventId: mintId.event(s1, 8), shotId: s1, point: { x: 0, y: 0, z: 0 } } as const;
+    const bells = [1, 2, 3].map(amount => soundsForSimEvent({ ...signal, mark: 'bell', amount })[0]!.id);
+    expect(bells).toEqual(['festival.bell.1', 'festival.bell.2', 'festival.bell.3']);
+    for (const id of bells) reachable.add(id);
+    for (const mark of ['bell-open', 'giant-slide', 'giant-drop', 'fuse'] as const) {
+      for (const r of soundsForSimEvent({ ...signal, mark, amount: .1 })) reachable.add(r.id);
+    }
     for (const r of soundsForSimEvent({ type: 'prizeTransformed', eventId: mintId.event(s1, 4), shotId: s1, instanceId: mintId.instance(1), fromTypeId: asPrizeTypeId('P001'), toTypeId: asPrizeTypeId('P002'), hpBefore: 1, maxHpBefore: 1, hpAfter: 1, maxHpAfter: 1 })) reachable.add(r.id);
     for (const a of [true, false]) for (const r of soundsForSimEvent(impact({ kind: 'cell', cellId: 'cell-r1-c01' as never, activated: a }))) reachable.add(r.id);
     for (const c of EXPANSION_CUE_NAMES) for (const r of soundsForUiCue({ type: 'ui', cue: c })) reachable.add(r.id);

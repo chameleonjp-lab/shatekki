@@ -328,6 +328,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let talkPanel: ReturnType<ExpandedUiKit['mountTalkPanel']> | null = null;
   let speechBubble: ReturnType<ExpandedUiKit['mountSpeechBubble']> | null = null;
   let speech: InstanceType<ExpandedUiKit['SpeechScheduler']> | null = null;
+  let encoreDialog: ReturnType<ExpandedUiKit['mountFestivalEncore']> | null = null;
   let afCard: ReturnType<ExpandedUiKit['mountAimFirstCard']> | null = null;
   let firedWithLastCork = false;
   let mapUpdatedAt = -Infinity;
@@ -345,6 +346,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const setScreen = (s: Screen) => {
     bookRequest++;
     if (s !== 'game') {
+      encoreDialog?.close();
       rewardMotions?.clear();
       effectResults?.hide();
       rewardPanel?.hideCard();
@@ -371,6 +373,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     rotate.hidden = !reasons.includes('landscape');
     root.dataset.pause = reasons.join(' ');
     if (reasons.length > 0) {
+      encoreDialog?.close();
       audio.silence(); // nothing piles up while hidden / rotated (AC36)
       // r007: rotating or hiding closes an unchosen talk without using it
       talkPanel?.close();
@@ -413,6 +416,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       talkPanel?.update(snap.view.aimFirst?.talk);
     } else panel?.update(controlsModel(snap.state, snap.view, tuning.maxBonusAmmoTotal, snap.lastSummary));
     root.dataset.phase = snap.state.phase;
+    encoreDialog?.show(screen === 'game' && snap.view.expansion?.festival?.progress.encore === 'offered' &&
+      !snap.view.paused && !controller?.persistencePending && recovery.hidden, i18n.locale);
     if (expansion) updateExpandedUi(snap);
     if (rewardPanel && rewardCfg) rewardPanel.update(snap.view.expansion?.rewards, { shots: rewardCfg.order.shots, amount: rewardCfg.order.amount });
   };
@@ -524,7 +529,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const playAcceptedCue = (cmd: GameCommand) => {
     if (cmd.type === 'ANSWER_SHOPKEEPER') cue('answerAccepted');
     else if (cmd.type === 'SET_POSITION') return;
-    else if (cmd.type === 'ORDER') cue(cmd.accept ? 'confirm' : 'cancel');
+    else if (cmd.type === 'FESTIVAL_ENCORE' || cmd.type === 'ORDER') cue(cmd.accept ? 'confirm' : 'cancel');
     else playCommandCue(cmd);
   };
 
@@ -604,6 +609,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     const s = c.current;
     const view = c.viewState();
     const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen && !afCard?.isVisible &&
+      view.expansion?.festival?.progress.encore !== 'offered' &&
       !view.expansion?.question && view.expansion?.rewards?.order?.status !== 'offered' && recovery.hidden && reasons.length === 0;
     const head = renderer?.projectShopkeeperHead?.() ?? null;
     const facts = { state: s, view, last: c.snapshot().lastSummary, maxBonusAmmo: tuning.maxBonusAmmoTotal, rewards: rewardCfg, mode, recorded: !atomic?.memory, shopkeeperVisible: head !== null };
@@ -645,6 +651,10 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     rewardMotions = null;
     rewardPanel?.destroy();
     rewardPanel = null;
+    encoreDialog?.dispose();
+    encoreDialog = expansion?.profile.festivalChallenges && expandedUi
+      ? expandedUi.mountFestivalEncore(root, accept => uiCommand({ type: 'FESTIVAL_ENCORE', accept }))
+      : null;
     if (expansion && expandedUi) {
       boothMap = expandedUi.mountBoothMap(ui, {
         layout,
@@ -695,7 +705,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
                   : null;
                 afCard.show(model, {
                   quiet,
-                  challenges: challenges.length ? expandedUi.festivalChallengeCard(doc, challenges, i18n.locale, quiet) : null,
+                  challenges: expandedUi.festivalChallengeCard(doc, event.summary, i18n.locale, quiet),
                   path: replay ? expandedUi.miniShotPath(doc, replay, i18n.locale, event.reducedMotion) : null,
                 });
                 return;
@@ -723,6 +733,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     const w = await sim.createShotWorld(layout, catalog, tuning, {
       transformPolicy: bundle.behavior?.transformPolicy,
       reportPrizeContacts: illustratedRewards,
+      festival: !!expansion?.profile.festivalChallenges,
       rewardDevices: rewardCfg ? rewardDevicesFor(rewardCfg) : undefined,
     });
     world = w;
@@ -925,6 +936,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   root.append(recovery);
 
   const savePrompt = (key: UiKey, retry?: () => void, conflict = false) => {
+    encoreDialog?.close();
     recovery.replaceChildren();
     recovery.hidden = false;
     root.dataset.saving = key;
@@ -1275,8 +1287,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           const score = doc.createElement('p');
           score.className = 'af-result-score';
           score.textContent = `${expText('af.result.delta', { p: delta >= 0 ? `+${delta}` : String(delta) })} · ${expText('af.result.total', { score: lastSummary.ledger.scoreAfter })}`;
-          const challenges = lastSummary.festivalChallenges ?? [];
-          if (challenges.length) box.append(expandedUi.festivalChallengeCard(doc, challenges, i18n.locale, true));
+          const challenges = expandedUi.festivalChallengeCard(doc, lastSummary, i18n.locale, true);
+          if (challenges) box.append(challenges);
           box.append(...expandedUi.cardBody(doc, model, expText, expandedUi.prizePortrait), score);
           sec.append(h, box);
         }
@@ -1481,6 +1493,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       effectResults?.destroy();
       questionPanel?.destroy();
       boothMap?.destroy();
+      encoreDialog?.dispose();
       talkPanel?.destroy();
       speechBubble?.destroy();
       afCard?.destroy();

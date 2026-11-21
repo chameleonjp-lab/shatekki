@@ -14,6 +14,7 @@ import type { PrizeMaterial } from './catalog';
 import type { FirstHitKey, PrizeOutcome } from './sim';
 import type { AppliedTransform, DeferredTransform, PartOutcome, PlannedEffect } from './expansion';
 import type { RewardOutcome } from './rewards';
+import type { FestivalSignal } from './festival';
 
 export const EVENTS_VERSION = 1;
 
@@ -134,7 +135,14 @@ export interface ShotStageEvent {
   readonly stage: ShotStage;
 }
 
+export interface FestivalEvent extends FestivalSignal {
+  readonly type: 'festival';
+  readonly eventId: EventId;
+  readonly shotId: ShotId;
+}
+
 export type SimEvent =
+  | FestivalEvent
   | ImpactEvent
   | PrizeContactEvent
   | ProjectileSpawnedEvent
@@ -154,6 +162,7 @@ export const SIM_EVENT_TYPES: readonly SimEventType[] = [
   'deviceActivated',
   'prizeDamaged',
   'prizeReachedCollection',
+  'festival',
   'prizeTransformed',
   'shotStage',
 ];
@@ -276,6 +285,7 @@ export interface ShotSummary {
   readonly facts?: ShotFacts;
   /** r008 achievements confirmed from the shot, in display order. */
   readonly festivalChallenges?: readonly FestivalChallenge[];
+  readonly festival?: import('./festival').FestivalShot;
 }
 
 /** r007: the contact that explains a shot best, picked from the sim's real contacts. */

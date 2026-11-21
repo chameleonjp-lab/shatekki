@@ -13,6 +13,7 @@ import { loadingBarValue, loadPeriodMultiplierFor } from '../core/loading';
 import { resolveShot } from '../core/settlement';
 import { createTransformChooser } from '../core/gimmicks';
 import { reduceWithRewards } from '../core/rewards';
+import { reduceFestivalCommand } from '../core/festival';
 import { isAimFirstState, reduceAimFirst } from '../core/aim-first';
 
 export const CORE_RULES: RulesApi = {
@@ -20,7 +21,7 @@ export const CORE_RULES: RulesApi = {
   // Rewards (r002+) wrap the core reducer: A9 accept/decline, A5 placement at the stand and its use at FIRE.
   // r007 (aim first) handles its own movement, gauge, FIRE and talk; every other version goes straight to the core reducer.
   reduceGame: (state, command, ctx) =>
-    reduceWithRewards(state, command, { tuning: ctx.tuning, layout: ctx.layout, expansion: ctx.expansion }, (s, c) => {
+    reduceFestivalCommand(state, command, ctx.expansion) ?? reduceWithRewards(state, command, { tuning: ctx.tuning, layout: ctx.layout, expansion: ctx.expansion }, (s, c) => {
       const core = (x: typeof s, y: typeof c) => reduceGame(x, y, { tuning: ctx.tuning, layout: ctx.layout });
       if (ctx.expansion?.profile.aimFirst) return reduceAimFirst(s, c, { tuning: ctx.tuning, layout: ctx.layout, catalog: ctx.catalog, expansion: ctx.expansion }, core);
       // The r007-only commands mean nothing to r001-r006 and rules-v1.

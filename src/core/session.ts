@@ -21,6 +21,7 @@ import {
   isSlotId,
 } from '../contracts';
 import { isValidRngState } from '../catalog/rng';
+import { validFestivalProgress } from './festival';
 
 export type RestorePlan =
   | { readonly kind: 'resume'; readonly state: RunState }
@@ -287,6 +288,11 @@ function validateExpansionState(s: Obj, exp: ExpansionCatalog, layout: BoothLayo
   }
   const rng = x.rng;
   if (!isObj(rng) || !isValidRngState(rng.cells) || !isValidRngState(rng.questions) || !isValidRngState(rng.effects)) return 'invalid expansion rng';
+  if (x.festival !== undefined && (!exp.profile.festivalChallenges || !validFestivalProgress(x.festival))) return 'invalid festival progress';
+  if (isObj(x.festival) && (x.festival.encore === 'offered' || x.festival.encore === 'ready')) {
+    if (!isObj(x.rewards) || !isObj(x.rewards.order) || x.rewards.order.status !== 'done') return 'encore without a completed order';
+    if (x.festival.encore === 'offered' && phase !== 'aiming' && phase !== 'abandoned') return 'invalid encore phase';
+  }
   const aimProblem = validateAimFirstState(x.aimFirst, exp, shots, phase);
   if (aimProblem !== null) return aimProblem;
   return validateRewardState(x.rewards, exp, catalog, shots);

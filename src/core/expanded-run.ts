@@ -6,7 +6,7 @@
  * (`state.draw`) so later redraw/recheck code never shifts another stream.
  */
 import type { BoothLayout, ExpandedRunState, ExpansionCatalog, ExpansionRunState, RunConfig, RuntimeCatalog, TuningConfig } from '../contracts';
-import { BASE_SHOT_MODIFIERS, EXPANDED_RUN_STATE_SCHEMA_VERSION } from '../contracts';
+import { BASE_SHOT_MODIFIERS, INITIAL_FESTIVAL, EXPANDED_RUN_STATE_SCHEMA_VERSION } from '../contracts';
 import { rngNext, seedRng, type RngState } from '../catalog/rng';
 import { assignCells } from './background-cells';
 import { createRun, lowestStatus } from './state';
@@ -51,6 +51,7 @@ export function createExpandedRun(config: RunConfig, bundle: ExpandedBundleInput
   const withRewards = rewardCfg ? initialRewards(base.shelf, config.seed, rewardCfg, catalog, layout) : null;
 
   const exp: ExpansionRunState = {
+    ...(expansion.profile.festivalChallenges ? { festival: INITIAL_FESTIVAL } : {}),
     cells: cells.cells,
     questionOrder: questions.items,
     questionCursor: 0,

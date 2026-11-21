@@ -88,6 +88,16 @@ function talkAllowed(from: RunState, to: RunState, operationId: string): boolean
 }
 
 function commandAllowed(from: RunState, to: RunState, operationId: string): boolean {
+  const beforeFestival = from.expansion?.festival;
+  const afterFestival = to.expansion?.festival;
+  if (operationId === to.runId + '/festival-encore') {
+    if (beforeFestival?.encore !== 'offered' || from.phase !== 'aiming' || to.phase !== 'aiming' ||
+        (afterFestival?.encore !== 'ready' && afterFestival?.encore !== 'declined') ||
+        canonical({ ...beforeFestival, encore: afterFestival.encore }) !== canonical(afterFestival)) return false;
+    if (afterFestival.encore === 'ready') {
+      if (to.standX !== 0 || to.aim.yaw !== 0 || to.aim.pitch !== 0) return false;
+    } else if (to.standX !== from.standX || canonical(to.aim) !== canonical(from.aim)) return false;
+  } else if (canonical(beforeFestival) !== canonical(afterFestival)) return false;
   if (!terminal(from) && operationId.endsWith('/shopkeeper-talk')) return talkAllowed(from, to, operationId);
   // r007 saves each finished move/aim as its own numbered operation; nothing else may change with it.
   const aimSeq = to.expansion?.aimFirst?.aimSeq;
