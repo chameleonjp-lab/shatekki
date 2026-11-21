@@ -327,6 +327,9 @@ export interface ResultDeps {
   readonly onOpenSetBook?: () => void;
   /** Loaded with the illustrated build, together with its prize atlas. */
   readonly renderLastSet?: (set: LastShotView['sets'][number]) => HTMLElement;
+  readonly renderPrizeShelf?: (result: FinalResult) => HTMLElement;
+  readonly highlight?: HTMLElement;
+  readonly recordBreak?: HTMLElement;
   /** Expanded build: pair-set names (same source as the book) and the last-shot lines. */
   readonly text?: ResultTextOptions;
   readonly open?: OpenWindow;
@@ -394,7 +397,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   bookBtn.dataset.testid = 'result-setbook';
   chainValue.dataset.testid = 'result-chain';
 
-  const heroSec = el('section', { class: 'sec hero' }, [heroLabel, el('div', { class: 'hero-row' }, [heroValue, heroUnit]), newBest, best, prevBest, rank]);
+  const heroSec = el('section', { class: 'sec hero' }, [heroLabel, el('div', { class: 'hero-row' }, [heroValue, heroUnit]), newBest, ...(deps.recordBreak ? [deps.recordBreak] : []), best, prevBest, rank]);
   const rankingBlock = el('div', { class: 'btn-with-note' }, [rankingBtn, rankingNote]);
   const submitSec = el('section', { class: 'sec' }, [submitMsg, storageWarn, submitRetry]);
   const topSec = el('section', { class: 'sec' }, [topTitle, topMsg, topRetry, topList]);
@@ -406,6 +409,7 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   ]);
   const col = el('main', { class: 'scr-col' }, [
     title, notice, heroSec, actionsSec,
+    ...(deps.highlight ? [deps.highlight] : []),
     bestSec,
     lastSec,
     el('section', { class: 'sec' }, [prizesTitle, prizesBody]),
@@ -422,6 +426,9 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
   function chip(text: string, count?: number): HTMLElement {
     return el('span', { class: 'chip' }, [el('span', { text }), ...(count && count > 1 ? [el('b', { text: ` ×${count}` })] : [])]);
   }
+
+  let prizeShelfInput: FinalResult | null = null;
+  let prizeShelfLocale: Locale | null = null;
 
   function refresh(): void {
     vm = resultViewModel(input, deps.i18n.locale, deps.text);
@@ -452,7 +459,14 @@ export function mountResult(root: HTMLElement, deps: ResultDeps, initial: Result
     setHidden(rankingNote, vm.actions.ranking.note === null);
     setText(share, vm.actions.share.label);
     setText(prizesTitle, `${vm.prizes.title} (${vm.prizes.total})`);
-    replaceChildren(prizesBody, vm.prizes.items.length === 0 ? [el('span', { class: 'note', text: vm.prizes.emptyText })] : vm.prizes.items.map((i) => chip(i.name, i.count)));
+    if (!deps.renderPrizeShelf || prizeShelfInput !== input.result || prizeShelfLocale !== deps.i18n.locale) {
+      const prizeContent = vm.prizes.items.length === 0
+        ? [el('span', { class: 'note', text: vm.prizes.emptyText })]
+        : deps.renderPrizeShelf ? [deps.renderPrizeShelf(input.result)] : vm.prizes.items.map(i => chip(i.name, i.count));
+      replaceChildren(prizesBody, prizeContent);
+      prizeShelfInput = input.result;
+      prizeShelfLocale = deps.i18n.locale;
+    }
     setHidden(bestSec, vm.bestShot === null);
     setText(bestTitle, vm.bestShot?.title ?? '');
     setText(bestText, vm.bestShot?.text ?? '');

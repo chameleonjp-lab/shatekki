@@ -18,11 +18,11 @@ export async function restoreBeforeShot(page: Page, outcome: Outcome, previousDi
   return restoreShotStart(page, shot, previousDiscoveries);
 }
 
-export async function restoreShotStart(page: Page, { beforeFire, gameTick }: ShotStart, previousDiscoveries: readonly string[] = []) {
+export async function restoreShotStart(page: Page, { beforeFire, gameTick }: ShotStart, previousDiscoveries: readonly string[] = [], bestScore: number | null = null) {
   await page.goto('/?e2e=1');
   await expect(page.locator('#app')).toHaveAttribute('data-rules-version', beforeFire.rulesVersion);
   await expect(page.getByTestId('home-start')).toBeVisible();
-  await page.evaluate(({ state, gameTick, previousDiscoveries }) => new Promise<void>((resolve, reject) => {
+  await page.evaluate(({ state, gameTick, previousDiscoveries, bestScore }) => new Promise<void>((resolve, reject) => {
     const open = indexedDB.open('shatekki.checkpoints');
     open.onerror = () => reject(open.error);
     open.onsuccess = () => {
@@ -42,11 +42,12 @@ export async function restoreShotStart(page: Page, { beforeFire, gameTick }: Sho
         tx.objectStore('profiles').put({
           discoveredSets: [...new Set([...previousDiscoveries, ...state.completedSets])], legacyBestScore: null,
         }, JSON.stringify(['book', 'normal', state.rulesVersion]));
+        if (bestScore !== null) tx.objectStore('profiles').put(bestScore, JSON.stringify(['best', JSON.stringify(['normal', state.rulesVersion, ''])]));
       };
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onabort = () => { db.close(); reject(tx.error ?? Error('expected an empty test run store')); };
     };
-  }), { state: beforeFire, gameTick, previousDiscoveries });
+  }), { state: beforeFire, gameTick, previousDiscoveries, bestScore });
   await page.reload();
   await page.getByTestId('btn-resume-run').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'paused');
