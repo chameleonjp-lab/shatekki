@@ -122,6 +122,18 @@ export const SOUNDS = {
   'speech.paper': def(2, 0.4, [n('bandpass', 3800, 0, 0.07, 0.07, 1.4), n('bandpass', 2600, 0.05, 0.06, 0.05, 1.2)]),
   'load.latch': def(1, 0.1, [t('square', 2400, 0, 0.025, 0.14, 1800), n('highpass', 5500, 0, 0.03, 0.12)]),
   'lastShot.hayashi': def(2, 0.6, [t('sine', 1568, 0, 0.1, 0.24, 1760), t('sine', 1760, 0.1, 0.1, 0.24), t('sine', 2093, 0.2, 0.22, 0.24), t('sine', 140, 0, 0.12, 0.45, 90), t('sine', 140, 0.22, 0.12, 0.4, 90)]),
+  // Internal candidate: trigger, falling cork pop and a short wooden tail.
+  'festival.fire': def(2, 0.08, [
+    n('highpass', 3900, 0, .018, .26),
+    t('triangle', 1340, 0, .024, .11, 670),
+    n('bandpass', 1460, .012, .051, .39, 1.45),
+    t('sine', 385, .012, .081, .45, 81),
+    t('triangle', 177, .026, .088, .17, 54),
+  ]),
+  'festival.drop.1': def(1, .06, [t('triangle', 850, 0, .085, .24, 650), n('bandpass', 2500, 0, .024, .11, 2)]),
+  'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .26), t('triangle', 1568, .065, .125, .13)]),
+  'festival.drop.3': def(1, .08, [t('sine', 146, 0, .2, .48, 60), t('triangle', 1568, .064, .16, .19)]),
+  'festival.drop.4': def(1, .1, [t('sine', 132, 0, .25, .52, 55), t('sine', 120, .11, .24, .34, 52), t('sine', 1976, .13, .18, .21)]),
   // ---- settlement
   collectDrop: def(0, 0.1, [t('sine', 700, 0, 0.08, 0.2, 300)]),
   collect: def(2, 0.15, [t('sine', 1047, 0, 0.3, 0.3), t('sine', 1319, 0.05, 0.3, 0.22)]),
@@ -183,7 +195,9 @@ const PART_SOUND = { hat: 'shop.hat', fan: 'shop.fan', body: 'shop.body', feet: 
 
 const NONE: readonly SoundRequest[] = [];
 
-export function soundsForSimEvent(ev: SimEvent): readonly SoundRequest[] {
+const FESTIVAL_DROPS = ['festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4'] as const;
+
+export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly SoundRequest[] {
   switch (ev.type) {
     case 'impact': {
       const gain = Math.min(1.3, 0.55 + ev.speed / 16);
@@ -217,7 +231,7 @@ export function soundsForSimEvent(ev: SimEvent): readonly SoundRequest[] {
     case 'deviceActivated':
       return [req(DEVICE_SOUND[ev.deviceKind])];
     case 'prizeReachedCollection':
-      return [req('collectDrop')];
+      return [req(festivalDropCount > 0 ? FESTIVAL_DROPS[Math.min(festivalDropCount, FESTIVAL_DROPS.length) - 1]! : 'collectDrop')];
     case 'prizeTransformed':
       return [req('transform')];
     case 'projectileSpawned':
@@ -270,8 +284,10 @@ const TIER_SOUND: Record<LoadTier, SoundId> = {
   weak: 'load.stop.weak',
 };
 
-export function soundsForUiCue(cue: UiCueExt): readonly SoundRequest[] {
+export function soundsForUiCue(cue: UiCueExt, festival = false): readonly SoundRequest[] {
   switch (cue.cue) {
+    case 'fire':
+      return [req(festival ? 'festival.fire' : 'fire')];
     case 'loadStop':
       return [req(TIER_SOUND[cue.tier ?? 'normal'])];
     case 'collect':

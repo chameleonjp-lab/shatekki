@@ -26,15 +26,15 @@ function textureNoise(seed: number) {
   };
 }
 
-function woodGrain(ctx: CanvasRenderingContext2D, bump: boolean) {
+function woodGrain(ctx: CanvasRenderingContext2D) {
   const noise = textureNoise(0x574f4f44);
-  ctx.fillStyle = bump ? '#808080' : '#e7cdb1';
+  ctx.fillStyle = '#e7cdb1';
   ctx.fillRect(0, 0, 256, 256);
   // Grain bands bend around knots. Span the canvas so boards can tile.
   for (let y = 0; y < 256; y += 2 + Math.floor(noise() * 4)) {
     const bend = (noise() - 0.5) * 22;
     const alpha = 0.06 + noise() * 0.25;
-    ctx.strokeStyle = bump ? `rgba(32,32,32,${alpha})` : `rgba(91,49,29,${alpha})`;
+    ctx.strokeStyle = `rgba(91,49,29,${alpha})`;
     ctx.lineWidth = 0.45 + noise() * 1.6;
     ctx.beginPath();
     ctx.moveTo(0, y);
@@ -43,7 +43,7 @@ function woodGrain(ctx: CanvasRenderingContext2D, bump: boolean) {
   }
   for (const [x, y] of [[55, 78], [186, 191]] as const) {
     for (let i = 1; i <= 5; i++) {
-      ctx.strokeStyle = bump ? 'rgba(12,12,12,0.13)' : 'rgba(84,44,27,0.15)';
+      ctx.strokeStyle = 'rgba(84,44,27,0.15)';
       ctx.lineWidth = 0.85;
       ctx.beginPath();
       ctx.ellipse(x, y, i * 4.6, i * 1.4, -0.05, 0, 2 * Math.PI);
@@ -85,8 +85,7 @@ export type StallTextures = ReturnType<typeof createStallTextures>;
 
 /** Shared for the lifetime of one scene. Node can build the scene without canvases. */
 export function createStallTextures() {
-  const wood = paint(256, 256, (ctx) => woodGrain(ctx, false));
-  const woodBump = paint(256, 256, (ctx) => woodGrain(ctx, true), THREE.NoColorSpace);
+  const wood = paint(256, 256, woodGrain);
   const cloth = paint(128, 128, felt);
   const paper = paint(128, 128, washi);
   const shadow = paint(64, 64, (ctx) => {
@@ -97,13 +96,13 @@ export function createStallTextures() {
     ctx.fillStyle = ink;
     ctx.fillRect(0, 0, 64, 64);
   }, THREE.NoColorSpace);
-  for (const map of [wood, woodBump, cloth]) {
+  for (const map of [wood, cloth]) {
     if (map) map.wrapS = map.wrapT = THREE.RepeatWrapping;
   }
   return {
-    wood, woodBump, cloth, paper, shadow,
+    wood, cloth, paper, shadow,
     dispose() {
-      for (const map of [wood, woodBump, cloth, paper, shadow]) map?.dispose();
+      for (const map of [wood, cloth, paper, shadow]) map?.dispose();
     },
   };
 }

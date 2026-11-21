@@ -16,7 +16,7 @@
  *   start at once, so rapid contacts do not machine-gun (UI / result sounds
  *   are exempt from the window budget).
  */
-import type { AudioEngine, AudioSettings, SimEvent, UiCue } from '../contracts';
+import type { AudioEngine, AudioSettings, SimEvent, UiCue, Vec3 } from '../contracts';
 import { SOUNDS, soundsForSimEvent, soundsForUiCue, type SoundId, type SoundRequest, type UiCueExt, type Voice, type ExpansionUiCue } from './sounds';
 
 interface ParamLike {
@@ -61,12 +61,16 @@ export interface AudioContextLike {
   createOscillator(): OscLike;
   createBiquadFilter(): FilterLike;
   createBufferSource(): BufferSourceLike;
+  createStereoPanner?(): NodeLike & { pan: ParamLike };
+  createDynamicsCompressor?(): NodeLike & { threshold: ParamLike; ratio: ParamLike; release: ParamLike };
   createBuffer(channels: number, length: number, sampleRate: number): { getChannelData(channel: number): Float32Array };
   resume(): Promise<void>;
 }
 
 export interface AudioEngineOptions {
   readonly createContext?: () => AudioContextLike;
+  readonly festival?: boolean;
+  readonly listener?: () => Vec3;
 }
 
 export const MAX_VOICES = 12;
@@ -81,6 +85,7 @@ interface Active {
   readonly id: SoundId;
   readonly priority: 0 | 1 | 2;
   readonly bus: GainLike;
+  readonly disconnect: () => void;
   readonly sources: SourceLike[];
   readonly hold: boolean;
   readonly start: number;
@@ -111,6 +116,8 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   const seenEvents = new Set<string>();
   const seenOrder: string[] = [];
   let resumePromise: Promise<void> | null = null;
+  let dropShot: string | null = null;
+  let dropCount = 0;
 
   function ensureContext(): boolean {
     if (ctx) return true;
@@ -118,7 +125,14 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       const c = createContext();
       const m = c.createGain();
       m.gain.value = 0;
-      m.connect(c.destination);
+      const compressor = options.festival ? c.createDynamicsCompressor?.() : undefined;
+      if (compressor) {
+        compressor.threshold.value = -13;
+        compressor.ratio.value = 4;
+        compressor.release.value = .18;
+        m.connect(compressor);
+        compressor.connect(c.destination);
+      } else m.connect(c.destination);
       const len = Math.max(1, Math.floor(c.sampleRate * 0.5));
       const buf = c.createBuffer(1, len, c.sampleRate);
       const data = buf.getChannelData(0);
@@ -161,7 +175,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     try {
       if (immediate) {
         for (const s of a.sources) s.stop(0);
-        a.bus.disconnect();
+        a.disconnect();
       } else {
         a.bus.gain.cancelScheduledValues(now);
         a.bus.gain.setValueAtTime(1, now);
@@ -181,7 +195,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       if (a.end > now) keep.push(a);
       else
         try {
-          a.bus.disconnect();
+          a.disconnect();
         } catch {
           /* already gone */
         }
@@ -205,7 +219,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     }
   }
 
-  function voice(c: AudioContextLike, v: Voice, bus: GainLike, t0: number, gain: number, out: SourceLike[]): number {
+  function voice(c: AudioContextLike, v: Voice, bus: GainLike, t0: number, gain: number, out: SourceLike[], disconnect: () => void): number {
     const start = t0 + v.at;
     const end = start + v.dur;
     const env = c.createGain();
@@ -243,7 +257,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       env.disconnect();
       out.splice(out.indexOf(source), 1);
       if (out.length === 0) {
-        bus.disconnect();
+        disconnect();
         active = active.filter(a => a.bus !== bus);
       }
     };
@@ -252,7 +266,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     return end + 0.02;
   }
 
-  function play(r: SoundRequest): void {
+  function play(r: SoundRequest, point?: Vec3): void {
     if (!ctx || !master) return;
     const c = ctx;
     const def = SOUNDS[r.id];
@@ -276,12 +290,32 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     if (def.hold) stopHold();
     const bus = c.createGain();
     bus.gain.value = 1;
-    bus.connect(master);
+    const positioned = point && options.listener?.();
+    let gain = Math.min(1.3, Math.max(0.1, r.gain));
+    const nodes: NodeLike[] = [bus];
+    if (point && positioned) {
+      const dx = point.x - positioned.x;
+      const distance = Math.hypot(dx, point.y - positioned.y, point.z - positioned.z);
+      gain /= 1 + distance * .23;
+      const filter = c.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 12000 / (1 + distance * .38);
+      bus.connect(filter);
+      nodes.push(filter);
+      const panner = c.createStereoPanner?.();
+      if (panner) {
+        panner.pan.value = Math.max(-.84, Math.min(.84, dx / 2.5));
+        filter.connect(panner);
+        nodes.push(panner);
+      }
+    }
+    nodes.at(-1)!.connect(master);
+    const disconnect = () => { for (const node of nodes) node.disconnect(); };
     const sources: SourceLike[] = [];
     let end = now;
     const t0 = now + LEAD_SEC;
-    for (const v of def.voices) end = Math.max(end, voice(c, v, bus, t0, Math.min(1.3, Math.max(0.1, r.gain)), sources));
-    active.push({ id: r.id, priority: def.priority, bus, sources, hold: def.hold === true, start: now, end });
+    for (const v of def.voices) end = Math.max(end, voice(c, v, bus, t0, gain, sources, disconnect));
+    active.push({ id: r.id, priority: def.priority, bus, disconnect, sources, hold: def.hold === true, start: now, end });
     lastStart.set(r.id, now);
     if (def.priority < 2) recentStarts.push(now);
   }
@@ -319,11 +353,18 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         if (event.type === 'ui') {
           const cue = (event as UiCueExt).cue;
           if (cue === 'loadStop' || cue === 'critLatch' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
-          reqs = soundsForUiCue(event as UiCueExt);
+          reqs = soundsForUiCue(event as UiCueExt, options.festival);
+        } else if (options.festival && event.type === 'prizeReachedCollection') {
+          if (dropShot !== event.shotId) {
+            dropShot = event.shotId;
+            dropCount = 0;
+          }
+          reqs = soundsForSimEvent(event, ++dropCount);
         } else {
           reqs = soundsForSimEvent(event);
         }
-        for (const r of reqs) play(r);
+        const point = options.festival && (event.type === 'impact' || event.type === 'prizeContact') ? event.point : undefined;
+        for (const r of reqs) play(r, point);
       } catch {
         /* audio must never break the game */
       }

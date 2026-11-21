@@ -1,0 +1,98 @@
+.shot-festival {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.shot-festival-border {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 0 15%, #ffc653b8 0%, transparent 23%),
+    radial-gradient(ellipse at 100% 48%, #f89b49ae 0%, transparent 26%);
+  box-shadow: inset 0 0 0 2px #ffdc7f, inset 0 0 20px #e78e3c;
+}
+
+.shot-festival-border[data-tier='3'] {
+  background:
+    radial-gradient(ellipse at 0 0, #ffd666c9 0%, transparent 31%),
+    radial-gradient(ellipse at 100% 100%, #fb6d32ab 0%, transparent 35%);
+  box-shadow: inset 0 0 0 4px #ffdc7f, inset 0 0 28px #f8b043;
+}
+
+.shot-festival-border[data-tier='4'] {
+  background:
+    radial-gradient(ellipse at 0 0, #ffec91 0%, transparent 33%),
+    radial-gradient(ellipse at 100% 0, #fa6849d9 0%, transparent 26%),
+    radial-gradient(ellipse at 0 100%, #fa6849c9 0%, transparent 28%),
+    radial-gradient(ellipse at 100% 100%, #ffec91 0%, transparent 36%);
+  box-shadow: inset 0 0 0 5px #ffed9e, inset 0 0 38px #ffc448;
+}
+
+.shot-festival-token {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font: 900 1.6rem/1 system-ui, sans-serif;
+  white-space: nowrap;
+  -webkit-text-stroke: 1px #593319;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 4px #312012, 0 0 14px #ff713b;
+  will-change: transform, opacity;
+}
+
+.shot-festival-score {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-card[data-kind='set'] .af-card-seal {
+  background: #fff2ce;
+  box-shadow: 0 0 0 1px #9d2b21, 1px 2px 4px #7131206b;
+}
+
+.af-card[data-kind='continue'] .af-card-headline {
+  font-size: 1.22rem;
+  color: #fff0a3;
+  text-shadow: 0 0 12px #fd7c39;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-card[data-quiet='false'] .af-card-member {
+    animation: festival-member-left 410ms cubic-bezier(.17,.87,.31,1.35) both;
+  }
+  .af-card[data-quiet='false'] .af-card-member:nth-child(even) {
+    animation-name: festival-member-right;
+  }
+  .af-card[data-quiet='false'] .af-card-seal {
+    animation: festival-ink-stamp 360ms cubic-bezier(.17,.74,.42,1.23) both;
+  }
+}
+
+@keyframes festival-member-left {
+  from { opacity: 0; transform: translateX(-15px) scale(.82); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes festival-member-right {
+  from { opacity: 0; transform: translateX(15px) scale(.82); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes festival-ink-stamp {
+  from { opacity: 0; transform: rotate(-18deg) scale(1.65); }
+  55% { opacity: 1; transform: rotate(-5deg) scale(.9); }
+  to { transform: rotate(-6deg); }
+}
+
+.shot-festival-firework {
+  position: absolute;
+  aspect-ratio: 1;
+  background:
+    repeating-conic-gradient(from 7deg, currentColor 0deg 2deg, transparent 3deg 16deg);
+  mask-image: radial-gradient(circle, transparent 28%, #000 35%, #000 45%, transparent 68%);
+  filter: drop-shadow(0 0 7px currentColor);
+}

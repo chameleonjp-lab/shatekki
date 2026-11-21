@@ -190,14 +190,18 @@ const PRIZE_FINISH: Record<PrizeMaterial, { roughness: number; metalness: number
   rubber: { roughness: 0.63, metalness: 0 },
 };
 
-function createDuskPrizeMaterials(): Record<PrizeMaterial, THREE.Material> {
+function createDuskPrizeMaterials(environment: THREE.Texture | null): Record<PrizeMaterial, THREE.Material> {
   const materials = {} as Record<PrizeMaterial, THREE.Material>;
   for (const material of Object.keys(PRIZE_FINISH) as PrizeMaterial[]) {
     const finish = { ...PRIZE_FINISH[material], vertexColors: true };
     // Keep the collision silhouette visible. The coat gives glass reflections without transmission.
-    materials[material] = material === 'glass'
-      ? new THREE.MeshPhysicalMaterial({ ...finish, clearcoat: 0.7, clearcoatRoughness: 0.1 })
-      : new THREE.MeshStandardMaterial(finish);
+    if (material === 'glass') {
+      materials[material] = new THREE.MeshPhysicalMaterial({ ...finish, envMap: environment, envMapIntensity: 0.8, clearcoat: 0.7, clearcoatRoughness: 0.1 });
+    } else if (GLOSSY[material] !== undefined) {
+      materials[material] = new THREE.MeshStandardMaterial({ ...finish, envMap: environment, envMapIntensity: 0.8 });
+    } else {
+      materials[material] = new THREE.MeshLambertMaterial({ vertexColors: true });
+    }
   }
   return materials;
 }
@@ -235,9 +239,9 @@ function shapeKey(s: CollisionShape): string {
   }
 }
 
-export function createPrizeVisualFactory(duskMaterials = false): PrizeVisualFactory {
+export function createPrizeVisualFactory(duskMaterials = false, environment: THREE.Texture | null = null): PrizeVisualFactory {
   const geos = new Map<string, THREE.BufferGeometry>();
-  const mats = duskMaterials ? createDuskPrizeMaterials() : createPrizeMaterials();
+  const mats = duskMaterials ? createDuskPrizeMaterials(environment) : createPrizeMaterials();
   return {
     createMesh(spec) {
       const key = `${spec.modelKey}|${shapeKey(spec.shape)}|${PRIZE_RECIPES[spec.modelKey] ? '' : spec.material}`;

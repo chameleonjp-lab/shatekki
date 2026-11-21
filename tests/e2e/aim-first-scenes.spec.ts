@@ -24,6 +24,9 @@ for (const name of ['pair-first', 'pair-again', 'trio-first', 'pair-and-trio', '
     await aimAndFire(page, sc);
     const card = page.getByTestId('shot-card');
     await expect(card).toHaveAttribute('data-kind', 'set', { timeout: 30_000 });
+    if (name === 'pair-and-trio') {
+      await expect(page.locator('.shot-festival-border')).toHaveAttribute('data-tier', '4');
+    }
     await shot(page, info, `scene-${name}`);
     await expectCardClear(page);
     const record = await readRecordedRun(page);

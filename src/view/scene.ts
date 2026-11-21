@@ -22,6 +22,7 @@ import { createStallTextures } from './materials/procedural-textures';
 export interface SceneGraphDeps {
   readonly illustratedRewards?: boolean;
   readonly duskMaterials?: boolean;
+  readonly prizeEnvironment?: THREE.Texture | null;
   readonly layout: BoothLayout;
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
   /**
@@ -222,7 +223,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     rewardPick: deps.illustratedRewards ? createRewardPickTargets(proxyMaterial) : null,
     pickInflate,
     basePickInflate: pickInflate,
-    factory: createPrizeVisualFactory(deps.duskMaterials),
+    factory: createPrizeVisualFactory(deps.duskMaterials, deps.prizeEnvironment),
     contactShadows,
     flashes: buildFlashPool(effectsLayer),
     handledEvents: new Set(),

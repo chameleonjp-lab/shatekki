@@ -354,10 +354,10 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
   lanterns.name = 'booth:lanterns';
   group.add(lanterns);
   if (textures && paper) {
-    const woodFinish = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: textures.wood, bumpMap: textures.woodBump, bumpScale: 0.009, roughness: 0.82,
-    });
-    const feltFinish = new THREE.MeshStandardMaterial({ vertexColors: true, map: textures.cloth, roughness: 0.97 });
+    // These surfaces fill the viewport. Use the baked grain with the same inexpensive
+    // lighting as the untextured booth. Save per-pixel reflections for glossy prizes.
+    const woodFinish = new THREE.MeshLambertMaterial({ vertexColors: true, map: textures.wood });
+    const feltFinish = new THREE.MeshLambertMaterial({ vertexColors: true, map: textures.cloth });
     const lanternPaper = new THREE.MeshBasicMaterial({ vertexColors: true, map: textures.paper });
     surfaceMaterials.push(woodFinish, feltFinish, lanternPaper);
     const boards = tiledSurface(wood, woodFinish, 0.95, 0.24);

@@ -24,7 +24,6 @@ export const SETS = new Map<string, string[]>([
 ]);
 const AIM_SENSITIVITY = 0.0022;
 
-
 export async function drag(page: Page, dyaw: number, dpitch: number) {
   const box = (await page.getByTestId('aim-pad').boundingBox())!;
   const x0 = box.x + box.width / 2;
@@ -64,15 +63,39 @@ export async function aimAndFire(page: Page, sc: Scene) {
   const saved = (await readRecordedRun(page)).state.aim;
   await drag(page, sc.aim.yaw - saved.yaw, sc.aim.pitch - saved.pitch);
   await expect.poll(async () => (await readRecordedRun(page)).state.aim).toEqual(expect.objectContaining({ yaw: expect.closeTo(sc.aim.yaw, 4) }));
+  await fireWithGauge(page);
+  await expect.poll(async () => (await readRecordedRun(page)).state.shotsFired, { timeout: 15_000 }).toBe(sc.state.shotsFired + 1);
+}
+
+/**
+ * Drive the visible button with touch input while the gauge uses a controlled
+ * clock. A trusted touch does not wait for two stable animation frames while
+ * that clock is paused, and the final tap still goes through the real handler.
+ */
+export async function fireWithGauge(page: Page) {
   const btn = page.getByTestId('btn-fire');
+  const tap = async () => {
+    await expect(btn).toBeVisible();
+    await expect(btn).toBeEnabled();
+    const box = await btn.boundingBox();
+    if (!box) throw new Error('The visible fire control has no touch area');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const reachable = await btn.evaluate((el, point) => el.contains(el.ownerDocument.elementFromPoint(point.x, point.y)), { x, y });
+    if (!reachable) throw new Error('The fire control is covered');
+    await page.touchscreen.tap(x, y);
+  };
   await holdClock(page);
-  await btn.tap();
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
-  for (let i = 0; i < 6; i++) await page.clock.runFor(100);
-  await expect(page.getByTestId('load-label')).toHaveAttribute('data-tier', /^(good|perfect)$/);
-  await btn.tap();
-  await page.clock.resume();
-  await expect.poll(async () => (await readRecordedRun(page)).state.shotsFired).toBe(sc.state.shotsFired + 1);
+  try {
+    await tap();
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
+    // The UI and game clocks both advance through the same animation frames.
+    await page.clock.runFor(600);
+    await expect(page.getByTestId('load-label')).toHaveAttribute('data-tier', /^(good|perfect)$/);
+    await tap();
+  } finally {
+    await page.clock.resume();
+  }
 }
 
 type Rect = { x: number; y: number; width: number; height: number };
