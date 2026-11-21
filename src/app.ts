@@ -307,7 +307,13 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   stale.hidden = true;
   stale.textContent = i18n.t('app.error.stale');
 
-  root.append(canvas, ui, screens, overlay, resumeBox, notice, rotate, stale);
+  const recovery = doc.createElement('section');
+  recovery.className = 'save-dialog';
+  recovery.dataset.testid = 'save-dialog';
+  recovery.hidden = true;
+  recovery.setAttribute('role', 'alert');
+
+  root.append(canvas, ui, screens, overlay, resumeBox, notice, rotate, stale, recovery);
 
   // ------------------------------------------------------------ state
   let screen: Screen = 'home';
@@ -940,13 +946,6 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       },
       initial,
     );
-
-  const recovery = doc.createElement('section');
-  recovery.className = 'save-dialog';
-  recovery.dataset.testid = 'save-dialog';
-  recovery.hidden = true;
-  recovery.setAttribute('role', 'alert');
-  root.append(recovery);
 
   const savePrompt = (key: UiKey, retry?: () => void, conflict = false) => {
     encoreDialog?.close();
