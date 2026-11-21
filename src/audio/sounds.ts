@@ -102,13 +102,16 @@ export const FESTIVAL_GIMMICK_SOUNDS = {
   ]),
 
   'festival.bell.1': def(2, 0.12, [
-    t('sine', 587, 0, 0.34, 0.34), t('sine', 1620, 0, 0.18, 0.15), n('highpass', 5800, 0, 0.03, 0.12),
+    t('sine', 587, 0, .34, .34), t('sine', 1620, 0, .18, .15), t('sine', 2465, 0, .105, .075),
+    n('highpass', 5800, 0, .03, .12),
   ]),
   'festival.bell.2': def(2, 0.12, [
-    t('sine', 659, 0, 0.34, 0.36), t('sine', 1819, 0, 0.18, 0.16), n('highpass', 6000, 0, 0.03, 0.12),
+    t('sine', 659, 0, .34, .36), t('sine', 1819, 0, .18, .16), t('sine', 2768, 0, .105, .078),
+    n('highpass', 6000, 0, .03, .12),
   ]),
   'festival.bell.3': def(2, 0.12, [
-    t('sine', 880, 0, 0.38, 0.38), t('sine', 2429, 0, 0.20, 0.18), n('highpass', 6400, 0, 0.035, 0.14),
+    t('sine', 880, 0, .38, .38), t('sine', 2429, 0, .20, .18), t('sine', 3696, 0, .11, .081),
+    n('highpass', 6400, 0, .035, .14),
   ]),
   'festival.bell.wrong': def(1, 0.15, [
     t('sine', 420, 0, 0.08, 0.30, 310),
@@ -292,16 +295,17 @@ export const SOUNDS = {
   'lastShot.hayashi': def(2, 0.6, [t('sine', 1568, 0, 0.1, 0.24, 1760), t('sine', 1760, 0.1, 0.1, 0.24), t('sine', 2093, 0.2, 0.22, 0.24), t('sine', 140, 0, 0.12, 0.45, 90), t('sine', 140, 0.22, 0.12, 0.4, 90)]),
   // Internal candidate: trigger, falling cork pop and a short wooden tail.
   'festival.fire': def(2, 0.08, [
-    n('highpass', 3900, 0, .018, .26),
-    t('triangle', 1340, 0, .024, .11, 670),
-    n('bandpass', 1460, .012, .051, .39, 1.45),
-    t('sine', 385, .012, .081, .45, 81),
-    t('triangle', 177, .026, .088, .17, 54),
+    n('bandpass', 4080, 0, .021, .30, 3.6),
+    t('triangle', 1510, 0, .029, .12, 630),
+    n('bandpass', 1520, .012, .053, .43, 1.6),
+    t('sine', 430, .012, .086, .46, 91),
+    n('bandpass', 780, .034, .064, .20, 2.4),
+    t('triangle', 194, .034, .098, .21, 64),
   ]),
   'festival.creak': def(1, .12, [n('bandpass', 495, 0, .23, .31, 2.8), t('triangle', 106, 0, .18, .23, 64), n('lowpass', 330, .035, .16, .27)]),
-  'festival.drop.1': def(1, .06, [t('triangle', 850, 0, .085, .24, 650), n('bandpass', 2500, 0, .024, .11, 2)]),
-  'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .26), t('triangle', 1568, .065, .125, .13)]),
-  'festival.drop.3': def(1, .08, [t('sine', 146, 0, .2, .48, 60), t('triangle', 1568, .064, .16, .19)]),
+  'festival.drop.1': def(1, .06, [n('bandpass', 2840, 0, .025, .24, 3.5), t('sine', 810, .003, .069, .22, 560)]),
+  'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .23, 1319), t('sine', 1568, .063, .14, .19, 1760)]),
+  'festival.drop.3': def(1, .08, [t('sine', 146, 0, .22, .48, 60), n('lowpass', 480, 0, .09, .15), t('sine', 1760, .062, .19, .21, 1976)]),
   'festival.drop.4': def(1, .1, [t('sine', 132, 0, .25, .52, 55), t('sine', 120, .11, .24, .34, 52), t('sine', 1976, .13, .25, .21), t('sine', 3370, .12, .13, .10)]),
   // ---- settlement
   collectDrop: def(0, 0.1, [t('sine', 700, 0, 0.08, 0.2, 300)]),
