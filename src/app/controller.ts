@@ -328,6 +328,7 @@ export class GameController {
           ? {
               expanded: {
                 modifiers: active.modifiers,
+                ...(this.deps.expansion?.profile.festivalChallenges ? { festivalChallenges: true as const } : {}),
                 usableCells: after.expansion.cells.filter((c) => !c.used).map((c) => c.cellId),
                 ...(after.expansion.rewards
                   ? {

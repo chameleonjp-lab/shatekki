@@ -27,7 +27,7 @@ const project = ({ x, y, z }: Vec3) => ({ x: x + .47 * z, y: -y + .31 * z });
 
 function shotPath(doc: Document, replay: ShotReplay, label: string, compact = false): SVGSVGElement {
   const svg = doc.createElementNS(SVG, 'svg');
-  const tracks = replay.tracks.map(track => ({ points: track.points.map(project), contacts: track.contacts.map(project) }));
+  const tracks = replay.tracks.map(track => ({ points: track.points.map(project), contacts: track.contacts.map(c => ({ ...project(c.position), kind: c.kind })) }));
   const all = tracks.flatMap(track => track.points);
   const left = Math.min(...all.map(p => p.x));
   const right = Math.max(...all.map(p => p.x));
@@ -50,8 +50,9 @@ function shotPath(doc: Document, replay: ShotReplay, label: string, compact = fa
     line.style.setProperty('--branch', String(index));
     line.classList.add(index === 0 ? 'main' : 'branch');
     svg.append(line);
-    for (const { x, y } of track.contacts) {
+    for (const { x, y, kind } of track.contacts) {
       const contact = doc.createElementNS(SVG, 'circle');
+      contact.classList.add(kind);
       contact.setAttribute('cx', String(toSvgX(x)));
       contact.setAttribute('cy', String(toSvgY(y)));
       contact.setAttribute('r', compact ? '2.2' : '3.1');

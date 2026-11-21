@@ -25,8 +25,12 @@ import aimFirstProfiles from '../../data/expansion-v2/aim-first-profile.json';
 import { BOOTH_LAYOUT_V3 } from '../contracts/layout-v3';
 import type { AimFirstConfig, EffectDef, EffectId, ExpansionCatalog } from '../contracts';
 
-type ProfileKey = keyof typeof nextProfiles | keyof typeof aimFirstProfiles;
-const PROFILES: Readonly<Record<ProfileKey, (typeof nextProfiles)[keyof typeof nextProfiles] & { readonly controls?: string }>> = { ...nextProfiles, ...aimFirstProfiles };
+type AimFirstKey = keyof typeof aimFirstProfiles | 'expanded-festival';
+type ProfileKey = keyof typeof nextProfiles | AimFirstKey;
+const PROFILES: Readonly<Record<ProfileKey, (typeof nextProfiles)[keyof typeof nextProfiles] & { readonly controls?: string }>> = {
+  ...nextProfiles, ...aimFirstProfiles,
+  'expanded-festival': { ...aimFirstProfiles['expanded-aim-first'], rulesVersion: 'rules-v2-proposed-r008' },
+};
 
 function isNextProfile(key: ExpandedBundleKey): key is ProfileKey {
   return Object.hasOwn(PROFILES, key);
@@ -46,7 +50,7 @@ function behaviorFor(key: ProfileKey): GameplayBehavior {
 export const EXPANSION_RAW_DATA = { pairSets, questions, groups, effects, series, profile } as const;
 
 /** Internal prototype keys, each an exact build-time value. */
-export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next', 'expanded-aim-first'] as const;
+export const EXPANDED_BUNDLE_KEYS = ['expanded-proposed', 'expanded-trial', 'expanded-full', 'expanded-save-trial', 'expanded-placement-trial', 'expanded-next', 'expanded-aim-first', 'expanded-festival'] as const;
 export type ExpandedBundleKey = (typeof EXPANDED_BUNDLE_KEYS)[number];
 
 /**
@@ -95,19 +99,20 @@ const OFFICIAL: GameplayBundle = Object.freeze({
 
 const expandedCache = new Map<ExpandedBundleKey, GameplayBundle>();
 
-const isAimFirst = (key: ExpandedBundleKey): key is keyof typeof aimFirstProfiles => Object.hasOwn(aimFirstProfiles, key);
+const isAimFirst = (key: ExpandedBundleKey): key is AimFirstKey => key === 'expanded-festival' || Object.hasOwn(aimFirstProfiles, key);
+const aimProfile = (key: AimFirstKey) => aimFirstProfiles[key === 'expanded-festival' ? 'expanded-aim-first' : key];
 
 /**
  * r007: FX012/013/035/036 widen or narrow the power zones instead of the hand sway, with their own
  * names. The other 96 effects and every other version keep their data.
  */
-function aimFirstEffects(key: keyof typeof aimFirstProfiles): typeof effects {
-  const zones: Readonly<Record<string, number>> = aimFirstProfiles[key].powerZoneEffects;
+function aimFirstEffects(key: AimFirstKey): typeof effects {
+  const zones: Readonly<Record<string, number>> = aimProfile(key).powerZoneEffects;
   return effects.map((e) => (e.id in zones ? { ...e, operation: { kind: 'shotModifiers', set: { powerZoneWidthMult: zones[e.id]! } } } : e)) as typeof effects;
 }
 
-function withAimFirst(key: keyof typeof aimFirstProfiles, expansion: ExpansionCatalog): ExpansionCatalog {
-  const p = aimFirstProfiles[key];
+function withAimFirst(key: AimFirstKey, expansion: ExpansionCatalog): ExpansionCatalog {
+  const p = aimProfile(key);
   const renamed = new Map<EffectId, EffectDef>();
   for (const [id, def] of expansion.effects) {
     renamed.set(id, id in p.powerZoneEffects ? Object.freeze({ ...def, nameKey: `exp.fx.${id}.r007.name`, resultKey: `exp.fx.${id}.r007.result` }) : def);
@@ -116,14 +121,14 @@ function withAimFirst(key: keyof typeof aimFirstProfiles, expansion: ExpansionCa
   return Object.freeze({
     ...expansion,
     effects: Object.freeze(renamed),
-    profile: Object.freeze({ ...expansion.profile, cellCount: 100 as const, aimFirst: Object.freeze(aimFirst) }),
+    profile: Object.freeze({ ...expansion.profile, cellCount: 100 as const, aimFirst: Object.freeze(aimFirst), ...(key === 'expanded-festival' ? { festivalChallenges: true as const } : {}) }),
   });
 }
 
 function buildExpandedBundle(key: ExpandedBundleKey): GameplayBundle {
   const version = rewardsFor(key);
   const aimFirst = isAimFirst(key);
-  const limits = aimFirst ? { ...profile.limits, powerZoneWidthMult: aimFirstProfiles[key].powerZoneWidthMult } : profile.limits;
+  const limits = aimFirst ? { ...profile.limits, powerZoneWidthMult: aimProfile(key).powerZoneWidthMult } : profile.limits;
   const raw = { ...EXPANSION_RAW_DATA, ...(aimFirst ? { effects: aimFirstEffects(key) } : {}), profile: { ...profile, limits, rulesVersion: version.rulesVersion } };
   const built = buildExpansion(RELEASE_CATALOG, raw);
   const catalog = built.catalog;

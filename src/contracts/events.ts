@@ -231,6 +231,8 @@ export interface CollectedPrize {
   readonly shotId: ShotId;
 }
 
+export type FestivalChallenge = 'three-shelves' | 'fan-tray';
+
 export interface ShotSummary {
   readonly runId: RunId;
   readonly shotId: ShotId;
@@ -272,6 +274,8 @@ export interface ShotSummary {
   readonly parts?: readonly PartOutcome[];
   /** r007: what the shot really touched and where a cork that touched nothing left (never re-derived from the picture). */
   readonly facts?: ShotFacts;
+  /** r008 achievements confirmed from the shot, in display order. */
+  readonly festivalChallenges?: readonly FestivalChallenge[];
 }
 
 /** r007: the contact that explains a shot best, picked from the sim's real contacts. */
