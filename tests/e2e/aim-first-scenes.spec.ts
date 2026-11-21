@@ -145,6 +145,7 @@ test('T20 the last cork earns a replay and a prize shelf that survives a reload'
   const beforeFire = { ...sc.state, ammo: 1, bonusAmmoTotal: 10, ammoLostTotal: 19 };
   await restoreShotStart(page, { beforeFire, gameTick: 0 }, sc.discovered, 1);
   await aimAndFire(page, sc);
+  await page.getByTestId('shopq-choice-A').click({ timeout: 25_000 });
   await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 30_000 });
   const recorded = await readRecordedRun(page);
   expect(recorded.result?.collected.length).toBeGreaterThan(0);
