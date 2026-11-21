@@ -1,15 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { asPrizeTypeId, mintId, SIM_EVENT_TYPES, type ImpactTarget, type SimEvent, type UiCue } from '../../src/contracts';
 import { createAudioEngine, type AudioContextLike } from '../../src/audio/engine';
 import { SOUNDS, SIM_EVENT_POLICY, UI_CUE_SOUND, EXPANSION_CUE_NAMES, effectCueFor, effectFeel, soundsForSimEvent, soundsForUiCue, type SoundId } from '../../src/audio/sounds';
+import { resolveFestivalBgmScene } from '../../src/audio/festival-bgm';
 
 // ------------------------------------------------------------- fake WebAudio
 class FakeParam {
   value = 0;
-  setValueAtTime() {
+  targets: number[] = [];
+  setValueAtTime(v?: number) {
+    if (v !== undefined) this.targets.push(v);
     return this;
   }
-  linearRampToValueAtTime() {
+  linearRampToValueAtTime(v?: number) {
+    if (v !== undefined) this.targets.push(v);
     return this;
   }
   exponentialRampToValueAtTime() {
@@ -28,17 +32,22 @@ class FakeNode {
   buffer: unknown = null;
   started = false;
   stopped = false;
+  startAt: number | undefined;
+  stopAt: number | undefined;
+  loop = false;
   onended: (() => void) | null = null;
   connect(n: unknown) {
     this.connected.push(n);
     return n;
   }
   disconnect() { this.connected.length = 0; }
-  start() {
+  start(at?: number) {
     this.started = true;
+    this.startAt = at;
   }
-  stop() {
+  stop(at?: number) {
     this.stopped = true;
+    this.stopAt = at;
   }
 }
 class FakeCtx implements AudioContextLike {
@@ -50,6 +59,7 @@ class FakeCtx implements AudioContextLike {
   sources: FakeNode[] = [];
   resumeCalls = 0;
   resumeFails = false;
+  stateChange: (() => void) | undefined;
   mk(): FakeNode {
     const n = new FakeNode();
     this.nodes.push(n);
@@ -73,6 +83,12 @@ class FakeCtx implements AudioContextLike {
   }
   createBuffer(_c: number, len: number) {
     return { getChannelData: () => new Float32Array(len) } as never;
+  }
+  addEventListener(_type: 'statechange', listener: () => void) {
+    this.stateChange = listener;
+  }
+  removeEventListener() {
+    this.stateChange = undefined;
   }
   resume() {
     this.resumeCalls++;
@@ -258,7 +274,7 @@ describe('mapping covers every event and cue', () => {
   });
 
   it('every UiCue maps to a defined sound', () => {
-    const cues: UiCue['cue'][] = ['select', 'confirm', 'cancel', 'start', 'loadStart', 'loadStop', 'fire', 'resultShow', 'newBest', 'setDiscovered', 'setComplete', 'runEnd', 'miss', 'nearMiss', 'collect', 'penalty', 'ammoBonus'];
+    const cues = ['select', 'confirm', 'cancel', 'start', 'loadStart', 'loadStop', 'fire', 'resultShow', 'newBest', 'setDiscovered', 'setComplete', 'runEnd', 'miss', 'nearMiss', 'collect', 'penalty', 'ammoBonus'] as const satisfies readonly UiCue['cue'][];
     for (const c of cues) {
       expect(UI_CUE_SOUND[c], c).toBeDefined();
       for (const r of soundsForUiCue({ type: 'ui', cue: c })) expect(SOUNDS[r.id], r.id).toBeDefined();
@@ -313,14 +329,42 @@ describe('mapping covers every event and cue', () => {
     const dropCues = [0, 1, 2, 3, 4, 9].map(count => soundsForSimEvent(collected, count)[0]!.id);
     expect(dropCues).toEqual(['collectDrop', 'festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4', 'festival.drop.4']);
     for (const id of dropCues) reachable.add(id);
-    for (const r of soundsForUiCue({ type: 'ui', cue: 'fire' }, true)) reachable.add(r.id);
+    for (const cue of Object.keys(UI_CUE_SOUND) as (keyof typeof UI_CUE_SOUND)[]) {
+      for (const r of soundsForUiCue({ type: 'ui', cue }, true)) reachable.add(r.id);
+    }
+    for (const tier of ['perfect', 'good', 'normal', 'weak'] as const) {
+      for (const r of soundsForUiCue({ type: 'ui', cue: 'loadStop', tier }, true)) reachable.add(r.id);
+    }
+    const challenge = { type: 'ui', cue: 'festivalChallenge' } as const;
+    expect(soundsForUiCue(challenge)).toEqual([]);
+    for (const r of soundsForUiCue(challenge, true)) reachable.add(r.id);
+    for (const part of ['hat', 'fan', 'body', 'feet'] as const) {
+      for (const r of soundsForSimEvent(impact({ kind: 'shopkeeper', part }), 0, true)) reachable.add(r.id);
+    }
+    const tray = impact({ kind: 'surface', surfaceId: 'reflector-tray', material: 'metal' }, { reflectionIndex: 1 });
+    expect(soundsForSimEvent(tray).map(r => r.id)).toEqual(['hit.metal', 'reflect']);
+    const previewTray = soundsForSimEvent(tray, 0, true).map(r => r.id);
+    expect(previewTray).toEqual(['festival.reflect.tray']);
+    for (const id of previewTray) reachable.add(id);
     const signal = { type: 'festival', eventId: mintId.event(s1, 8), shotId: s1, point: { x: 0, y: 0, z: 0 } } as const;
     const bells = [1, 2, 3].map(amount => soundsForSimEvent({ ...signal, mark: 'bell', amount })[0]!.id);
     expect(bells).toEqual(['festival.bell.1', 'festival.bell.2', 'festival.bell.3']);
     for (const id of bells) reachable.add(id);
-    for (const mark of ['bell-open', 'giant-slide', 'giant-drop', 'fuse'] as const) {
-      for (const r of soundsForSimEvent({ ...signal, mark, amount: .1 })) reachable.add(r.id);
+    const markSounds = {
+      lantern: 'festival.lantern.1', relay: 'festival.relay', red: 'festival.kohaku.red', white: 'festival.kohaku.white',
+      'red-white': 'festival.kohaku.both', bell: 'festival.bell.1', 'bell-wrong': 'festival.bell.wrong',
+      'bell-open': 'festival.open', 'bell-prize': 'festival.bell.prize', 'eye-left': 'festival.daruma.eye',
+      'eye-right': 'festival.daruma.eye', daruma: 'festival.daruma.done', 'giant-slide': 'festival.creak',
+      'giant-drop': 'festival.giant.drop', fuse: 'festival.fuse', encore: 'festival.encore',
+    } as const satisfies Record<Extract<SimEvent, { type: 'festival' }>['mark'], SoundId>;
+    for (const mark of Object.keys(markSounds) as (keyof typeof markSounds)[]) {
+      const ids = soundsForSimEvent({ ...signal, mark }).map(r => r.id);
+      expect(ids, mark).toEqual([markSounds[mark]]);
+      for (const id of ids) reachable.add(id);
     }
+    const secondLantern = soundsForSimEvent({ ...signal, mark: 'lantern', amount: 2 })[0]!.id;
+    expect(secondLantern).toBe('festival.lantern.2');
+    reachable.add(secondLantern);
     for (const r of soundsForSimEvent({ type: 'prizeTransformed', eventId: mintId.event(s1, 4), shotId: s1, instanceId: mintId.instance(1), fromTypeId: asPrizeTypeId('P001'), toTypeId: asPrizeTypeId('P002'), hpBefore: 1, maxHpBefore: 1, hpAfter: 1, maxHpAfter: 1 })) reachable.add(r.id);
     for (const a of [true, false]) for (const r of soundsForSimEvent(impact({ kind: 'cell', cellId: 'cell-r1-c01' as never, activated: a }))) reachable.add(r.id);
     for (const c of EXPANSION_CUE_NAMES) for (const r of soundsForUiCue({ type: 'ui', cue: c })) reachable.add(r.id);
@@ -338,6 +382,86 @@ describe('mapping covers every event and cue', () => {
   it('a chain of 2+ adds the chain sound to the collect cue', () => {
     expect(soundsForUiCue({ type: 'ui', cue: 'collect' }).map((r) => r.id)).toEqual(['collect']);
     expect(soundsForUiCue({ type: 'ui', cue: 'collect', count: 3 } as never).map((r) => r.id)).toEqual(['collect', 'chain']);
+  });
+});
+
+describe('festival score lifecycle', () => {
+  it('selects all seven arrangements, including the offered and accepted encore and the last aiming state', () => {
+    expect(resolveFestivalBgmScene('home', false, undefined, 0, undefined)).toBe('home');
+    expect(resolveFestivalBgmScene('game', false, 'aiming', 2, 'idle')).toBe('aiming');
+    expect(resolveFestivalBgmScene('game', false, 'loading', 1, 'idle')).toBe('loading');
+    expect(resolveFestivalBgmScene('game', false, 'resolving', 1, 'ready')).toBe('resolving');
+    expect(resolveFestivalBgmScene('game', false, 'aiming', 1, 'declined')).toBe('lastShot');
+    for (const status of ['offered', 'ready'] as const) {
+      expect(resolveFestivalBgmScene('game', false, 'aiming', 1, status)).toBe('encore');
+    }
+    expect(resolveFestivalBgmScene('result', false, 'ended', 0, 'spent')).toBe('result');
+    expect(resolveFestivalBgmScene('game', true, 'aiming', 1, 'offered')).toBe('off');
+    expect(resolveFestivalBgmScene('resume', false, undefined, 0, undefined)).toBe('off');
+  });
+
+  it('waits for a gesture, cancels future notes when switching scenes, and clears the scheduler and ambience on mute', async () => {
+    vi.useFakeTimers();
+    const ctx = new FakeCtx();
+    ctx.state = 'suspended';
+    const engine = createAudioEngine({ createContext: () => ctx, festival: true });
+    try {
+      engine.setBgmScene!('home', ON);
+      expect(ctx.nodes).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await engine.unlock();
+      expect(ctx.resumeCalls).toBe(1);
+      const home = [...ctx.sources];
+      expect(home.some(source => source.loop)).toBe(true);
+      expect(home.some(source => (source.startAt ?? 0) > ctx.currentTime)).toBe(true);
+      expect(vi.getTimerCount()).toBe(1);
+      engine.setBgmScene!('loading', ON);
+      expect(home.every(source => source.stopAt === undefined && source.connected.length === 0)).toBe(true);
+      expect(ctx.sources.length).toBeGreaterThan(home.length);
+      expect(vi.getTimerCount()).toBe(1);
+      engine.setBgmScene!('loading', { enabled: true, volume: 0 });
+      expect(ctx.sources.every(source => source.stopAt === undefined && source.connected.length === 0)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      ctx.currentTime = 100;
+      vi.advanceTimersByTime(500);
+      const before = ctx.sources.length;
+      engine.setBgmScene!('lastShot', ON);
+      const restored = ctx.sources.slice(before);
+      expect(restored.length).toBeGreaterThan(0);
+      expect(restored.every(source => source.startAt! >= 100)).toBe(true);
+    } finally {
+      engine.dispose!();
+      vi.useRealTimers();
+    }
+  });
+
+  it('ducks on a festival flourish, halts on interruption, and drops effects while suspended', async () => {
+    vi.useFakeTimers();
+    const ctx = new FakeCtx();
+    const engine = createAudioEngine({ createContext: () => ctx, festival: true });
+    try {
+      engine.setBgmScene!('aiming', ON);
+      await engine.unlock();
+      engine.handle({ type: 'ui', cue: 'newBest' }, ON);
+      expect(ctx.nodes.some(node => node.gain.targets.includes(.5) && node.gain.targets.at(-1) === 1)).toBe(true);
+      const before = ctx.sources.length;
+      ctx.state = 'suspended';
+      ctx.stateChange!();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(ctx.sources.every(source => !source.connected.length || source.stopAt === 0)).toBe(true);
+      engine.handle({ type: 'ui', cue: 'setComplete' }, ON);
+      expect(ctx.sources.length).toBe(before);
+      expect(ctx.resumeCalls).toBe(0);
+      await engine.unlock();
+      expect(ctx.sources.length).toBeGreaterThan(before);
+      expect(vi.getTimerCount()).toBe(1);
+      engine.silence();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      engine.dispose!();
+      expect(ctx.stateChange).toBeUndefined();
+      vi.useRealTimers();
+    }
   });
 });
 

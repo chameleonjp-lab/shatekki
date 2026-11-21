@@ -124,12 +124,14 @@ export type UiCue =
         // P5: a metal latch at the same moment as the perfect-load sound.
         | 'critLatch' | 'windChime'
         /** r007: the shopkeeper's speech bubble appeared. */
-        | 'speech';
+        | 'speech' | 'festivalChallenge';
       /** loadStop: the load quality, so the stop sound can differ. */
       readonly tier?: LoadTier;
       /** collect: prizes collected in the shot (chain count). */
       readonly count?: number;
     };
+
+export type FestivalBgmScene = 'off' | 'home' | 'aiming' | 'loading' | 'resolving' | 'lastShot' | 'encore' | 'result';
 
 export interface AudioEngine {
   /** Must be callable from a user gesture to unlock/resume the audio context. */
@@ -137,6 +139,8 @@ export interface AudioEngine {
   handle(event: SimEvent | UiCue, settings: AudioSettings): void;
   /** Stop everything now and drop queued sounds (used on pause/hide, AC36). */
   silence(): void;
+  setBgmScene?(scene: FestivalBgmScene, settings: AudioSettings): void;
+  dispose?(): void;
 }
 
 export type SubmitState = 'idle' | 'submitting' | 'submitted' | 'retryable_failed' | 'permanent_failed' | 'not_eligible';

@@ -66,6 +66,7 @@ import { createRankingService } from './ranking/client';
 import { publicLinks, RANKING_CONFIG } from './ranking/config';
 import { normalizePlayerName } from './ranking/name';
 import { createAudioEngine, effectCueFor } from './audio';
+import { resolveFestivalBgmScene } from './audio/festival-bgm';
 import type { AudioSettings, GameCommand, UiCue } from './contracts';
 
 /** Commands still taken while the r007 talk panel is open. */
@@ -343,6 +344,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   let disposed = false;
   let starting = false;
 
+  const syncFestivalMusic = (state = controller?.current) => {
+    if (!audio.setBgmScene || disposed) return;
+    const paused = reasons.length > 0 || !recovery.hidden || (screen === 'game' && !!state?.pauseReasons.length);
+    audio.setBgmScene(resolveFestivalBgmScene(screen, paused, state?.phase, state?.ammo ?? 0, state?.expansion?.festival?.encore), audioSettings);
+  };
+
   const setScreen = (s: Screen) => {
     bookRequest++;
     if (s !== 'game') {
@@ -355,6 +362,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     root.dataset.screen = s;
     ui.hidden = s !== 'game';
     resumeBox.hidden = s !== 'resume';
+    syncFestivalMusic();
   };
 
   const clearScreen = () => {
@@ -380,6 +388,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       afPanel?.cancelGestures();
     }
     controller?.setEnvironmentPause(reasons);
+    syncFestivalMusic();
   };
   const onResize = () => {
     updateEnv();
@@ -411,6 +420,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   // ------------------------------------------------------------ game
   const rewardCfg = expansion?.profile.rewards ?? null;
   const onChange = (snap: ControllerSnapshot) => {
+    syncFestivalMusic(snap.state);
     if (afPanel) {
       afPanel.update({ state: snap.state, view: snap.view, maxBonusAmmo: tuning.maxBonusAmmoTotal }, !!controller?.persistencePending);
       talkPanel?.update(snap.view.aimFirst?.talk);
@@ -848,6 +858,9 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         onConfirmed: (event) => {
           if (festivalPreview && event.kind === 'shot' && !event.replayed) {
             renderer?.presentFestivalShot(event.summary, event.freshSets.length, event.ammoBeforeShot, event.reducedMotion);
+            if (event.summary.festivalChallenges?.length || event.summary.festival?.domino.length) {
+              cue('festivalChallenge');
+            }
           }
           rewardMotions?.presentRewardMotion(event);
         },
@@ -940,6 +953,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     recovery.replaceChildren();
     recovery.hidden = false;
     root.dataset.saving = key;
+    syncFestivalMusic();
     ui.inert = screens.inert = resumeBox.inert = true;
     panel?.cancelGestures();
     const message = doc.createElement('p');
@@ -980,6 +994,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     ui.inert = screens.inert = resumeBox.inert = false;
     if (talkPanel?.isOpen) ui.inert = true;
     lastTs = 0;
+    syncFestivalMusic();
   };
 
   const saveError = (error: unknown, retry: () => void) => {
@@ -1133,6 +1148,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           audioSettings = settingsStore.save({ audio: next }).audio;
           if (!audioSettings.enabled || audioSettings.volume <= 0) audio.silence();
           else cue('select');
+          syncFestivalMusic();
         },
         onOpenSetBook: openSetBook,
       },
@@ -1484,6 +1500,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
       doc.removeEventListener('visibilitychange', updateEnv);
       unsubLocale();
       audio.silence();
+      audio.dispose?.();
       root.removeEventListener('pointerdown', unlockAudio, { capture: true });
       root.removeEventListener('keydown', unlockAudio, { capture: true });
       clearScreen();
