@@ -16,8 +16,9 @@
  *   start at once, so rapid contacts do not machine-gun (UI / result sounds
  *   are exempt from the window budget).
  */
-import type { AudioEngine, AudioSettings, SimEvent, UiCue, Vec3 } from '../contracts';
+import type { AudioEngine, AudioSettings, FestivalBgmScene, SimEvent, UiCue, Vec3 } from '../contracts';
 import { SOUNDS, soundsForSimEvent, soundsForUiCue, type SoundId, type SoundRequest, type UiCueExt, type Voice, type ExpansionUiCue } from './sounds';
+import { createFestivalBgm } from './festival-bgm';
 
 interface ParamLike {
   value: number;
@@ -26,14 +27,14 @@ interface ParamLike {
   exponentialRampToValueAtTime(v: number, t: number): unknown;
   cancelScheduledValues(t: number): unknown;
 }
-interface NodeLike {
+export interface NodeLike {
   connect(n: unknown): unknown;
   disconnect(): void;
 }
 interface GainLike extends NodeLike {
   gain: ParamLike;
 }
-interface SourceLike extends NodeLike {
+export interface SourceLike extends NodeLike {
   onended: (() => void) | null;
   start(t?: number): void;
   stop(t?: number): void;
@@ -49,6 +50,7 @@ interface FilterLike extends NodeLike {
 }
 interface BufferSourceLike extends SourceLike {
   buffer: unknown;
+  loop: boolean;
 }
 
 /** The slice of AudioContext this engine uses (a fake implements it in tests). */
@@ -63,8 +65,12 @@ export interface AudioContextLike {
   createBufferSource(): BufferSourceLike;
   createStereoPanner?(): NodeLike & { pan: ParamLike };
   createDynamicsCompressor?(): NodeLike & { threshold: ParamLike; ratio: ParamLike; release: ParamLike };
+  createDelay?(maxDelayTime: number): NodeLike & { delayTime: ParamLike };
   createBuffer(channels: number, length: number, sampleRate: number): { getChannelData(channel: number): Float32Array };
   resume(): Promise<void>;
+  close?(): Promise<void>;
+  addEventListener?(type: 'statechange', listener: () => void): void;
+  removeEventListener?(type: 'statechange', listener: () => void): void;
 }
 
 export interface AudioEngineOptions {
@@ -80,6 +86,13 @@ const WINDOW_BUDGET_LOW = 4;
 const WINDOW_BUDGET_MID = 6;
 const LEAD_SEC = 0.005;
 const FADE_SEC = 0.03;
+const MAX_FESTIVAL_EFFECT_SOURCES = 52;
+const REFLECTION_TAIL_SEC = .047;
+const DUCK_SOUNDS = new Set<SoundId>([
+  'festival.set.complete', 'festival.set.discovered', 'festival.newBest', 'take.taiko',
+  'festival.relay', 'festival.daruma.done', 'festival.giant.drop', 'festival.fuse',
+  'festival.encore', 'festival.lastShot', 'festival.challenge',
+]);
 
 interface Active {
   readonly id: SoundId;
@@ -109,6 +122,15 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   const createContext = options.createContext ?? defaultCreateContext;
   let ctx: AudioContextLike | null = null;
   let master: GainLike | null = null;
+  let effects: GainLike | null = null;
+  let wet: GainLike | null = null;
+  let wetBlockedUntil = 0;
+  let festivalNodes: NodeLike[] = [];
+  let music: ReturnType<typeof createFestivalBgm> | null = null;
+  let scene: FestivalBgmScene = 'off';
+  let musicSettings: AudioSettings = { enabled: false, volume: 0 };
+  let disposed = false;
+  let variation = 0x97e743a1;
   let noise: { getChannelData(c: number): Float32Array } | null = null;
   let active: Active[] = [];
   const lastStart = new Map<SoundId, number>();
@@ -120,6 +142,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   let dropCount = 0;
 
   function ensureContext(): boolean {
+    if (disposed) return false;
     if (ctx) return true;
     try {
       const c = createContext();
@@ -146,12 +169,53 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       ctx = c;
       master = m;
       noise = buf;
+      if (options.festival) {
+        const send = c.createGain();
+        send.gain.value = 1;
+        send.connect(m);
+        effects = send;
+        festivalNodes = compressor ? [send, compressor] : [send];
+        if (c.createDelay) {
+          const returnBus = c.createGain();
+          const filter = c.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 5200;
+          for (const [time, amount] of [[.029, .085], [REFLECTION_TAIL_SEC, .055]] as const) {
+            const echo = c.createDelay(.08);
+            const level = c.createGain();
+            echo.delayTime.value = time;
+            level.gain.value = amount;
+            send.connect(echo);
+            echo.connect(level);
+            level.connect(filter);
+            festivalNodes.push(echo, level);
+          }
+          filter.connect(returnBus);
+          returnBus.connect(m);
+          wet = returnBus;
+          festivalNodes.push(filter, returnBus);
+        }
+        music = createFestivalBgm(c, m, buf);
+        c.addEventListener?.('statechange', onContextStateChange);
+      }
       return true;
     } catch {
       ctx = null;
       master = null;
       return false;
     }
+  }
+
+  function syncMusic(): void {
+    if (!music || !ctx || !master) return;
+    const audible = musicSettings.enabled && musicSettings.volume > 0;
+    master.gain.value = audible ? masterGainFor(musicSettings.volume) : 0;
+    music.setScene(audible && ctx.state === 'running' ? scene : 'off');
+  }
+
+  function onContextStateChange(): void {
+    if (ctx?.state !== 'running') stopEffects();
+    syncMusic();
   }
 
   function resumeSafely(): Promise<void> {
@@ -174,7 +238,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     const now = ctx?.currentTime ?? 0;
     try {
       if (immediate) {
-        for (const s of a.sources) s.stop(0);
+        for (const s of [...a.sources]) s.stop(0);
         a.disconnect();
       } else {
         a.bus.gain.cancelScheduledValues(now);
@@ -207,11 +271,17 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     for (const a of active) if (a.hold) killActive(a, false);
   }
 
-  function silence(): void {
+  function stopEffects(): void {
     for (const a of active) killActive(a, true);
     active = [];
     recentStarts.length = 0;
     lastStart.clear();
+    if (wet && ctx) {
+      const now = ctx.currentTime;
+      wetBlockedUntil = now + REFLECTION_TAIL_SEC + LEAD_SEC;
+      wet.gain.cancelScheduledValues(now);
+      wet.gain.setValueAtTime(0, now);
+    }
     try {
       master?.gain.cancelScheduledValues(ctx?.currentTime ?? 0);
     } catch {
@@ -219,9 +289,16 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     }
   }
 
-  function voice(c: AudioContextLike, v: Voice, bus: GainLike, t0: number, gain: number, out: SourceLike[], disconnect: () => void): number {
-    const start = t0 + v.at;
-    const end = start + v.dur;
+  function silence(): void {
+    stopEffects();
+    scene = 'off';
+    music?.setScene('off');
+  }
+
+  function voice(c: AudioContextLike, v: Voice, aud: { bus: GainLike; at: number; gain: number; pitch: number; durationScale: number }, out: SourceLike[], disconnect: () => void): number {
+    const { bus, at, gain, pitch, durationScale } = aud;
+    const start = at + v.at;
+    const end = start + v.dur * durationScale;
     const env = c.createGain();
     const peak = Math.max(0.0002, v.gain * gain);
     env.gain.setValueAtTime(0.0001, start);
@@ -232,8 +309,8 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     if (v.kind === 'tone') {
       const o = c.createOscillator();
       o.type = v.wave;
-      o.frequency.setValueAtTime(v.f0, start);
-      if (v.f1 !== undefined) o.frequency.exponentialRampToValueAtTime(v.f1, end);
+      o.frequency.setValueAtTime(v.f0 * pitch, start);
+      if (v.f1 !== undefined) o.frequency.exponentialRampToValueAtTime(v.f1 * pitch, end);
       o.connect(env);
       source = o;
     } else {
@@ -241,7 +318,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       src.buffer = noise;
       const f = c.createBiquadFilter();
       f.type = v.filter;
-      f.frequency.setValueAtTime(v.freq, start);
+      f.frequency.setValueAtTime(v.freq * pitch, start);
       if (v.q !== undefined) f.Q.setValueAtTime(v.q, start);
       src.connect(f);
       f.connect(env);
@@ -279,12 +356,13 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       const budget = def.priority === 0 ? WINDOW_BUDGET_LOW : WINDOW_BUDGET_MID;
       if (recentStarts.length >= budget) return;
     }
-    if (active.length >= MAX_VOICES) {
+    while (active.length >= MAX_VOICES || (options.festival &&
+      active.reduce((total, cue) => total + cue.sources.length, 0) + def.voices.length > MAX_FESTIVAL_EFFECT_SOURCES)) {
       // steal the oldest sound of lower priority; otherwise drop the new one
       let victim: Active | null = null;
       for (const a of active) if (a.priority < def.priority && (victim === null || a.start < victim.start)) victim = a;
       if (!victim) return;
-      killActive(victim, false);
+      killActive(victim, options.festival === true);
       active = active.filter((a) => a !== victim);
     }
     if (def.hold) stopHold();
@@ -309,15 +387,27 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         nodes.push(panner);
       }
     }
-    nodes.at(-1)!.connect(master);
+    nodes.at(-1)!.connect(effects ?? master);
+    if (wet && wetBlockedUntil > 0) {
+      wet.gain.setValueAtTime(1, Math.max(now, wetBlockedUntil));
+      wetBlockedUntil = 0;
+    }
     const disconnect = () => { for (const node of nodes) node.disconnect(); };
     const sources: SourceLike[] = [];
     let end = now;
-    const t0 = now + LEAD_SEC;
-    for (const v of def.voices) end = Math.max(end, voice(c, v, bus, t0, gain, sources, disconnect));
+    let pitch = 1;
+    if (options.festival && def.priority === 0) {
+      variation ^= variation << 13;
+      variation ^= variation >>> 17;
+      variation ^= variation << 5;
+      pitch += ((variation >>> 0) / 4294967296 - .5) * .06;
+    }
+    const playback = { bus, at: now + LEAD_SEC, gain, pitch, durationScale: r.durationScale ?? 1 };
+    for (const v of def.voices) end = Math.max(end, voice(c, v, playback, sources, disconnect));
     active.push({ id: r.id, priority: def.priority, bus, disconnect, sources, hold: def.hold === true, start: now, end });
     lastStart.set(r.id, now);
     if (def.priority < 2) recentStarts.push(now);
+    if (DUCK_SOUNDS.has(r.id)) music?.duck(Math.max(.55, end - now + .17));
   }
 
   return {
@@ -326,6 +416,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         if (!ensureContext()) return;
         await resumeSafely();
         if (ctx && ctx.state !== 'running') await resumeSafely(); // a handle()-started attempt may have just failed
+        syncMusic();
       } catch {
         /* never break the game */
       }
@@ -334,12 +425,12 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     handle(event: SimEvent | UiCue | ExpansionUiCue, settings: AudioSettings): void {
       try {
         if (!settings.enabled || !(settings.volume > 0)) {
-          if (active.length > 0) silence(); // muted mid-sound: stop at once
+          if (active.length > 0 || music) silence(); // muted mid-sound: stop at once
           return;
         }
         if (!ctx || !master) return;
         if (ctx.state !== 'running') {
-          void resumeSafely(); // drop this sound; never queue it for later
+          if (!options.festival) void resumeSafely(); // the festival score only resumes from a gesture/browser state change
           return;
         }
         if (event.type !== 'ui') {
@@ -352,7 +443,8 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         let reqs: readonly SoundRequest[];
         if (event.type === 'ui') {
           const cue = (event as UiCueExt).cue;
-          if (cue === 'loadStop' || cue === 'critLatch' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow') stopHold();
+          if (cue === 'loadStop' || cue === 'critLatch' || cue === 'fire' || cue === 'runEnd' || cue === 'resultShow' ||
+            (options.festival && cue === 'cancel')) stopHold();
           reqs = soundsForUiCue(event as UiCueExt, options.festival);
         } else if (options.festival && event.type === 'prizeReachedCollection') {
           if (dropShot !== event.shotId) {
@@ -361,7 +453,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
           }
           reqs = soundsForSimEvent(event, ++dropCount);
         } else {
-          reqs = soundsForSimEvent(event);
+          reqs = soundsForSimEvent(event, 0, options.festival);
         }
         const point = options.festival && (event.type === 'impact' || event.type === 'prizeContact' || event.type === 'festival') ? event.point : undefined;
         for (const r of reqs) play(r, point);
@@ -377,5 +469,27 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         /* ignore */
       }
     },
+
+    ...(options.festival ? {
+      setBgmScene(next: FestivalBgmScene, settings: AudioSettings) {
+        if (disposed) return;
+        if (next === scene && settings.enabled === musicSettings.enabled && settings.volume === musicSettings.volume) return;
+        if ((!settings.enabled || settings.volume <= 0) && musicSettings.enabled && musicSettings.volume > 0) silence();
+        scene = next;
+        musicSettings = settings;
+        syncMusic();
+      },
+      dispose() {
+        disposed = true;
+        silence();
+        ctx?.removeEventListener?.('statechange', onContextStateChange);
+        music?.dispose();
+        for (const node of festivalNodes) node.disconnect();
+        master?.disconnect();
+        void ctx?.close?.().catch(() => undefined);
+        ctx = master = effects = wet = music = noise = null;
+        festivalNodes = [];
+      },
+    } : {}),
   };
 }

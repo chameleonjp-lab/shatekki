@@ -64,7 +64,178 @@ const t = (wave: Tone['wave'], f0: number, at: number, dur: number, gain: number
 const n = (filter: NoiseBurst['filter'], freq: number, at: number, dur: number, gain: number, q?: number): NoiseBurst => ({ kind: 'noise', filter, freq, at, dur, gain, ...(q !== undefined ? { q } : {}) });
 const def = (priority: 0 | 1 | 2, minGapSec: number, voices: Voice[], hold?: boolean): SoundDef => ({ priority, minGapSec, voices, ...(hold ? { hold } : {}) });
 
+export const FESTIVAL_GIMMICK_SOUNDS = {
+  'festival.lantern.1': def(1, 0.08, [
+    t('sine', 420, 0, 0.06, 0.24, 240),
+    t('sine', 1175, 0.01, 0.14, 0.18),
+    t('sine', 3240, 0.01, 0.09, 0.08),
+  ]),
+  'festival.lantern.2': def(1, 0.08, [
+    t('sine', 480, 0, 0.06, 0.26, 280),
+    t('sine', 1319, 0.01, 0.15, 0.20),
+    t('sine', 3640, 0.01, 0.10, 0.09),
+  ]),
+  'festival.relay': def(2, 0.25, [
+    n('bandpass', 3200, 0.00, 0.022, 0.34, 4.5), t('sine', 2950, 0.00, 0.04, 0.22),
+    n('bandpass', 3400, 0.07, 0.022, 0.36, 4.5), t('sine', 3120, 0.07, 0.04, 0.24),
+    t('sine', 142, 0.13, 0.28, 0.68, 56), n('lowpass', 320, 0.13, 0.12, 0.34),
+    t('sine', 1568, 0.14, 0.24, 0.22), t('sine', 2349, 0.19, 0.32, 0.20),
+  ]),
+
+  'festival.kohaku.red': def(1, 0.10, [
+    n('bandpass', 2700, 0, 0.024, 0.32, 4.0),
+    t('sine', 2480, 0, 0.045, 0.20),
+    t('sine', 880, 0.02, 0.18, 0.16),
+  ]),
+  'festival.kohaku.white': def(1, 0.10, [
+    n('bandpass', 3450, 0, 0.024, 0.32, 4.2),
+    t('sine', 3180, 0, 0.045, 0.20),
+    t('sine', 1175, 0.02, 0.18, 0.16),
+  ]),
+  'festival.kohaku.both': def(2, 0.30, [
+    n('bandpass', 3100, 0.00, 0.02, 0.32, 4.4),
+    n('bandpass', 3100, 0.07, 0.02, 0.32, 4.4),
+    n('bandpass', 3500, 0.14, 0.028, 0.38, 4.6),
+    t('sine', 1175, 0.14, 0.12, 0.26),
+    t('sine', 1760, 0.24, 0.30, 0.30),
+    t('sine', 136, 0.24, 0.28, 0.62, 58),
+  ]),
+
+  'festival.bell.1': def(2, 0.12, [
+    t('sine', 587, 0, .34, .34), t('sine', 1620, 0, .18, .15), t('sine', 2465, 0, .105, .075),
+    n('highpass', 5800, 0, .03, .12),
+  ]),
+  'festival.bell.2': def(2, 0.12, [
+    t('sine', 659, 0, .34, .36), t('sine', 1819, 0, .18, .16), t('sine', 2768, 0, .105, .078),
+    n('highpass', 6000, 0, .03, .12),
+  ]),
+  'festival.bell.3': def(2, 0.12, [
+    t('sine', 880, 0, .38, .38), t('sine', 2429, 0, .20, .18), t('sine', 3696, 0, .11, .081),
+    n('highpass', 6400, 0, .035, .14),
+  ]),
+  'festival.bell.wrong': def(1, 0.15, [
+    t('sine', 420, 0, 0.08, 0.30, 310),
+    n('bandpass', 1200, 0, 0.022, 0.16, 3.0),
+  ]),
+  'festival.open': def(2, 0.25, [
+    n('bandpass', 2400, 0.00, 0.18, 0.22, 0.9),
+    n('bandpass', 3300, 0.08, 0.025, 0.34, 4.5),
+    t('sine', 1175, 0.10, 0.12, 0.24),
+    t('sine', 1568, 0.20, 0.28, 0.28),
+  ]),
+  'festival.bell.prize': def(2, 0.28, [
+    t('sine', 1175, 0.00, 0.24, 0.28), t('sine', 3243, 0.00, 0.14, 0.12),
+    t('sine', 1760, 0.08, 0.30, 0.30), t('sine', 2349, 0.16, 0.36, 0.26),
+    t('sine', 138, 0.16, 0.30, 0.65, 55),
+  ]),
+
+  'festival.daruma.eye': def(1, 0.12, [
+    n('bandpass', 3600, 0.00, 0.055, 0.18, 1.4),
+    t('sine', 520, 0.04, 0.09, 0.32, 390),
+    n('bandpass', 1450, 0.04, 0.025, 0.18, 2.8),
+  ]),
+  'festival.daruma.done': def(2, 0.35, [
+    t('sine', 118, 0.00, 0.38, 0.76, 48), n('lowpass', 260, 0.00, 0.16, 0.40),
+    n('bandpass', 3300, 0.12, 0.024, 0.34, 4.6),
+    n('bandpass', 3500, 0.22, 0.028, 0.38, 4.6),
+    n('highpass', 4800, 0.22, 0.34, 0.14),
+    t('sine', 1760, 0.22, 0.38, 0.28),
+  ]),
+
+  'festival.giant.drop': def(2, 0.35, [
+    t('sine', 96, 0.00, 0.45, 0.80, 42),
+    n('lowpass', 220, 0.00, 0.22, 0.46),
+    t('sine', 135, 0.18, 0.34, 0.68, 52),
+    n('bandpass', 3200, 0.32, 0.028, 0.38, 4.5),
+  ]),
+
+  'festival.fuse': def(2, .4, [
+    n('highpass', 3800, 0, .19, .20),
+    t('sine', 520, .16, .14, .16, 1680),
+    t('sine', 112, .30, .36, .65, 48),
+    n('bandpass', 950, .30, .24, .37, .8),
+    ...[.41, .47, .56, .69].map((at, i) => n('highpass', 5600 - i * 510, at, .105, .18 - i * .029)),
+  ]),
+
+  'festival.encore': def(2, 0.45, [
+    n('bandpass', 3400, 0.00, 0.022, 0.36, 4.6),
+    n('bandpass', 3600, 0.07, 0.024, 0.38, 4.6),
+    t('sine', 142, 0.12, 0.22, 0.70, 58),
+    t('sine', 134, 0.24, 0.24, 0.74, 54),
+    t('sine', 124, 0.36, 0.40, 0.80, 46),
+    t('sine', 1175, 0.14, 0.10, 0.26),
+    t('sine', 1568, 0.24, 0.12, 0.28),
+    t('sine', 2349, 0.36, 0.50, 0.34),
+    n('highpass', 5800, 0.40, 0.45, 0.20),
+  ]),
+} as const satisfies Record<string, SoundDef>;
+
+export const FESTIVAL_CORE_OVERRIDES = {
+  'festival.ui.select':  def(2, 0.05, [n('bandpass', 2200, 0, 0.018, 0.22, 3.0), t('sine', 960, 0, 0.035, 0.18, 720)]),
+  'festival.ui.confirm': def(2, 0.08, [n('bandpass', 3200, 0, 0.022, 0.30, 4.5), t('sine', 2950, 0, 0.04, 0.18)]),
+  'festival.ui.cancel':  def(2, 0.08, [t('sine', 420, 0, 0.07, 0.24, 280), n('bandpass', 1100, 0, 0.02, 0.14, 2.5)]),
+  'festival.ui.start':   def(2, 0.30, [
+    n('bandpass', 3200, 0.00, 0.02, 0.32, 4.5), n('bandpass', 3500, 0.08, 0.025, 0.36, 4.5),
+    t('sine', 142, 0.16, 0.30, 0.68, 56), t('sine', 1175, 0.16, 0.12, 0.22), t('sine', 1760, 0.26, 0.26, 0.26),
+  ]),
+  'festival.reflect.tray': def(1, 0.05, [
+    n('highpass', 5400, 0, 0.018, 0.24),
+    t('sine', 1520, 0, 0.26, 0.28),
+    t('triangle', 4195, 0, 0.18, 0.15),
+  ]),
+  'festival.shop.feet': def(1, 0.12, [
+    n('bandpass', 2400, 0.00, 0.02, 0.26, 3.2), t('sine', 680, 0.00, 0.05, 0.26, 480),
+    n('bandpass', 2700, 0.08, 0.02, 0.26, 3.2), t('sine', 760, 0.08, 0.05, 0.26, 540),
+  ]),
+  'festival.newBest': def(2, 0.8, [
+    n('bandpass', 2600, 0.00, 0.035, 0.42, 2.2),               // 木札割れ「パキッ！」
+    n('bandpass', 1900, 0.04, 0.045, 0.38, 1.8),               // 「バキッ！」
+    t('sine', 138, 0.12, 0.36, 0.76, 48),                      // 大太鼓「ドォン！」
+    t('sine', 1175, 0.14, 0.12, 0.26), t('sine', 1568, 0.24, 0.12, 0.28), t('sine', 2349, 0.34, 0.50, 0.34),
+    n('highpass', 5800, 0.36, 0.44, 0.20),
+  ]),
+  'festival.runEnd': def(2, 0.8, [
+    t('sine', 112, 0.00, 0.48, 0.55, 52),
+    t('sine', 1568, 0.22, 0.55, 0.22),
+    t('sine', 2351, 0.22, 0.32, 0.10),
+    t('sine', 1175, 0.48, 0.65, 0.20),
+  ]),
+  'festival.load.charge': def(1, .1, [
+    t('triangle', 92, 0, 3, .055, 267), n('bandpass', 1160, 0, .22, .14, 2.2),
+  ], true),
+  'festival.load.perfect': def(2, .1, [t('sine', 1568, 0, .26, .25), t('sine', 4328, 0, .16, .10), t('sine', 2349, .07, .27, .2)]),
+  'festival.load.good': def(2, .1, [n('bandpass', 2750, 0, .03, .2, 3), t('sine', 1175, .03, .18, .21)]),
+  'festival.load.normal': def(2, .1, [n('bandpass', 2200, 0, .03, .2, 3), t('sine', 660, 0, .065, .14, 470)]),
+  'festival.load.weak': def(2, .1, [n('bandpass', 1060, 0, .035, .17, 2), t('sine', 390, 0, .09, .19, 280)]),
+  'festival.load.latch': def(1, .1, [n('highpass', 6100, 0, .027, .19), t('sine', 2140, 0, .046, .18, 1660)]),
+  'festival.shop.hat': def(1, .12, [t('sine', 710, 0, .09, .3, 440), n('bandpass', 1620, .008, .055, .19, 1.8)]),
+  'festival.shop.fan': def(1, .095, [n('bandpass', 1750, 0, .08, .29, 2.1), n('highpass', 3400, .035, .12, .16)]),
+  'festival.shop.body': def(1, .12, [n('lowpass', 530, 0, .11, .32), t('sine', 192, 0, .11, .22, 109)]),
+  'festival.speech': def(1, .4, [n('bandpass', 3630, 0, .10, .11, 1.2), n('bandpass', 2180, .058, .08, .075, 1.7)]),
+  'festival.lastShot': def(2, .6, [
+    n('bandpass', 3210, 0, .027, .33, 4),
+    ...[.09, .19, .32].map((at, i) => t('sine', 128 - i * 4, at, .22, .48 + i * .05, 54)),
+    t('sine', 1175, .11, .12, .23, 1319), t('sine', 1760, .28, .26, .22, 1976),
+  ]),
+  'festival.set.complete': def(2, .5, [
+    t('sine', 128, 0, .24, .45, 60), n('bandpass', 3450, .065, .022, .22, 3.2),
+    t('sine', 1175, .035, .14, .2), t('sine', 1568, .13, .16, .25), t('sine', 1760, .25, .28, .23), t('sine', 4858, .25, .16, .09),
+  ]),
+  'festival.set.discovered': def(2, .5, [
+    t('sine', 135, 0, .25, .57, 52), n('lowpass', 510, 0, .1, .22),
+    t('sine', 1976, .16, .26, .26), t('sine', 5454, .18, .16, .12),
+    n('bandpass', 835, .28, .16, .24, 1.1), n('highpass', 5950, .35, .29, .16),
+  ]),
+  'festival.result': def(2, .7, [t('sine', 1175, 0, .45, .21), t('sine', 3243, 0, .20, .10), t('sine', 880, .2, .39, .18)]),
+  'festival.challenge': def(2, .27, [
+    n('bandpass', 3130, 0, .025, .31, 4), t('sine', 142, .08, .21, .43, 56),
+    t('sine', 1175, .08, .13, .2), t('sine', 1568, .19, .23, .24),
+  ]),
+} as const satisfies Record<string, SoundDef>;
+
 export const SOUNDS = {
+  ...FESTIVAL_GIMMICK_SOUNDS,
+  ...FESTIVAL_CORE_OVERRIDES,
   // ---- UI
   'ui.select': def(2, 0.05, [t('sine', 880, 0, 0.06, 0.3)]),
   'ui.confirm': def(2, 0.08, [t('sine', 660, 0, 0.08, 0.3), t('sine', 990, 0.07, 0.12, 0.3)]),
@@ -124,22 +295,18 @@ export const SOUNDS = {
   'lastShot.hayashi': def(2, 0.6, [t('sine', 1568, 0, 0.1, 0.24, 1760), t('sine', 1760, 0.1, 0.1, 0.24), t('sine', 2093, 0.2, 0.22, 0.24), t('sine', 140, 0, 0.12, 0.45, 90), t('sine', 140, 0.22, 0.12, 0.4, 90)]),
   // Internal candidate: trigger, falling cork pop and a short wooden tail.
   'festival.fire': def(2, 0.08, [
-    n('highpass', 3900, 0, .018, .26),
-    t('triangle', 1340, 0, .024, .11, 670),
-    n('bandpass', 1460, .012, .051, .39, 1.45),
-    t('sine', 385, .012, .081, .45, 81),
-    t('triangle', 177, .026, .088, .17, 54),
+    n('bandpass', 4080, 0, .021, .30, 3.6),
+    t('triangle', 1510, 0, .029, .12, 630),
+    n('bandpass', 1520, .012, .053, .43, 1.6),
+    t('sine', 430, .012, .086, .46, 91),
+    n('bandpass', 780, .034, .064, .20, 2.4),
+    t('triangle', 194, .034, .098, .21, 64),
   ]),
-  'festival.bell.1': def(2, .14, [t('sine', 523, 0, .31, .43), t('sine', 1569, 0, .13, .13)]),
-  'festival.bell.2': def(2, .14, [t('sine', 587, 0, .31, .43), t('sine', 1761, 0, .13, .13)]),
-  'festival.bell.3': def(2, .14, [t('sine', 659, 0, .33, .45), t('sine', 1977, 0, .14, .14)]),
-  'festival.open': def(2, .25, [t('triangle', 784, 0, .18, .29), t('sine', 880, .14, .24, .32)]),
-  'festival.creak': def(1, .1, [n('bandpass', 540, 0, .2, .36, 2), t('triangle', 92, 0, .12, .27, 69)]),
-  'festival.fuse': def(2, .3, [n('highpass', 3500, 0, .27, .19), n('lowpass', 480, .3, .33, .46), t('sine', 96, .3, .32, .44, 47)]),
-  'festival.drop.1': def(1, .06, [t('triangle', 850, 0, .085, .24, 650), n('bandpass', 2500, 0, .024, .11, 2)]),
-  'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .26), t('triangle', 1568, .065, .125, .13)]),
-  'festival.drop.3': def(1, .08, [t('sine', 146, 0, .2, .48, 60), t('triangle', 1568, .064, .16, .19)]),
-  'festival.drop.4': def(1, .1, [t('sine', 132, 0, .25, .52, 55), t('sine', 120, .11, .24, .34, 52), t('sine', 1976, .13, .18, .21)]),
+  'festival.creak': def(1, .12, [n('bandpass', 495, 0, .23, .31, 2.8), t('triangle', 106, 0, .18, .23, 64), n('lowpass', 330, .035, .16, .27)]),
+  'festival.drop.1': def(1, .06, [n('bandpass', 2840, 0, .025, .24, 3.5), t('sine', 810, .003, .069, .22, 560)]),
+  'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .23, 1319), t('sine', 1568, .063, .14, .19, 1760)]),
+  'festival.drop.3': def(1, .08, [t('sine', 146, 0, .22, .48, 60), n('lowpass', 480, 0, .09, .15), t('sine', 1760, .062, .19, .21, 1976)]),
+  'festival.drop.4': def(1, .1, [t('sine', 132, 0, .25, .52, 55), t('sine', 120, .11, .24, .34, 52), t('sine', 1976, .13, .25, .21), t('sine', 3370, .12, .13, .10)]),
   // ---- settlement
   collectDrop: def(0, 0.1, [t('sine', 700, 0, 0.08, 0.2, 300)]),
   collect: def(2, 0.15, [t('sine', 1047, 0, 0.3, 0.3), t('sine', 1319, 0.05, 0.3, 0.22)]),
@@ -159,6 +326,7 @@ export interface SoundRequest {
   readonly id: SoundId;
   /** 0..1.3 relative loudness (e.g. from cork speed). */
   readonly gain: number;
+  readonly durationScale?: number;
 }
 const req = (id: SoundId, gain = 1): SoundRequest => ({ id, gain });
 
@@ -199,13 +367,14 @@ const MATERIAL_SOUND = {
 } as const satisfies Record<string, SoundId>;
 
 const PART_SOUND = { hat: 'shop.hat', fan: 'shop.fan', body: 'shop.body', feet: 'shop.feet' } as const satisfies Record<string, SoundId>;
+const FESTIVAL_PART_SOUND = { hat: 'festival.shop.hat', fan: 'festival.shop.fan', body: 'festival.shop.body', feet: 'festival.shop.feet' } as const satisfies Record<keyof typeof PART_SOUND, SoundId>;
 
 const NONE: readonly SoundRequest[] = [];
 
 const FESTIVAL_BELL_NOTES = ['festival.bell.1', 'festival.bell.2', 'festival.bell.3'] as const;
 const FESTIVAL_DROPS = ['festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4'] as const;
 
-export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly SoundRequest[] {
+export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0, festival = false): readonly SoundRequest[] {
   switch (ev.type) {
     case 'impact': {
       const gain = Math.min(1.3, 0.55 + ev.speed / 16);
@@ -213,15 +382,19 @@ export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly
       const t = ev.target;
       switch (t.kind) {
         case 'prize':
-        case 'surface':
           out.push(req(MATERIAL_SOUND[t.material], gain));
+          break;
+        case 'surface':
+          if (festival && t.surfaceId === 'reflector-tray') return [req('festival.reflect.tray', gain)];
+          out.push(req(MATERIAL_SOUND[t.material], gain));
+          if (ev.reflectionIndex > 0) out.push(req('reflect', gain));
           break;
         case 'device':
           // An activating contact is voiced by deviceActivated; a repeat contact is the ordinary small sound.
           if (!t.activated) out.push(req('hit.deviceDull', gain));
           break;
         case 'shopkeeper':
-          out.push(req(PART_SOUND[t.part], gain));
+          out.push(req((festival ? FESTIVAL_PART_SOUND : PART_SOUND)[t.part], gain));
           break;
         case 'hidden':
           out.push(req('hidden', gain));
@@ -231,7 +404,6 @@ export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly
           out.push(req(t.activated ? 'cell.activate' : 'hit.deviceDull', gain));
           break;
       }
-      if (ev.reflectionIndex > 0 && t.kind === 'surface') out.push(req('reflect', gain));
       return out;
     }
     case 'prizeContact':
@@ -244,27 +416,40 @@ export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly
       return [req('transform')];
     case 'festival':
       switch (ev.mark) {
+        case 'lantern': return [req((ev.amount ?? 1) >= 2 ? 'festival.lantern.2' : 'festival.lantern.1')];
+        case 'relay': return [req('festival.relay')];
+        case 'red': return [req('festival.kohaku.red')];
+        case 'white': return [req('festival.kohaku.white')];
+        case 'red-white': return [req('festival.kohaku.both')];
         case 'bell': return [req(FESTIVAL_BELL_NOTES[(ev.amount ?? 1) - 1] ?? FESTIVAL_BELL_NOTES[0])];
+        case 'bell-wrong': return [req('festival.bell.wrong')];
         case 'bell-open': return [req('festival.open')];
-        case 'bell-wrong': return [req('effect.neutral', .55)];
-        case 'giant-slide': return [req('festival.creak', Math.min(1.15, .28 + (ev.amount ?? 0) * 5))];
-        case 'giant-drop': return [req('take.taiko')];
+        case 'bell-prize': return [req('festival.bell.prize')];
+        case 'eye-left':
+        case 'eye-right': return [req('festival.daruma.eye')];
+        case 'daruma': return [req('festival.daruma.done')];
+        case 'giant-slide': {
+          const distance = Math.max(0, ev.amount ?? 0);
+          return [{ id: 'festival.creak', gain: Math.min(1.15, .32 + distance * 5), durationScale: Math.min(1.4, .8 + distance * 4) }];
+        }
+        case 'giant-drop': return [req('festival.giant.drop')];
         case 'fuse': return [req('festival.fuse')];
-        case 'relay': case 'red-white': case 'daruma': case 'bell-prize': case 'encore': return [req('effect.good')];
-        default: return NONE;
+        case 'encore': return [req('festival.encore')];
       }
+      break;
     case 'projectileSpawned':
     case 'projectileEnded':
     case 'prizeDamaged':
     case 'shotStage':
       return NONE;
   }
+  return NONE;
 }
 
 // -------------------------------------------------------------- UiCue map
 
 /** The primary sound of each cue (extras such as tier / chain are in soundsForUiCue). */
-export const UI_CUE_SOUND: Record<UiCueName, SoundId> = {
+export const UI_CUE_SOUND: Record<Exclude<UiCueName, 'festivalChallenge'>, SoundId> = {
   questionShown: 'question.show',
   answerAccepted: 'answer.accept',
   effectGood: 'effect.good',
@@ -302,21 +487,45 @@ const TIER_SOUND: Record<LoadTier, SoundId> = {
   normal: 'load.stop.normal',
   weak: 'load.stop.weak',
 };
+const FESTIVAL_TIER_SOUND: Record<LoadTier, SoundId> = {
+  perfect: 'festival.load.perfect',
+  good: 'festival.load.good',
+  normal: 'festival.load.normal',
+  weak: 'festival.load.weak',
+};
+const FESTIVAL_UI_SOUND: Partial<Record<UiCueName, SoundId>> = {
+  select: 'festival.ui.select',
+  confirm: 'festival.ui.confirm',
+  cancel: 'festival.ui.cancel',
+  start: 'festival.ui.start',
+  loadStart: 'festival.load.charge',
+  critLatch: 'festival.load.latch',
+  fire: 'festival.fire',
+  speech: 'festival.speech',
+  lastShotContinue: 'festival.lastShot',
+  setComplete: 'festival.set.complete',
+  setDiscovered: 'festival.set.discovered',
+  newBest: 'festival.newBest',
+  runEnd: 'festival.runEnd',
+  resultShow: 'festival.result',
+};
 
 export function soundsForUiCue(cue: UiCueExt, festival = false): readonly SoundRequest[] {
   switch (cue.cue) {
-    case 'fire':
-      return [req(festival ? 'festival.fire' : 'fire')];
+    case 'festivalChallenge':
+      return festival ? [req('festival.challenge')] : NONE;
     case 'loadStop':
-      return [req(TIER_SOUND[cue.tier ?? 'normal'])];
+      return [req((festival ? FESTIVAL_TIER_SOUND : TIER_SOUND)[cue.tier ?? 'normal'])];
     case 'collect':
       return (cue.count ?? 1) >= 2 ? [req('collect'), req('chain')] : [req('collect')];
     case 'takeTier': {
       const n = cue.count ?? 1;
       return [req(n >= 4 ? 'take.taiko' : n === 3 ? 'take.3' : n === 2 ? 'take.2' : 'take.1')];
     }
-    default:
-      return [req(UI_CUE_SOUND[cue.cue])];
+    default: {
+      const previewSound = festival ? FESTIVAL_UI_SOUND[cue.cue] : undefined;
+      return [req(previewSound ?? UI_CUE_SOUND[cue.cue])];
+    }
   }
 }
 
