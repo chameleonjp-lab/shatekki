@@ -98,25 +98,28 @@ test('T06 frame intervals while aiming and during a real shot (recorded, not a d
   await restoreShotStart(page, { beforeFire: sc.state, gameTick: 0 }, sc.discovered);
   const sample = (ms: number) =>
     page.evaluate(
-      (dur) =>
+      ({ duration, minSamples, limit }) =>
         new Promise<number[]>((done) => {
           const out: number[] = [];
           let last = performance.now();
-          const end = last + dur;
+          const end = last + duration;
+          const deadline = last + limit;
           const step = (t: number) => {
             out.push(t - last);
             last = t;
-            if (t < end) requestAnimationFrame(step);
+            // Keep a useful sample when the software renderer is slow, up to a
+            // fixed limit. The recorded intervals still show every slow frame.
+            if (t < deadline && (t < end || out.length < minSamples)) requestAnimationFrame(step);
             else done(out);
           };
           requestAnimationFrame(step);
         }),
-      ms,
+      { duration: ms, minSamples: 12, limit: 7_500 },
     );
   const stats = (xs: number[]) => {
     const s = [...xs].sort((a, b) => a - b);
     const q = (p: number) => +(s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0).toFixed(1);
-    return { frames: xs.length, medianMs: q(0.5), p95Ms: q(0.95), worstMs: q(1), over33ms: xs.filter((x) => x > 33.4).length };
+    return { frames: xs.length, elapsedMs: Math.round(xs.reduce((sum, interval) => sum + interval, 0)), medianMs: q(0.5), p95Ms: q(0.95), worstMs: q(1), over33ms: xs.filter((x) => x > 33.4).length };
   };
   const aiming = stats(await sample(2000));
   await aimAndFire(page, sc);
