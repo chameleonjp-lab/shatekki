@@ -197,7 +197,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const contactShadows = textures?.shadow ? createContactShadows(layout, textures.shadow) : null;
   if (contactShadows) scene.add(contactShadows.mesh);
   scene.add(booth.group, booth.proxies);
-  const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
+  const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout, deps.duskMaterials) : null;
   if (cells) scene.add(cells.group);
   for (const l of booth.lights) scene.add(l);
 

@@ -21,6 +21,7 @@ export type Translate = (key: string, params?: Readonly<Record<string, string | 
 
 export interface ExpandedViewDeps {
   readonly illustratedRewards?: boolean;
+  readonly festival?: boolean;
   readonly graph: SceneGraph;
   readonly layout: BoothLayout;
   readonly catalog: RuntimeCatalog;
@@ -39,6 +40,7 @@ export interface ScreenLabel {
   readonly accessibleName?: string;
   /** Confirmed transform request, used once to turn this price tag. */
   readonly turn?: string;
+  readonly compact?: boolean;
   readonly tone: HintTone | 'badge' | 'guide' | 'cork';
   /** "#RRGGBB" for series badges and cork numbers. */
   readonly color?: string;
@@ -55,6 +57,7 @@ export interface ExpandedViewModel {
   readonly outline: SeriesLegend | null;
   /** Refill series after FX041-FX060. */
   readonly assortment: SeriesRow | null;
+  readonly curtain?: { readonly rows: readonly number[]; readonly color: string };
   readonly hint: HintKind | null;
   readonly hintTitle: string;
   /** The hint applies but no individual matches. */
@@ -72,7 +75,7 @@ export interface ExpandedViewModel {
 }
 
 export interface ExpandedView {
-  update(frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }): ExpandedViewModel | null;
+  update(frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }, festivalTime?: number): ExpandedViewModel | null;
   showConfirmedTransforms(transforms: readonly AppliedTransform[], animate?: boolean): void;
   lastModel(): ExpandedViewModel | null;
   dispose(): void;
@@ -101,7 +104,7 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   graph.scene.add(rewardProps.group);
   /** P4: price tags on prizes whose kind really changed, for a few seconds of simulation time. */
   const changed = new Map<string, { readonly toTypeId: PrizeTypeId; readonly untilSec: number; readonly turn?: string }>();
-  const TAG_SEC = 3;
+  const TAG_SEC = deps.festival ? 1.4 : 3;
   let confirmed: readonly AppliedTransform[] = [];
   let turnTags = true;
   /** First kind each individual was seen as: the mount keeps running that kind's motion after a transform. */
@@ -116,13 +119,13 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
     return catalog.prizes.get(kind)?.motion ?? null;
   };
 
-  const model = (frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }): ExpandedViewModel | null => {
+  const model = (frame: SimulationFrame, view: ViewState, camera: THREE.Camera, size: { width: number; height: number }, festivalTime?: number): ExpandedViewModel | null => {
     const ex = view.expansion;
     if (!ex) return null;
     graph.cells?.update(ex.cells);
 
     // ---- series outline + legend
-    const targets = outline.update(frame.prizes, ex.outlineSeries);
+    const targets = outline.update(frame.prizes, ex.outlineSeries, deps.festival ? festivalTime : undefined);
     const outlineDef = ex.outlineSeries ? expansion.series.get(ex.outlineSeries) : undefined;
     const legend = seriesLegend(outlineDef, targets.length, text);
     const assortDef = ex.assortmentSeries ? expansion.series.get(ex.assortmentSeries) : undefined;
@@ -212,6 +215,7 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
     // ---- rewards: the bag on its prize and the last-shot target (display only)
     const placed = rewardProps.update(ex.rewards, frame.prizes);
     const rewardLabels: ScreenLabel[] = [];
+    let curtain: ExpandedViewModel['curtain'];
     if (placed.bag && ex.rewards) {
       const s = projectToScreen(camera, placed.bag, size.width, size.height);
       if (s) {
@@ -239,6 +243,21 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
           const text = d.spent ? (d.id === 'A4' ? `${count} ✓` : '✓') : d.icon;
           rewardLabels.push({ id: `reward:device:${d.id}`, ...s, text, accessibleName, tone: 'badge', color: d.color });
         }
+        if (deps.festival && turnTags && confirmed.length > 1 && assortment) {
+          const rows = new Map<number, number>();
+          for (const t of confirmed) {
+            const p = byId.get(t.instanceId);
+            if (!p || p.collected || p.typeId !== t.toTypeId) continue;
+            const target = projectToScreen(camera, p.position, size.width, size.height);
+            if (!target || target.y < size.height * .26 || target.y > size.height * .63) continue;
+            const row = Math.round(target.y / 36);
+            if (!rows.has(row)) rows.set(row, target.y);
+          }
+          if (rows.size) curtain = {
+            rows: [...rows.values()].slice(0, 3),
+            color: assortment.color,
+          };
+        }
         for (const t of confirmed) {
           changed.set(t.instanceId, {
             toTypeId: t.toTypeId, untilSec: frame.simTimeSec + TAG_SEC,
@@ -247,15 +266,29 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
         }
         confirmed = [];
       } else for (const e of frame.events) if (e.type === 'prizeTransformed') changed.set(e.instanceId, { toTypeId: e.toTypeId, untilSec: frame.simTimeSec + TAG_SEC });
-      for (const [id, c] of [...changed]) {
+      const compactTags: ScreenLabel[] = [];
+      for (const [id, c] of changed) {
         const p = byId.get(id);
         if (!p || (deps.illustratedRewards && (p.collected || p.typeId !== c.toTypeId)) || frame.simTimeSec > c.untilSec) {
           if (frame.simTimeSec > c.untilSec) changed.delete(id);
           continue;
         }
         const s = projectToScreen(camera, p.position, size.width, size.height);
-        if (s) rewardLabels.push({ id: `reward:tag:${id}`, x: s.x, y: s.y, text: ui('reward.tag.changed', { name: deps.prizeName(c.toTypeId) }), turn: c.turn, tone: 'badge', color: '#ffe9a8' });
+        if (!s) continue;
+        const name = ui('reward.tag.changed', { name: deps.prizeName(c.toTypeId) });
+        const label: ScreenLabel = { id: `reward:tag:${id}`, ...s, text: name, turn: c.turn, tone: 'badge', color: '#ffe9a8' };
+        if (!deps.festival) rewardLabels.push(label);
+        else if (s.x > 20 && s.x < size.width - 20 && s.y > size.height * .23 && s.y < size.height * .66) {
+          compactTags.push({ ...label, text: '◆', accessibleName: name, compact: true });
+        }
       }
+      compactTags.sort((a, b) => Math.abs(a.x - size.width / 2) - Math.abs(b.x - size.width / 2) || a.id.localeCompare(b.id));
+      const placedTags: ScreenLabel[] = [];
+      for (const tag of compactTags) {
+        if (placedTags.length >= 6) break;
+        if (!placedTags.some(p => Math.abs(p.x - tag.x) < 42 && Math.abs(p.y - tag.y) < 28)) placedTags.push(tag);
+      }
+      rewardLabels.push(...placedTags);
     }
     if (placed.target && ex.rewards?.target) {
       const center = placed.target;
@@ -274,6 +307,7 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
       rewardLabels,
       outline: legend,
       assortment,
+      ...(curtain ? { curtain } : {}),
       hint,
       hintTitle: hint ? ui(`xhint.title.${hint}`) : '',
       hintEmpty,
@@ -288,8 +322,8 @@ export function createExpandedView(deps: ExpandedViewDeps): ExpandedView {
   };
 
   return {
-    update(frame, view, camera, size) {
-      last = model(frame, view, camera, size);
+    update(frame, view, camera, size, festivalTime) {
+      last = model(frame, view, camera, size, festivalTime);
       if (!view.expansion) {
         outline.update([], null);
         hint3d.setAimPreview(null);

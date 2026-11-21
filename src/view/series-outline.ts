@@ -64,7 +64,7 @@ interface OutlineNode {
 
 export interface SeriesOutline {
   /** Brings the outlines in line with the frame; returns the targeted individuals. */
-  update(prizes: readonly PrizeFrame[], outlineSeries: SeriesId | null): string[];
+  update(prizes: readonly PrizeFrame[], outlineSeries: SeriesId | null, now?: number): string[];
   /** Outline meshes currently shown, by instance id (tests / browser checks). */
   active(): ReadonlyMap<string, THREE.Mesh>;
   dispose(): void;
@@ -76,6 +76,9 @@ export function createSeriesOutline(graph: SceneGraph, series: ReadonlyMap<Serie
   graph.scene.add(layer);
   const materials = new Map<string, THREE.MeshBasicMaterial>();
   const nodes = new Map<string, OutlineNode>();
+  let activeSeries: SeriesId | null = null;
+  let sweepStart = -Infinity;
+  const startOrder = new Map<string, number>();
 
   const material = (color: string): THREE.MeshBasicMaterial => {
     let m = materials.get(color);
@@ -93,9 +96,16 @@ export function createSeriesOutline(graph: SceneGraph, series: ReadonlyMap<Serie
   };
 
   return {
-    update(prizes, outlineSeries) {
+    update(prizes, outlineSeries, now) {
       const def = outlineSeries ? series.get(outlineSeries) : undefined;
       const targets = seriesOutlineTargets(prizes, def);
+      if (outlineSeries !== activeSeries) {
+        activeSeries = outlineSeries;
+        sweepStart = now ?? -Infinity;
+        startOrder.clear();
+        const sorted = [...targets].sort((a, b) => (graph.prizes.get(a)?.mesh.position.x ?? 0) - (graph.prizes.get(b)?.mesh.position.x ?? 0));
+        for (const [index, id] of sorted.entries()) startOrder.set(id, Math.min(index, 12));
+      }
       const want = new Set(targets);
       for (const id of [...nodes.keys()]) if (!want.has(id)) drop(id);
       for (const id of targets) {
@@ -117,7 +127,9 @@ export function createSeriesOutline(graph: SceneGraph, series: ReadonlyMap<Serie
         }
         n.mesh.position.copy(src.position);
         n.mesh.quaternion.copy(src.quaternion);
-        n.mesh.scale.setScalar(HULL_SCALE);
+        const age = now === undefined ? Infinity : now - sweepStart - (startOrder.get(id) ?? 0) * .032;
+        const glow = age < 0 || age > .25 ? 0 : Math.sin((age / .25) * Math.PI) * .12;
+        n.mesh.scale.setScalar(HULL_SCALE + glow);
         n.mesh.visible = src.visible;
       }
       return targets;

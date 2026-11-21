@@ -118,7 +118,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   });
 
   const expandedView: ExpandedView | null = deps.expanded
-    ? createExpandedView({ graph, illustratedRewards: deps.expanded.illustratedRewards, layout, catalog: deps.expanded.catalog, expansion: deps.expanded.expansion, translate: deps.expanded.translate, prizeName: deps.expanded.prizeName })
+    ? createExpandedView({ graph, festival: deps.duskMaterials, illustratedRewards: deps.expanded.illustratedRewards, layout, catalog: deps.expanded.catalog, expansion: deps.expanded.expansion, translate: deps.expanded.translate, prizeName: deps.expanded.prizeName })
     : null;
   const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
 
@@ -140,19 +140,33 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       festival?.begin(shotId, isPerfect && !reduceMotion.matches);
     },
     presentFestivalShot(summary, freshSets, ammoBefore, quiet) {
-      festival?.settle(summary, freshSets, ammoBefore, quiet || reduceMotion.matches);
+      const still = quiet || reduceMotion.matches;
+      festival?.settle(summary, freshSets, ammoBefore, still);
+      if (festival && !still) {
+        const ids = (summary.effects ?? []).flatMap(effect => effect.source.kind === 'cell' &&
+          effect.reason !== 'cellAlreadyUsed' && effect.reason !== 'unknownCell' ? [effect.source.cellId] : []);
+        graph.cells?.celebrate(ids, performance.now() / 1_000);
+        festival.showCellLinks(summary, camera, width, height, id => {
+          const prize = graph.prizes.get(id)?.mesh;
+          return prize?.visible ? prize.position : undefined;
+        });
+      }
     },
     clearFestival() {
       festivalShot = null;
       reflections.clear();
       festival?.clear();
+      graph.cells?.clearCelebration();
     },
     render(frame: SimulationFrame, view: ViewState): void {
       if (disposed) return;
       applyFrame(graph, frame);
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height, view.aimFirst?.aim), width / height);
       last = updateAim(graph, view);
-      if (expandedView) expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }));
+      if (expandedView) {
+        const animationTime = festival && !view.paused && !reduceMotion.matches ? performance.now() / 1_000 : undefined;
+        expandedOverlay?.render(expandedView.update(frame, view, camera, { width, height }, animationTime));
+      }
       // r007: the shopkeeper's nod/blink, and a wrist flick when the cork hits the fan (view only;
       // the hit volumes never move). Wall time, so it also lives between shots.
       const keeper = graph.booth.keeperMotion;
@@ -189,6 +203,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       }
       fx.handleEvents(frame.events, frame.simTimeSec, { festival: !!festival && !reduceMotion.matches && !view.paused, perfect });
       fx.update(frame.simTimeSec);
+      if (festival) graph.cells?.animate(performance.now() / 1_000, reduceMotion.matches || view.paused);
       webgl.render(graph.scene, camera);
     },
     present(summary: ShotSummary, options: PresentOptions): Promise<void> {
