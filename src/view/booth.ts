@@ -8,13 +8,14 @@
  *    decals (<= 5 mm) and the hair-thin bell cord.
  *  - An invisible "collision proxy" box per layout element is kept for the
  *    reticle raycast so the aim point follows the physics boxes, not the art.
- *  - Static pieces are merged into one vertex-coloured mesh (1 draw call).
+ *  - Static pieces are merged into batches by material.
  */
 import * as THREE from 'three';
 import type { Box3, BoothLayout, DeviceGeometry, HiddenTargetGeometry, StaticSurface } from '../contracts';
 import { Kit, ROT_X, mergeParts, type V3 } from './assets/kit';
 import { C } from './assets/prize-recipes';
 import { buildShopkeeper, buildShopkeeperV3 } from './shopkeeper';
+import type { StallTextures } from './materials/procedural-textures';
 
 const PI = Math.PI;
 const DECAL = 0.002;
@@ -39,7 +40,7 @@ const pos = (b: Box3): V3 => [b.center.x, b.center.y, b.center.z];
 
 // --------------------------------------------------------------------- static
 
-function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean): void {
+function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean, wood = k, cloth = k): void {
   const b = s.box;
   const [w, h, d] = size(b);
   const [cx, cy, cz] = pos(b);
@@ -51,14 +52,14 @@ function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean): void {
       k.box(0x4a2a2a, w, h, d, [cx, cy, cz]);
       // collection cloth: deep red with cream stripes along z
       const top = cy + hy + DECAL / 2;
-      for (let i = 0; i < 7; i++) k.box(i % 2 ? 0x8a2e32 : 0x6e2328, w / 7, DECAL, d, [cx - hx + (i + 0.5) * (w / 7), top, cz]);
+      for (let i = 0; i < 7; i++) cloth.box(i % 2 ? 0x8a2e32 : 0x6e2328, w / 7, DECAL, d, [cx - hx + (i + 0.5) * (w / 7), top, cz]);
       k.box(C.cream, w, DECAL * 2, 0.04, [cx, top + DECAL / 2, cz - hz + 0.05]);
       break;
     }
     case 'back-wall': {
-      k.box(0x5a3924, w, h, d, [cx, cy, cz]);
+      wood.box(0x5a3924, w, h, d, [cx, cy, cz]);
       const front = cz + hz + DECAL / 2;
-      for (let i = 0; i < 14; i++) k.box(i % 2 ? 0x6b4429 : 0x5a3924, w / 14, h - 0.04, DECAL, [cx - hx + (i + 0.5) * (w / 14), cy, front]);
+      for (let i = 0; i < 14; i++) wood.box(i % 2 ? 0x6b4429 : 0x5a3924, w / 14, h - 0.04, DECAL, [cx - hx + (i + 0.5) * (w / 14), cy, front]);
       // red/white scalloped valance along the top (visual only, flat)
       for (let i = 0; i < 14; i++) k.box(i % 2 ? C.white : C.red, w / 14, 0.1, DECAL * 2, [cx - hx + (i + 0.5) * (w / 14), cy + hy - 0.06, front + DECAL]);
       if (hasCells) break; // layout v2: the 36 background cells fill the wall (src/view/background-cells.ts)
@@ -72,10 +73,10 @@ function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean): void {
     }
     case 'left-wall':
     case 'right-wall': {
-      k.box(0x7a4f32, w, h, d, [cx, cy, cz]);
+      wood.box(0x7a4f32, w, h, d, [cx, cy, cz]);
       const sign = s.id === 'left-wall' ? 1 : -1; // inner face direction
       const face = cx + sign * (hx + DECAL / 2);
-      for (let i = 0; i < 10; i++) k.box(i % 2 ? 0x8a5c3a : 0x7a4f32, DECAL, 0.22, d - 0.02, [face, 0.1 + i * 0.22, cz]);
+      for (let i = 0; i < 10; i++) wood.box(i % 2 ? 0x8a5c3a : 0x7a4f32, DECAL, 0.22, d - 0.02, [face, 0.1 + i * 0.22, cz]);
       for (let i = 0; i < 12; i++) k.box(i % 2 ? C.white : C.red, DECAL * 2, 0.1, d / 12, [face + sign * DECAL, cy + hy - 0.06, cz - hz + (i + 0.5) * (d / 12)]);
       break;
     }
@@ -86,30 +87,30 @@ function paintSurface(k: Kit, s: StaticSurface, hasCells: boolean): void {
       break;
     }
     case 'counter': {
-      k.box(0x6b4429, w, h, d, [cx, cy, cz]);
+      wood.box(0x6b4429, w, h, d, [cx, cy, cz]);
       const top = cy + hy + DECAL / 2;
-      k.box(C.lightBrown, w, DECAL, d, [cx, top, cz]);
+      wood.box(C.lightBrown, w, DECAL, d, [cx, top, cz]);
       k.box(C.darkRed, w, DECAL * 2, 0.03, [cx, top + DECAL / 2, cz + hz - 0.03]);
       break;
     }
     default: {
       // shelf boards: honey wood, red felt on the front face, 3 cloth slot pads
-      k.box(0xc89a5b, w, h, d, [cx, cy, cz]);
-      k.box(C.red, w, h * 0.9, DECAL, [cx, cy, cz + hz + DECAL / 2]);
-      k.box(0x8a5a2c, w, h * 0.3, DECAL * 2, [cx, cy - h * 0.35, cz + hz + DECAL]);
+      wood.box(0xc89a5b, w, h, d, [cx, cy, cz]);
+      cloth.box(C.red, w, h * 0.9, DECAL, [cx, cy, cz + hz + DECAL / 2]);
+      wood.box(0x8a5a2c, w, h * 0.3, DECAL * 2, [cx, cy - h * 0.35, cz + hz + DECAL]);
     }
   }
 }
 
-function paintSlotPads(k: Kit, layout: BoothLayout): void {
+function paintSlotPads(k: Kit, layout: BoothLayout, cloth = k): void {
   for (const s of layout.slots) {
-    k.box(0x7b2d34, 0.3, DECAL, 0.22, [s.spawnBase.x, s.spawnBase.y + DECAL / 2, s.spawnBase.z]);
+    cloth.box(0x7b2d34, 0.3, DECAL, 0.22, [s.spawnBase.x, s.spawnBase.y + DECAL / 2, s.spawnBase.z]);
     k.box(0xe4c27a, 0.3, DECAL * 1.5, 0.014, [s.spawnBase.x, s.spawnBase.y + DECAL * 0.75, s.spawnBase.z + 0.11]);
   }
 }
 
 /** Wall-mounted flat half lanterns (<= 5 cm proud), unlit-looking glow. */
-function buildLanterns(layout: BoothLayout): THREE.BufferGeometry {
+function buildLanterns(layout: BoothLayout, paper?: Kit): THREE.BufferGeometry {
   const k = new Kit();
   const wallL = -1.05;
   const wallR = 1.05;
@@ -117,12 +118,16 @@ function buildLanterns(layout: BoothLayout): THREE.BufferGeometry {
   const lantern = (at: V3, axis: 'x' | 'z', sign: 1 | -1) => {
     const rot: V3 = [0, 0, 0];
     const flat: V3 = axis === 'x' ? [0.45, 1, 1] : [1, 1, 0.45];
-    k.sph(0xff7a3a, 0.11, at, flat, rot, true);
-    k.sph(0xffd27a, 0.075, [at[0] + (axis === 'x' ? sign * 0.012 : 0), at[1], at[2] + (axis === 'z' ? 0.012 : 0)], flat, rot, true);
+    if (paper) {
+      paper.sph(0xffd088, 0.11, at, flat, rot, true);
+    } else {
+      k.sph(0xff7a3a, 0.11, at, flat, rot, true);
+      k.sph(0xffd27a, 0.075, [at[0] + (axis === 'x' ? sign * 0.012 : 0), at[1], at[2] + (axis === 'z' ? 0.012 : 0)], flat, rot, true);
+    }
     k.box(C.black, axis === 'x' ? 0.05 : 0.1, 0.012, axis === 'z' ? 0.05 : 0.1, [at[0], at[1] + 0.11, at[2]]);
     k.box(C.black, axis === 'x' ? 0.05 : 0.1, 0.012, axis === 'z' ? 0.05 : 0.1, [at[0], at[1] - 0.11, at[2]]);
   };
-  if (layout.slotModel === 'v2-36') {
+  if (layout.slotModel === 'v2-36' || (paper && layout.slotModel === 'v3-36')) {
     // Wide stall: side-wall lanterns at the real walls, back lanterns spread above the cell band (cells end at y 1.88).
     const lw = layout.surfaces.find((s) => s.id === 'left-wall');
     const rw = layout.surfaces.find((s) => s.id === 'right-wall');
@@ -284,13 +289,27 @@ function buildHidden(t: HiddenTargetGeometry, mat: THREE.Material): THREE.Mesh {
   return m;
 }
 
+/** World-space tiling keeps grain and fibres the same size across merged boards. */
+function tiledSurface(kit: Kit, material: THREE.Material, width: number, height: number): THREE.Mesh {
+  const geometry = mergeParts(kit.parts);
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const uv = new Float32Array(position.count * 2);
+  for (let i = 0; i < position.count; i++) {
+    uv[i * 2] = (Math.abs(normal.getX(i)) > 0.5 ? position.getZ(i) : position.getX(i)) / width;
+    uv[i * 2 + 1] = (Math.abs(normal.getY(i)) > 0.5 ? position.getZ(i) : position.getY(i)) / height;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return new THREE.Mesh(geometry, material);
+}
+
 // ----------------------------------------------------------------------- main
 
 /**
  * @param pickInflate collision proxies are grown by this much (the cork radius) so a
  *   ray along the cork centre meets them exactly where the swept sphere would.
  */
-export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = false): BoothBuild {
+export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = false, textures?: StallTextures): BoothBuild {
   const lit = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
@@ -299,17 +318,21 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
 
   // static, merged
   const sk = new Kit();
+  const wood = textures ? new Kit() : sk;
+  const cloth = textures ? new Kit() : sk;
+  const paper = textures ? new Kit() : undefined;
+  const surfaceMaterials: THREE.Material[] = [];
   const hasCells = (layout.backgroundCells?.length ?? 0) > 0;
-  for (const s of layout.surfaces) paintSurface(sk, s, hasCells);
-  paintSlotPads(sk, layout);
+  for (const s of layout.surfaces) paintSurface(sk, s, hasCells, wood, cloth);
+  paintSlotPads(sk, layout, cloth);
   if (illustrated) {
     // Sewn hems on the shelf cloths. One, two and three gold stitches identify
-    // the lantern zones even without colour; the static booth still draws once.
+    // the lantern zones even without colour.
     const fields = [0x88393b, 0x32615f, 0x374d69];
     for (const slot of layout.slots) {
       const zone = Math.min(2, Math.floor(slot.column / 4));
       const { x, y, z } = slot.spawnBase;
-      sk.box(fields[zone]!, 0.3, DECAL, 0.036, [x, y + DECAL * 1.6, z + 0.093]);
+      cloth.box(fields[zone]!, 0.3, DECAL, 0.036, [x, y + DECAL * 1.6, z + 0.093]);
       for (let stitch = 0; stitch <= zone; stitch++) {
         sk.box(0xffdf92, 0.013, DECAL, 0.023, [x + (stitch - zone / 2) * 0.024, y + DECAL * 2.6, z + 0.093]);
       }
@@ -327,9 +350,24 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
   staticMesh.name = 'booth:static';
   group.add(staticMesh);
 
-  const lanterns = new THREE.Mesh(buildLanterns(layout), glow);
+  const lanterns = new THREE.Mesh(buildLanterns(layout, paper), glow);
   lanterns.name = 'booth:lanterns';
   group.add(lanterns);
+  if (textures && paper) {
+    // These surfaces fill the viewport. Use the baked grain with the same inexpensive
+    // lighting as the untextured booth. Save per-pixel reflections for glossy prizes.
+    const woodFinish = new THREE.MeshLambertMaterial({ vertexColors: true, map: textures.wood });
+    const feltFinish = new THREE.MeshLambertMaterial({ vertexColors: true, map: textures.cloth });
+    const lanternPaper = new THREE.MeshBasicMaterial({ vertexColors: true, map: textures.paper });
+    surfaceMaterials.push(woodFinish, feltFinish, lanternPaper);
+    const boards = tiledSurface(wood, woodFinish, 0.95, 0.24);
+    boards.name = 'booth:wood-grain';
+    const pads = tiledSurface(cloth, feltFinish, 0.18, 0.18);
+    pads.name = 'booth:felt';
+    const lanternShells = new THREE.Mesh(mergeParts(paper.parts, true), lanternPaper);
+    lanternShells.name = 'booth:washi';
+    group.add(boards, pads, lanternShells);
+  }
 
   const devices = new Map<string, THREE.Object3D>();
   for (const d of layout.devices) {
@@ -412,6 +450,7 @@ export function buildBooth(layout: BoothLayout, pickInflate = 0, illustrated = f
       }
     },
     dispose() {
+      for (const material of surfaceMaterials) material.dispose();
       group.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });

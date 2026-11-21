@@ -24,7 +24,6 @@ export const SETS = new Map<string, string[]>([
 ]);
 const AIM_SENSITIVITY = 0.0022;
 
-
 export async function drag(page: Page, dyaw: number, dpitch: number) {
   const box = (await page.getByTestId('aim-pad').boundingBox())!;
   const x0 = box.x + box.width / 2;
@@ -64,37 +63,62 @@ export async function aimAndFire(page: Page, sc: Scene) {
   const saved = (await readRecordedRun(page)).state.aim;
   await drag(page, sc.aim.yaw - saved.yaw, sc.aim.pitch - saved.pitch);
   await expect.poll(async () => (await readRecordedRun(page)).state.aim).toEqual(expect.objectContaining({ yaw: expect.closeTo(sc.aim.yaw, 4) }));
-  const btn = page.getByTestId('btn-fire');
-  await holdClock(page);
-  await btn.tap();
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
-  for (let i = 0; i < 6; i++) await page.clock.runFor(100);
-  await expect(page.getByTestId('load-label')).toHaveAttribute('data-tier', /^(good|perfect)$/);
-  await btn.tap();
-  await page.clock.resume();
-  await expect.poll(async () => (await readRecordedRun(page)).state.shotsFired).toBe(sc.state.shotsFired + 1);
+  await fireWithGauge(page);
+  await expect.poll(async () => (await readRecordedRun(page)).state.shotsFired, { timeout: 15_000 }).toBe(sc.state.shotsFired + 1);
 }
 
-type Rect = { x: number; y: number; width: number; height: number };
-const meets = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+/**
+ * Drive the visible button with touch input while the gauge uses a controlled
+ * clock. A trusted touch does not wait for two stable animation frames while
+ * that clock is paused, and the final tap still goes through the real handler.
+ */
+export async function fireWithGauge(page: Page, checkSpentCork?: () => Promise<void>) {
+  const btn = page.getByTestId('btn-fire');
+  const tap = async () => {
+    await expect(btn).toBeVisible();
+    await expect(btn).toBeEnabled();
+    const box = await btn.boundingBox();
+    if (!box) throw new Error('The visible fire control has no touch area');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const reachable = await btn.evaluate((el, point) => el.contains(el.ownerDocument.elementFromPoint(point.x, point.y)), { x, y });
+    if (!reachable) throw new Error('The fire control is covered');
+    await page.touchscreen.tap(x, y);
+  };
+  await holdClock(page);
+  try {
+    await tap();
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
+    // The UI and game clocks both advance through the same animation frames.
+    await page.clock.runFor(600);
+    await expect(page.getByTestId('load-label')).toHaveAttribute('data-tier', /^(good|perfect)$/);
+    await tap();
+    // The IndexedDB write may still be pending after the native tap. Keep the
+    // game clock paused until FIRE starts, then inspect the committed shot.
+    await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'resolving', { timeout: 30_000 });
+    await checkSpentCork?.();
+  } finally {
+    await page.clock.resume();
+  }
+}
 
-/** T05: the card stays on screen and clear of the ammo, the score, the controls and the speech bubble. */
+/** T05: read the card as a player would and measure every element from one layout. */
 export async function expectCardClear(page: Page) {
-  const vp = page.viewportSize()!;
-  const card = (await page.getByTestId('shot-card').boundingBox())!;
-  expect(card.x).toBeGreaterThanOrEqual(0);
-  expect(card.y).toBeGreaterThanOrEqual(0);
-  expect(card.x + card.width).toBeLessThanOrEqual(vp.width + 0.5);
-  expect(card.y + card.height).toBeLessThanOrEqual(vp.height + 0.5);
-  for (const id of ['hud-ammo', 'hud-score', 'controls']) {
-    const other = await page.getByTestId(id).boundingBox();
-    if (other) expect(meets(card, other), `the card covers ${id} at ${vp.width}x${vp.height}`).toBe(false);
-  }
-  const speech = page.locator('.af-speech:not([hidden])');
-  if (await speech.count()) {
-    const b = await speech.first().boundingBox();
-    if (b) expect(meets(card, b), 'the card covers the speech bubble').toBe(false);
-  }
+  const card = page.getByTestId('shot-card');
+  await expect(card).toBeVisible();
+  await card.dispatchEvent('pointerdown');
+  await expect.poll(() => card.evaluate(element => {
+    const r = element.getBoundingClientRect();
+    if (!r.width || !r.height || r.left < -0.5 || r.top < -0.5 ||
+      r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) return 'The card is outside the viewport';
+    const selectors = ['[data-testid="hud-ammo"]', '[data-testid="hud-score"]', '[data-testid="controls"]', '.af-speech:not([hidden])'];
+    for (const selector of selectors) {
+      const other = element.ownerDocument.querySelector(selector)?.getBoundingClientRect();
+      if (other?.width && other.height && r.left < other.right && r.right > other.left &&
+        r.top < other.bottom && r.bottom > other.top) return `The card overlaps ${selector}`;
+    }
+    return null;
+  }), { timeout: 8_000 }).toBeNull();
 }
 
 export async function settle(page: Page) {

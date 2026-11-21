@@ -8,9 +8,10 @@ import { SETS, aimAndFire, expectCardClear, scene, settle } from '../helpers/aim
 // tests/fixtures/r007/scenarios.json.gz, checked by tests/integration/aim-first-scenarios.test.ts),
 // then the player's own drag to aim, "撃つ" and "発射". Flight, scoring, sets, saving and the
 // card all run as in a real game. Chromium with phone-sized viewports, not Safari, not a device.
-test.use({ baseURL: 'http://127.0.0.1:4180' });
+test.use({ baseURL: 'http://127.0.0.1:4180', screenshot: 'only-on-failure' });
 
 async function shot(page: Page, info: TestInfo, name: string) {
+  if (process.env.SHATEKKI_EVIDENCE !== '1') return;
   mkdirSync('test-results/aim-first', { recursive: true });
   await page.screenshot({ path: `test-results/aim-first/${info.project.name}-${name}.png` });
 }
@@ -24,8 +25,11 @@ for (const name of ['pair-first', 'pair-again', 'trio-first', 'pair-and-trio', '
     await aimAndFire(page, sc);
     const card = page.getByTestId('shot-card');
     await expect(card).toHaveAttribute('data-kind', 'set', { timeout: 30_000 });
-    await shot(page, info, `scene-${name}`);
+    if (name === 'pair-and-trio') {
+      await expect(page.locator('.shot-festival-border')).toHaveAttribute('data-tier', '4');
+    }
     await expectCardClear(page);
+    await shot(page, info, `scene-${name}`);
     const record = await readRecordedRun(page);
     const summary = record.lastSummary!;
     expect([...summary.newlyCompletedSets].sort()).toEqual([...sc.expect.sets!].sort());
@@ -67,8 +71,8 @@ for (const name of ['fan-take', 'tray-take'] as const) {
     await aimAndFire(page, sc);
     await settle(page);
     await expect(page.getByTestId('shot-card')).toBeVisible();
-    await shot(page, info, `scene-${name}-card`);
     await expectCardClear(page);
+    await shot(page, info, `scene-${name}-card`);
     const summary = (await readRecordedRun(page)).lastSummary!;
     expect(summary.collected.length).toBeGreaterThanOrEqual(1);
     expect(summary.ledger.items.some((i) => i.kind === 'trick')).toBe(true); // the existing reflection-take points
@@ -94,25 +98,28 @@ test('T06 frame intervals while aiming and during a real shot (recorded, not a d
   await restoreShotStart(page, { beforeFire: sc.state, gameTick: 0 }, sc.discovered);
   const sample = (ms: number) =>
     page.evaluate(
-      (dur) =>
+      ({ duration, minSamples, limit }) =>
         new Promise<number[]>((done) => {
           const out: number[] = [];
           let last = performance.now();
-          const end = last + dur;
+          const end = last + duration;
+          const deadline = last + limit;
           const step = (t: number) => {
             out.push(t - last);
             last = t;
-            if (t < end) requestAnimationFrame(step);
+            // Keep a useful sample when the software renderer is slow, up to a
+            // fixed limit. The recorded intervals still show every slow frame.
+            if (t < deadline && (t < end || out.length < minSamples)) requestAnimationFrame(step);
             else done(out);
           };
           requestAnimationFrame(step);
         }),
-      ms,
+      { duration: ms, minSamples: 12, limit: 7_500 },
     );
   const stats = (xs: number[]) => {
     const s = [...xs].sort((a, b) => a - b);
     const q = (p: number) => +(s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0).toFixed(1);
-    return { frames: xs.length, medianMs: q(0.5), p95Ms: q(0.95), worstMs: q(1), over33ms: xs.filter((x) => x > 33.4).length };
+    return { frames: xs.length, elapsedMs: Math.round(xs.reduce((sum, interval) => sum + interval, 0)), medianMs: q(0.5), p95Ms: q(0.95), worstMs: q(1), over33ms: xs.filter((x) => x > 33.4).length };
   };
   const aiming = stats(await sample(2000));
   await aimAndFire(page, sc);

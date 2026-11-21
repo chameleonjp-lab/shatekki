@@ -308,7 +308,12 @@ describe('mapping covers every event and cue', () => {
       for (const r of soundsForSimEvent({ type: 'deviceActivated', eventId: mintId.event(mintId.shot(1), 1), shotId: mintId.shot(1), deviceId: mintId.device('d'), deviceKind: k, projectileId: mintId.projectile(mintId.shot(1), 0) })) reachable.add(r.id);
     const s1 = mintId.shot(1);
     for (const r of soundsForSimEvent({ type: 'prizeContact', eventId: mintId.event(s1, 2), shotId: s1, a: mintId.instance(1), b: null, point: { x: 0, y: 0, z: 0 }, impulse: 1 })) reachable.add(r.id);
-    for (const r of soundsForSimEvent({ type: 'prizeReachedCollection', eventId: mintId.event(s1, 3), shotId: s1, instanceId: mintId.instance(1), typeId: asPrizeTypeId('P001') })) reachable.add(r.id);
+    const collected = { type: 'prizeReachedCollection', eventId: mintId.event(s1, 3), shotId: s1,
+      instanceId: mintId.instance(1), typeId: asPrizeTypeId('P001') } as const;
+    const dropCues = [0, 1, 2, 3, 4, 9].map(count => soundsForSimEvent(collected, count)[0]!.id);
+    expect(dropCues).toEqual(['collectDrop', 'festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4', 'festival.drop.4']);
+    for (const id of dropCues) reachable.add(id);
+    for (const r of soundsForUiCue({ type: 'ui', cue: 'fire' }, true)) reachable.add(r.id);
     for (const r of soundsForSimEvent({ type: 'prizeTransformed', eventId: mintId.event(s1, 4), shotId: s1, instanceId: mintId.instance(1), fromTypeId: asPrizeTypeId('P001'), toTypeId: asPrizeTypeId('P002'), hpBefore: 1, maxHpBefore: 1, hpAfter: 1, maxHpAfter: 1 })) reachable.add(r.id);
     for (const a of [true, false]) for (const r of soundsForSimEvent(impact({ kind: 'cell', cellId: 'cell-r1-c01' as never, activated: a }))) reachable.add(r.id);
     for (const c of EXPANSION_CUE_NAMES) for (const r of soundsForUiCue({ type: 'ui', cue: c })) reachable.add(r.id);

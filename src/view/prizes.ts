@@ -179,6 +179,33 @@ export function buildPrizeGeometry(modelKey: string, shape: CollisionShape, mate
 
 const GLOSSY: Partial<Record<PrizeMaterial, number>> = { glass: 90, metal: 70, ceramic: 60, plastic: 30, rubber: 12 };
 
+const PRIZE_FINISH: Record<PrizeMaterial, { roughness: number; metalness: number }> = {
+  paper: { roughness: 0.92, metalness: 0 },
+  plastic: { roughness: 0.36, metalness: 0 },
+  wood: { roughness: 0.76, metalness: 0 },
+  cloth: { roughness: 0.92, metalness: 0 },
+  metal: { roughness: 0.24, metalness: 0.78 },
+  glass: { roughness: 0.08, metalness: 0 },
+  ceramic: { roughness: 0.18, metalness: 0 },
+  rubber: { roughness: 0.63, metalness: 0 },
+};
+
+function createDuskPrizeMaterials(environment: THREE.Texture | null): Record<PrizeMaterial, THREE.Material> {
+  const materials = {} as Record<PrizeMaterial, THREE.Material>;
+  for (const material of Object.keys(PRIZE_FINISH) as PrizeMaterial[]) {
+    const finish = { ...PRIZE_FINISH[material], vertexColors: true };
+    // Keep the collision silhouette visible. The coat gives glass reflections without transmission.
+    if (material === 'glass') {
+      materials[material] = new THREE.MeshPhysicalMaterial({ ...finish, envMap: environment, envMapIntensity: 0.8, clearcoat: 0.7, clearcoatRoughness: 0.1 });
+    } else if (GLOSSY[material] !== undefined) {
+      materials[material] = new THREE.MeshStandardMaterial({ ...finish, envMap: environment, envMapIntensity: 0.8 });
+    } else {
+      materials[material] = new THREE.MeshLambertMaterial({ vertexColors: true });
+    }
+  }
+  return materials;
+}
+
 /** Shared materials per PrizeMaterial. */
 export function createPrizeMaterials(): Record<PrizeMaterial, THREE.Material> {
   const out = {} as Record<PrizeMaterial, THREE.Material>;
@@ -212,9 +239,9 @@ function shapeKey(s: CollisionShape): string {
   }
 }
 
-export function createPrizeVisualFactory(): PrizeVisualFactory {
+export function createPrizeVisualFactory(duskMaterials = false, environment: THREE.Texture | null = null): PrizeVisualFactory {
   const geos = new Map<string, THREE.BufferGeometry>();
-  const mats = createPrizeMaterials();
+  const mats = duskMaterials ? createDuskPrizeMaterials(environment) : createPrizeMaterials();
   return {
     createMesh(spec) {
       const key = `${spec.modelKey}|${shapeKey(spec.shape)}|${PRIZE_RECIPES[spec.modelKey] ? '' : spec.material}`;

@@ -149,8 +149,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Full runs cover 220 tests across three portrait sizes; narrow selections keep two shards.
-        shard: ${{ fromJSON(fromJSON(needs.plan.outputs.plan).scope == 'full' && '[1,2,3,4]' || '[1,2]') }}
+        # Split the full run further so long scene and localization cases fit the same limit.
+        shard: ${{ fromJSON(fromJSON(needs.plan.outputs.plan).scope == 'full' && '[1,2,3,4,5,6]' || '[1,2]') }}
     env:
       CI: 'true'
       CI_PREBUILT: 'true'

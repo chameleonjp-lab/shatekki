@@ -91,8 +91,8 @@ export class Kit {
   };
 }
 
-/** Merge parts into one non-indexed geometry with vertex colours (no uv). */
-export function mergeParts(parts: readonly Part[]): THREE.BufferGeometry {
+/** Merge parts into one non-indexed geometry with vertex colours. */
+export function mergeParts(parts: readonly Part[], preserveUvs = false): THREE.BufferGeometry {
   let verts = 0;
   const flat = parts.map((p) => {
     const g = p.geo.index ? p.geo.toNonIndexed() : p.geo;
@@ -102,14 +102,17 @@ export function mergeParts(parts: readonly Part[]): THREE.BufferGeometry {
   const pos = new Float32Array(verts * 3);
   const nor = new Float32Array(verts * 3);
   const col = new Float32Array(verts * 3);
+  const uv = preserveUvs ? new Float32Array(verts * 2) : null;
   let o = 0;
   for (const { g, color } of flat) {
     const pa = g.getAttribute('position');
     const na = g.getAttribute('normal');
+    const ta = uv ? g.getAttribute('uv') : undefined;
     for (let i = 0; i < pa.count; i++, o++) {
       pos.set([pa.getX(i), pa.getY(i), pa.getZ(i)], o * 3);
       nor.set([na.getX(i), na.getY(i), na.getZ(i)], o * 3);
       col.set([color.r, color.g, color.b], o * 3);
+      if (uv && ta) uv.set([ta.getX(i), ta.getY(i)], o * 2);
     }
   }
   for (const p of parts) p.geo.dispose();
@@ -117,6 +120,7 @@ export function mergeParts(parts: readonly Part[]): THREE.BufferGeometry {
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   return out;
 }
 

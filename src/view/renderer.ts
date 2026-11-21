@@ -7,7 +7,7 @@
  * and view state; nothing is written back into the simulation.
  */
 import * as THREE from 'three';
-import type { BoothLayout, ExpansionCatalog, PresentOptions, PrizeTypeId, Renderer, RuntimeCatalog, ShotSummary, SimulationFrame, ViewState } from '../contracts';
+import type { BoothLayout, ExpansionCatalog, PresentOptions, PrizeTypeId, Renderer, RuntimeCatalog, ShotId, ShotSummary, SimulationFrame, ViewState } from '../contracts';
 import { BOOTH_LAYOUT } from '../contracts';
 import { applyCameraPose, cameraPose } from './camera';
 import type { PrizeVisualSpec } from './prizes';
@@ -18,6 +18,8 @@ import { createEffects, type Effects, type EffectsHud } from './effects';
 import { createDomHud, type DomHud } from './hud';
 import { createExpandedView, type ExpandedView, type ExpandedViewModel } from './expanded-view';
 import { createExpandedOverlay, type ExpandedOverlay } from './expanded-overlay';
+import { createStallEnvironment } from './materials/procedural-textures';
+import { createShotFestival } from './shot-festival';
 
 export interface ThreeRendererDeps {
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
@@ -39,6 +41,8 @@ export interface ThreeRendererDeps {
   readonly onSettled?: (cls: ShotClass, summary: ShotSummary) => void;
   /** Expanded rules only: cells, series outline and the FX093-FX100 hints. */
   readonly expanded?: ExpandedRendererDeps;
+  /** Opt-in presentation for the r007 internal candidate. */
+  readonly duskMaterials?: boolean;
 }
 
 /**
@@ -58,6 +62,9 @@ export interface ExpandedRendererDeps {
 
 export interface ThreeRenderer extends Renderer {
   readonly graph: SceneGraph;
+  beginFestivalShot(shotId: ShotId, perfect: boolean): void;
+  presentFestivalShot(summary: ShotSummary, freshSets: number, ammoBefore: number, quiet: boolean): void;
+  clearFestival(): void;
   /** Reticle ray of the last render() (null before the first one). */
   lastReticle(): ReticleResult | null;
   /** What the expanded overlay showed in the last render() (null for rules-v1). */
@@ -76,7 +83,17 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   webgl.shadowMap.enabled = false;
   webgl.outputColorSpace = THREE.SRGBColorSpace;
 
-  const graph = createSceneGraph({ layout, illustratedRewards: deps.expanded?.illustratedRewards, resolvePrize: deps.resolvePrize, ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}) });
+  const environment = deps.duskMaterials ? createStallEnvironment() : null;
+  const graph = createSceneGraph({
+    layout, illustratedRewards: deps.expanded?.illustratedRewards, resolvePrize: deps.resolvePrize,
+    duskMaterials: deps.duskMaterials, prizeEnvironment: environment,
+    ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}),
+  });
+  if (deps.duskMaterials) {
+    webgl.toneMapping = THREE.ACESFilmicToneMapping;
+    webgl.toneMappingExposure = 1.12;
+    graph.scene.fog = new THREE.FogExp2(0x1b1020, 0.085);
+  }
   const camera = new THREE.PerspectiveCamera(60, 0.5, 0.05, 30);
   let width = Math.max(1, canvas.clientWidth || 402);
   let height = Math.max(1, canvas.clientHeight || 874);
@@ -89,6 +106,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const fx: Effects = createEffects({
     layer: graph.effectsLayer,
     illustratedRewards: deps.expanded?.illustratedRewards,
+    festival: deps.duskMaterials,
     layout,
     shopkeeperParts: graph.booth.shopkeeper,
     prizeObject: (id) => graph.prizes.get(id)?.mesh ?? null,
@@ -104,9 +122,31 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     : null;
   const expandedOverlay: ExpandedOverlay | null = expandedView && canvas.parentElement ? createExpandedOverlay(canvas.parentElement) : null;
 
+  const festival = deps.duskMaterials
+    ? createShotFestival(canvas, graph.effectsLayer, layout, graph.booth.group.getObjectByName('booth:washi'))
+    : null;
+  const reflections = new Map<string, number>();
+  let festivalShot: ShotId | null = null;
+  let perfect = false;
+  let kickStart = -Infinity;
   const reduceMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
   return {
     graph,
+    beginFestivalShot(shotId, isPerfect) {
+      festivalShot = shotId;
+      perfect = isPerfect;
+      reflections.clear();
+      kickStart = -Infinity;
+      festival?.begin(shotId, isPerfect && !reduceMotion.matches);
+    },
+    presentFestivalShot(summary, freshSets, ammoBefore, quiet) {
+      festival?.settle(summary, freshSets, ammoBefore, quiet || reduceMotion.matches);
+    },
+    clearFestival() {
+      festivalShot = null;
+      reflections.clear();
+      festival?.clear();
+    },
     render(frame: SimulationFrame, view: ViewState): void {
       if (disposed) return;
       applyFrame(graph, frame);
@@ -121,7 +161,33 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
         if (frame.events.some((e) => e.type === 'impact' && e.target.kind === 'shopkeeper' && e.target.part === 'fan')) keeper.flick(now);
         if (!reduceMotion.matches) keeper.idle(now);
       }
-      fx.handleEvents(frame.events, frame.simTimeSec);
+      if (festival && festivalShot) {
+        const quiet = reduceMotion.matches || view.paused;
+        const now = performance.now() / 1_000;
+        for (const event of frame.events) {
+          if (event.shotId !== festivalShot) continue;
+          if (event.type === 'projectileSpawned' && event.parentId === null && !Number.isFinite(kickStart)) kickStart = now;
+          if (event.type !== 'impact') continue;
+          const old = reflections.get(event.projectileId) ?? 0;
+          reflections.set(event.projectileId, Math.max(old, event.reflectionIndex + 1));
+        }
+        if (!quiet) for (const [id, cork] of graph.projectiles) {
+          const trace = cork.children[1] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+          const bounces = reflections.get(id) ?? 0;
+          trace.material.toneMapped = false;
+          trace.material.opacity = bounces || perfect ? 0.76 : 0.45;
+          if (bounces >= 3) trace.material.color.setHSL((frame.simTimeSec * 3) % 1, .98, .68);
+          else trace.material.color.setHex(bounces >= 2 || perfect ? 0xffcf54 : 0xdcf4ff);
+          trace.scale.set(1.1 + .2 * Math.min(bounces, 3), 1.1, 1.2 + .45 * Math.min(bounces, 3));
+        }
+        const kick = (now - kickStart) / .12;
+        if (!quiet && view.phase === 'resolving' && kick >= 0 && kick < 1) {
+          graph.gun.visible = true;
+          graph.gun.translateZ(.045 * Math.sin(kick * Math.PI));
+        }
+        festival.render(frame, camera, width, height, now, quiet);
+      }
+      fx.handleEvents(frame.events, frame.simTimeSec, { festival: !!festival && !reduceMotion.matches && !view.paused, perfect });
       fx.update(frame.simTimeSec);
       webgl.render(graph.scene, camera);
     },
@@ -142,10 +208,12 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       if (disposed) return;
       disposed = true;
       fx.dispose();
+      festival?.dispose();
       expandedOverlay?.dispose();
       expandedView?.dispose();
       domHud?.dispose();
       graph.dispose();
+      environment?.dispose();
       webgl.dispose();
     },
     lastReticle: () => last,

@@ -256,9 +256,11 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t'], p
     const limit = controls && controls.getBoundingClientRect().height > 0 ? controls.getBoundingClientRect().top : win.innerHeight;
     const numbers = bottomOf('[data-testid="hud"] > *');
     const withMap = Math.max(numbers, bottomOf('[data-testid="booth-map"]'));
-    const top = (limit - withMap - 12 >= MIN_CARD ? withMap : numbers) + 6;
-    card.style.top = `${Math.round(top)}px`;
-    card.style.maxHeight = `${Math.max(MIN_CARD, Math.round(limit - top - 6))}px`;
+    const top = Math.ceil((limit - withMap - 12 >= MIN_CARD ? withMap : numbers) + 6);
+    card.style.top = `${top}px`;
+    // The minimum is for choosing which HUD rows to avoid, not for extending
+    // the card into the controls on a short screen. The card can scroll.
+    card.style.maxHeight = `${Math.max(0, Math.floor(limit - top - 6))}px`;
   };
   // The controls grow back when aiming resumes after the shot, and the top rows change with the
   // next-shot mark: keep the card in the gap while it is open.

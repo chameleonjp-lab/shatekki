@@ -41,6 +41,7 @@ export interface EffectsDeps {
   readonly layer: THREE.Group;
   /** The illustrated card already presents the confirmed collection, sets and chain. */
   readonly illustratedRewards?: boolean;
+  readonly festival?: boolean;
   readonly layout: BoothLayout;
   readonly shopkeeperParts: ReadonlyMap<string, THREE.Mesh>;
   /** The current mesh of a prize instance (for the transform pop), if it exists. */
@@ -62,7 +63,7 @@ export interface EffectsStats {
 }
 
 export interface Effects {
-  handleEvents(events: readonly SimEvent[], simTimeSec: number): void;
+  handleEvents(events: readonly SimEvent[], simTimeSec: number, style?: { festival: boolean; perfect: boolean }): void;
   update(simTimeSec: number): void;
   present(summary: ShotSummary, options: PresentOptions): Promise<void>;
   stats(): EffectsStats;
@@ -101,6 +102,11 @@ const PRESETS: Record<string, Preset> = {
   penalty: { n: 8, color: 0xff3b3b, speed: 0.7, life: 0.6, size: 0.011, gravity: 2.5, spread: 1.4 },
   ammo: { n: 8, color: 0xffd24a, speed: 0.9, life: 0.7, size: 0.013, gravity: -1.2, spread: 0.8 },
   bulletType: { n: 8, color: 0x7aff9e, speed: 1.0, life: 0.55, size: 0.011, gravity: 0, spread: 1.8 },
+  // Only the internal festival presentation uses these presets.
+  muzzle: { n: 13, color: 0xffcf70, speed: 1.6, life: 0.23, size: 0.012, gravity: 1.2, spread: 0.95 },
+  corkDust: { n: 8, color: 0xffe8c7, speed: 0.8, life: 0.3, size: 0.014, gravity: 0.6, spread: 1.35 },
+  fanWind: { n: 11, color: 0x98eeff, speed: 1.55, life: 0.46, size: 0.012, gravity: 0.25, spread: 0.65 },
+  traySpark: { n: 13, color: 0xffc748, speed: 2.4, life: 0.29, size: 0.009, gravity: 2.4, spread: 1.15 },
   // settle
   collect: { n: 7, color: 0xffe27a, speed: 1.2, life: 0.7, size: 0.014, gravity: -0.8, spread: 1.8 },
   setComplete: { n: 14, color: 0xfff0a0, speed: 1.8, life: 1.0, size: 0.016, gravity: -0.3, spread: 2 },
@@ -117,6 +123,9 @@ const RING_COLOR: Record<string, number> = {
   ammo: 0xffd24a,
   bulletType: 0x7aff9e,
   split: 0xffffff,
+  muzzle: 0xfff4de,
+  fanWind: 0x94f5ff,
+  traySpark: 0xffba57,
   setComplete: 0xfff0a0,
   collect: 0xffe27a,
 };
@@ -238,6 +247,18 @@ export function createEffects(deps: EffectsDeps): Effects {
   layer.add(root);
 
   const pGeo = new THREE.OctahedronGeometry(1, 0);
+  const shards = deps.festival ? {
+    wood: new THREE.BoxGeometry(1.85, .38, .75),
+    metal: new THREE.BoxGeometry(.48, 2.8, .48),
+    glass: new THREE.TetrahedronGeometry(1.16),
+    cloth: new THREE.SphereGeometry(.78, 6, 4),
+  } : null;
+  const festivalShapes: Readonly<Record<string, THREE.BufferGeometry>> = shards ? {
+    wood: shards.wood, paper: shards.wood, metal: shards.metal, muzzle: shards.metal,
+    traySpark: shards.metal, glass: shards.glass, ceramic: shards.glass, cloth: shards.cloth,
+    clothPowder: shards.cloth, corkDust: shards.cloth, fanWind: shards.wood,
+  } : {};
+
   const rGeo = new THREE.RingGeometry(0.82, 1, 24);
   const bGeo = new THREE.BoxGeometry(1, 0.16, 0.16);
   const mkMat = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -346,6 +367,10 @@ export function createEffects(deps: EffectsDeps): Effects {
       p.size = pr.size * (0.8 + rnd() * 0.5);
       p.material.color.setHex(pr.color);
       p.mesh.position.set(x, y, z);
+      if (shards) {
+        p.mesh.geometry = festivalShapes[key] ?? pGeo;
+        p.mesh.rotation.set(rx * 3, ry * 3, rz * 3);
+      }
       p.mesh.scale.setScalar(p.size);
       p.mesh.visible = true;
     }
@@ -660,10 +685,33 @@ export function createEffects(deps: EffectsDeps): Effects {
   }
 
   return {
-    handleEvents(events, simTimeSec) {
+    handleEvents(events, simTimeSec, style) {
       if (disposed) return;
       if (lastSim === null) lastSim = simTimeSec;
-      for (const ev of events) handleEvent(ev);
+      for (const ev of events) {
+        const first = !handled.has(ev.eventId);
+        handleEvent(ev);
+        if (!style?.festival || !first) continue;
+        if (ev.type === 'projectileSpawned' && ev.parentId === null) {
+          const p = ev.position;
+          const length = Math.hypot(ev.velocity.x, ev.velocity.y, ev.velocity.z) || 1;
+          const x = ev.velocity.x / length, y = ev.velocity.y / length, z = ev.velocity.z / length;
+          // Place the ring just forward of the muzzle so the near plane cannot swallow it.
+          const bx = p.x + x * .08, by = p.y + y * .08, bz = p.z + z * .08;
+          ring(style.perfect ? 'traySpark' : 'muzzle', bx, by, bz, style.perfect ? .18 : .12, .19);
+          burst('muzzle', bx, by, bz, x, y, z, style.perfect ? 1.4 : 1);
+          burst('corkDust', bx, by, bz, x, y, z);
+        } else if (ev.type === 'impact') {
+          const p = ev.point;
+          if (ev.target.kind === 'shopkeeper' && ev.target.part === 'fan' && ev.target.face === 'front') {
+            burst('fanWind', p.x, p.y, p.z, ev.normal.x, ev.normal.y, ev.normal.z);
+            ring('fanWind', p.x, p.y, p.z, .28, .33);
+          } else if (ev.target.kind === 'surface' && ev.target.surfaceId === 'reflector-tray') {
+            burst('traySpark', p.x, p.y, p.z, ev.normal.x, ev.normal.y, ev.normal.z);
+            ring('traySpark', p.x, p.y, p.z, .23, .25);
+          }
+        }
+      }
     },
     update,
     present,
@@ -683,6 +731,7 @@ export function createEffects(deps: EffectsDeps): Effects {
       waiters.length = 0;
       layer.remove(root);
       pGeo.dispose();
+      if (shards) for (const geometry of Object.values(shards)) geometry.dispose();
       rGeo.dispose();
       bGeo.dispose();
       for (const p of particles) p.material.dispose();

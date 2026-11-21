@@ -242,7 +242,8 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
 
   // Sound: first run ON with volume > 0; saved off / 0 respected (settings store). The context is
   // created/resumed from a user gesture; failures never stop the game.
-  const audio = createAudioEngine();
+  const festivalPreview = bundle.key === 'expanded-aim-first';
+  const audio = createAudioEngine({ festival: festivalPreview, listener: () => ({ ...layout.camera.eye, x: controller?.current.standX ?? layout.camera.eye.x }) });
   let audioSettings: AudioSettings = settingsStore.load().audio;
   const cue = (c: UiCue['cue'], extra: Partial<Pick<UiCue, 'tier' | 'count'>> = {}) => {
     if (!atomic || reasons.length === 0) audio.handle({ type: 'ui', cue: c, ...extra } as UiCue, audioSettings);
@@ -718,6 +719,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     try {
       renderer = view.createThreeRenderer(canvas, {
         layout,
+        duskMaterials: festivalPreview,
         ...(expansion ? { expanded: { catalog, expansion, illustratedRewards, translate: expText, prizeName: (typeId) => prizeName(i18n.locale, typeId) } } : {}),
         corkRadius: tuning.cork.radius,
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
@@ -822,7 +824,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         tuning,
         layout,
         expansion,
-        onConfirmed: event => rewardMotions?.presentRewardMotion(event),
+        onConfirmed: (event) => {
+          if (festivalPreview && event.kind === 'shot' && !event.replayed) {
+            renderer?.presentFestivalShot(event.summary, event.freshSets.length, event.ammoBeforeShot, event.reducedMotion);
+          }
+          rewardMotions?.presentRewardMotion(event);
+        },
         reducedMotion: () => win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
         ...(session ? {session, onReplayed: showSavedRecord} : {}),
         clockPolicy: bundle.behavior?.clock,
@@ -841,6 +848,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
           effectResults?.hide();
           rewardPanel?.hideCard();
           firedWithLastCork = s.ammo === 0;
+          if (festivalPreview && s.inFlight) renderer?.beginFestivalShot(s.inFlight.shotId, s.load?.tier === 'perfect');
           if (atomic) return;
           runStore.saveAfterFire(s);
           markStale();
@@ -1010,6 +1018,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
         root.dataset.dailyDate = atomic.record.scope.mode === 'daily' ? atomic.record.scope.startedDateJst : '';
         dismissPrompt();
       }
+      renderer?.clearFestival();
       controller = makeController(w, initial);
       controller.setEnvironmentPause(reasons);
       setScreen('game');

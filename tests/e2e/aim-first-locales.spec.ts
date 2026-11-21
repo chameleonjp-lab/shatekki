@@ -9,7 +9,7 @@ import { aimAndFire, expectCardClear, scene } from '../helpers/aim-first-play';
 // of the ammo, the score, the controls and the speech bubble. Runs only in short-portrait-chromium
 // (playwright.config.ts ignores this file in the other projects). 14 of 15 are machine translations
 // not yet reviewed by native speakers; this checks fit and presence, not the wording.
-test.use({ baseURL: 'http://127.0.0.1:4180' });
+test.use({ baseURL: 'http://127.0.0.1:4180', screenshot: 'only-on-failure' });
 
 for (const locale of LOCALES) {
   test(`T08 two-set card fits in ${locale}`, async ({ browser }) => {
@@ -24,11 +24,13 @@ for (const locale of LOCALES) {
       await aimAndFire(page, sc);
       const card = page.getByTestId('shot-card');
       await expect(card).toHaveAttribute('data-kind', 'set', { timeout: 30_000 });
-      mkdirSync('test-results/aim-first', { recursive: true });
-      await page.screenshot({ path: `test-results/aim-first/locale-${locale}.png` });
+      await expectCardClear(page);
+      if (process.env.SHATEKKI_EVIDENCE === '1') {
+        mkdirSync('test-results/aim-first', { recursive: true });
+        await page.screenshot({ path: `test-results/aim-first/locale-${locale}.png` });
+      }
       const text = (await card.innerText()).trim();
       expect(text).not.toMatch(/\baf\.[a-z]|\bset\.[A-Z]|\bprize\.[A-Z]|\{[a-z]+\}/);
-      await expectCardClear(page);
       // nothing in the card is cut off sideways
       expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     } finally {

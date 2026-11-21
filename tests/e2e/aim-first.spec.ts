@@ -3,10 +3,11 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import type { PersistedRecord } from '../../src/contracts/persistence';
 import { BOOTH_LAYOUT_V3, isAmmoBalanced, type ExpandedRunState, type GameplayBundle, type TuningConfig } from '../../src/contracts';
 import { aimThrough } from '../helpers/aim-v3';
+import { fireWithGauge } from '../helpers/aim-first-play';
 
 // r007 internal candidate, local build only (npm run build:aim-first, port 4180).
 // Chromium with phone-sized viewports: NOT Safari and NOT a real iPhone.
-test.use({ baseURL: 'http://127.0.0.1:4180' });
+test.use({ baseURL: 'http://127.0.0.1:4180', screenshot: 'only-on-failure' });
 
 // r007 keeps the rules-v1 cork and aim numbers; only the layout is v3 (the browser loader cannot import the JSON bundle).
 const RELEASE_TUNING = (JSON.parse(readFileSync('data/release-approved-v1.json', 'utf8')) as { tuning: TuningConfig }).tuning;
@@ -15,6 +16,7 @@ const B = { layout: BOOTH_LAYOUT_V3, tuning: RELEASE_TUNING } as unknown as Game
 const AIM_SENSITIVITY = 0.0022;
 
 async function shot(page: Page, info: TestInfo, name: string) {
+  if (process.env.SHATEKKI_EVIDENCE !== '1') return;
   const dir = 'test-results/aim-first';
   mkdirSync(dir, { recursive: true });
   await page.screenshot({ path: `${dir}/${info.project.name}-${name}.png` });
@@ -42,6 +44,7 @@ async function record(page: Page): Promise<PersistedRecord> {
 }
 
 async function start(page: Page) {
+  await page.clock.install();
   await page.goto('/?e2e=1');
   await expect(page.locator('#app')).toHaveAttribute('data-rules-version', 'rules-v2-proposed-r007');
   await page.getByTestId('home-start').click();
@@ -55,8 +58,11 @@ async function hold(page: Page, testId: string, ms: number) {
   const box = (await page.getByTestId(testId).boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(ms);
-  await page.mouse.up();
+  try {
+    await page.clock.runFor(ms);
+  } finally {
+    await page.mouse.up();
+  }
 }
 
 /** Drag the aim pad by the pixels that give `dyaw`, `dpitch`. */
@@ -82,15 +88,6 @@ async function toRightEnd(page: Page) {
 async function savedAim(page: Page) {
   const s = (await record(page)).state;
   return { x: s.standX, yaw: s.aim.yaw, pitch: s.aim.pitch };
-}
-
-/** Tap 撃つ, wait for a bar near the middle of the strong zone, tap 発射. */
-async function shoot(page: Page) {
-  const btn = page.getByTestId('btn-fire');
-  await btn.tap();
-  await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'loading');
-  await page.waitForTimeout(560);
-  await btn.tap();
 }
 
 async function settle(page: Page, answer = true) {
@@ -125,8 +122,7 @@ test('aim first: tap and hold to move, drag to aim, 撃つ then 発射 uses one 
   await page.getByTestId('btn-cancel-gauge').tap();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
   await expect(page.getByTestId('hud-ammo')).toContainText('10');
-  await shoot(page);
-  await expect(page.getByTestId('hud-ammo')).toContainText('9');
+  await fireWithGauge(page, () => expect(page.getByTestId('hud-ammo')).toHaveText('弾 9'));
   await settle(page);
   await expect(page.getByTestId('shot-card')).toBeVisible();
   await shot(page, info, '04-card');
@@ -213,7 +209,10 @@ test('the shopkeeper speaks after six calm seconds, and the bubble closes when t
   await start(page);
   const bubble = page.getByTestId('shopkeeper-speech');
   await expect(bubble).toBeHidden();
-  await expect(bubble).toBeVisible({ timeout: 9_000 });
+  // A 250 ms step is the cap for speech time. It keeps the six-second calm
+  // period without requiring hundreds of frames from a software renderer.
+  for (let i = 0; i < 32 && !(await bubble.isVisible()); i++) await page.clock.fastForward(250);
+  await expect(bubble).toBeVisible();
   expect((await bubble.textContent())!.length).toBeGreaterThan(4);
   await shot(page, info, '07-speech');
   await page.getByTestId('btn-fire').tap();
@@ -231,7 +230,7 @@ test('a normal shot at the hat: 30 points, +1 cork, one question, then the resul
   // the drag moves in whole pixels: correct the rest with a second, shorter drag
   await dragAim(page, aim.yaw - saved.yaw, aim.pitch - saved.pitch);
   await shot(page, info, '08-hat-aim');
-  await shoot(page);
+  await fireWithGauge(page);
   await expect(page.getByTestId('shopkeeper-question')).toBeVisible({ timeout: 20_000 });
   // the question closes any speech bubble and none starts while it is open
   await expect(page.getByTestId('shopkeeper-speech')).toBeHidden();
@@ -261,7 +260,7 @@ test('a normal shot at the fan face: one fan contact, a question, and the card n
   const saved = await savedAim(page);
   await dragAim(page, aim.yaw - saved.yaw, aim.pitch - saved.pitch);
   await shot(page, info, '11-fan-aim');
-  await shoot(page);
+  await fireWithGauge(page);
   await expect(page.getByTestId('shopkeeper-question')).toBeVisible({ timeout: 20_000 });
   await page.getByTestId('shopq-choice-B').click();
   await settle(page);
@@ -273,6 +272,7 @@ test('a normal shot at the fan face: one fan contact, a question, and the card n
 
 test('today\'s stall (daily) uses the same aim-first rules, its own record, and resumes after a reload', async ({ page }, info) => {
   test.setTimeout(90_000);
+  await page.clock.install();
   await page.goto('/?e2e=1');
   await page.getByTestId('home-daily-start').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');
@@ -282,7 +282,7 @@ test('today\'s stall (daily) uses the same aim-first rules, its own record, and 
   await page.locator('.rwd-order button').nth(1).click();
   await page.getByTestId('btn-right').tap();
   await expect.poll(async () => (await savedAim(page)).x).toBeCloseTo(0.14, 5);
-  await shoot(page);
+  await fireWithGauge(page);
   await settle(page);
   await shot(page, info, '13-daily');
   await page.reload();
