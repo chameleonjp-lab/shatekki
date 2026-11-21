@@ -14,6 +14,7 @@ import type { HintKind, QuestionChoice, TalkOutcome } from './expansion';
  * effects, consumes RNG or creates commands from this.
  */
 export interface ExpansionViewState {
+  readonly festival?: { readonly progress: import('./festival').FestivalProgress; readonly seed: number };
   /** 36 cells in row/column order. effectId is null until the cell was used (hidden until hit). */
   readonly cells: readonly { readonly cellId: BackgroundCellId; readonly used: boolean; readonly effectId: EffectId | null }[];
   readonly outlineSeries: SeriesId | null;

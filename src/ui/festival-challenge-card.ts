@@ -1,4 +1,5 @@
-import type { FestivalChallenge } from '../contracts';
+import type { FestivalChallenge, ShotSummary } from '../contracts';
+import { FESTIVAL_TEXT } from './festival-gimmick-text';
 import type { Locale } from '../i18n';
 import './festival-challenge-card.css';
 
@@ -20,15 +21,29 @@ const TITLES: Record<Locale, Record<FestivalChallenge, string>> = {
   th: { 'three-shelves': 'โดนครบสามชั้น!', 'fan-tray': 'แฉลบสองครั้งจากพัดและถาด!' },
 };
 
-export function festivalChallengeCard(doc: Document, ids: readonly FestivalChallenge[], locale: Locale, quiet: boolean): HTMLElement {
+export function festivalChallengeCard(doc: Document, summary: ShotSummary, locale: Locale, quiet: boolean): HTMLElement | null {
+  const entries: { cls: string; text: string }[] = (summary.festivalChallenges ?? []).map(id => ({ cls: id, text: TITLES[locale][id] }));
+  const [relay, domino, pair, bell, bellPrize, daruma, giant, fuse, encore] = FESTIVAL_TEXT[locale];
+  const words = { relay, 'red-white': pair, 'bell-open': bell, 'bell-prize': bellPrize, daruma, 'giant-drop': giant, fuse, encore } as const;
+  const ledgerId = { relay: 'relay', 'bell-prize': 'bell-prize', 'giant-drop': 'giant', encore: 'encore' } as const;
+  const fmt = new Intl.NumberFormat(locale);
+  for (const { mark } of summary.festival?.signals ?? []) {
+    if (!(mark in words)) continue;
+    const id = mark in ledgerId ? ledgerId[mark as keyof typeof ledgerId] : undefined;
+    const points = id ? summary.ledger.items.find(item => item.refId === `festival:${id}:${summary.shotId}`)?.points : undefined;
+    entries.push({ cls: mark, text: words[mark as keyof typeof words] + (points ? ' +' + fmt.format(points) : '') });
+  }
+  const count = summary.festival?.domino.length ?? 0;
+  if (count) entries.push({ cls: 'domino', text: domino + ' ×' + fmt.format(count) });
+  if (!entries.length) return null;
   const list = doc.createElement('ul');
   list.className = 'festival-challenges';
   list.dataset.quiet = String(quiet);
   list.dataset.testid = 'festival-challenges';
-  for (const id of ids) {
+  for (const entry of entries) {
     const tile = doc.createElement('li');
-    tile.className = id;
-    tile.textContent = TITLES[locale][id];
+    tile.className = entry.cls;
+    tile.textContent = entry.text;
     list.append(tile);
   }
   return list;

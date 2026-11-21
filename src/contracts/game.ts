@@ -281,6 +281,7 @@ export type GameCommand =
   | AnswerShopkeeperCommand
   /** A9: take or decline the shopkeeper's order, before the first shot only. */
   | { readonly type: 'ORDER'; readonly accept: boolean }
+  | { readonly type: 'FESTIVAL_ENCORE'; readonly accept: boolean }
   /** r007: "撃つ" opens the power gauge with the current position and aim fixed. */
   | { readonly type: 'OPEN_GAUGE' }
   /** r007: "照準に戻る" closes the gauge without using a cork. */
@@ -301,6 +302,7 @@ export const GAME_COMMAND_TYPES: readonly GameCommandType[] = [
   'SKIP_PRESENTATION',
   'ANSWER_SHOPKEEPER',
   'ORDER',
+  'FESTIVAL_ENCORE',
   'OPEN_GAUGE',
   'CANCEL_GAUGE',
   'CHOOSE_SHOPKEEPER_TALK',
@@ -356,7 +358,8 @@ export function parseCommand(input: unknown): CommandParseResult {
       if (o.choice !== 'A' && o.choice !== 'B') return { ok: false, reason: 'invalid choice' };
       return { ok: true, command: { type, shotId: o.shotId as ShotId, questionId: o.questionId, choice: o.choice as QuestionChoice } };
     }
-    case 'ORDER': {
+    case 'ORDER':
+    case 'FESTIVAL_ENCORE': {
       if (!hasOnlyKeys(o, ['type', 'accept'])) return { ok: false, reason: 'unexpected fields' };
       if (typeof o.accept !== 'boolean') return { ok: false, reason: 'accept must be a boolean' };
       return { ok: true, command: { type, accept: o.accept } };

@@ -12,6 +12,7 @@
  *    plans the effects once, waits for exactly one shopkeeper answer when a
  *    question is due (nothing advances meanwhile), then resumes the sim once.
  */
+import { festivalOf } from '../core/festival';
 import {
   ballisticFor,
   ballisticForModifiers,
@@ -171,7 +172,9 @@ export class GameController {
     const question = s.inFlight?.stage === 'question' ? (s.inFlight.plan?.question ?? null) : null;
     // The archived shot keeps both series. Their live outlines and refill labels end with play.
     const seriesExpired = s.phase === 'ended' || s.phase === 'abandoned';
+    const festival = festivalOf(s, this.deps.expansion);
     const expansion: ExpansionViewState = {
+      ...(festival ? { festival } : {}),
       cells: e.cells.map((c) => ({ cellId: c.cellId, used: c.used, effectId: c.used ? c.effectId : null })),
       outlineSeries: seriesExpired ? null : e.outlineSeries,
       assortmentSeries: seriesExpired ? null : e.assortmentSeries,
@@ -225,6 +228,7 @@ export class GameController {
       : this.deps.rules.reduceGame(before, cmd, this.ctx);
     if (after === before) return 'rejected';
     const operationId = cmd.type === 'FIRE' ? `${after.runId}/${after.shotsFired}/fire`
+      : cmd.type === 'FESTIVAL_ENCORE' ? `${after.runId}/festival-encore`
       : cmd.type === 'CHOOSE_SHOPKEEPER_TALK' ? `${after.runId}/shopkeeper-talk`
       : `${after.runId}/${session.record.token.revision + 1}/${cmd.type}`;
     this.clock?.advance(0, true);
@@ -321,6 +325,7 @@ export class GameController {
       this.presentationSkipped = false;
       this.deps.onShotFired?.(after);
       const active = isExpandedRunState(after) ? after.expansion.active : null;
+      const festival = festivalOf(after, this.deps.expansion);
       this.deps.world.fire(after.inFlight.request, {
         runId: after.runId,
         chooseTransform: this.deps.rules.transformChooser(after, this.deps.catalog),
@@ -328,6 +333,7 @@ export class GameController {
           ? {
               expanded: {
                 modifiers: active.modifiers,
+                ...(festival ? { festival } : {}),
                 ...(this.deps.expansion?.profile.festivalChallenges ? { festivalChallenges: true as const } : {}),
                 usableCells: after.expansion.cells.filter((c) => !c.used).map((c) => c.cellId),
                 ...(after.expansion.rewards

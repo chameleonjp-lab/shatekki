@@ -363,7 +363,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
         } else {
           reqs = soundsForSimEvent(event);
         }
-        const point = options.festival && (event.type === 'impact' || event.type === 'prizeContact') ? event.point : undefined;
+        const point = options.festival && (event.type === 'impact' || event.type === 'prizeContact' || event.type === 'festival') ? event.point : undefined;
         for (const r of reqs) play(r, point);
       } catch {
         /* audio must never break the game */

@@ -130,6 +130,12 @@ export const SOUNDS = {
     t('sine', 385, .012, .081, .45, 81),
     t('triangle', 177, .026, .088, .17, 54),
   ]),
+  'festival.bell.1': def(2, .14, [t('sine', 523, 0, .31, .43), t('sine', 1569, 0, .13, .13)]),
+  'festival.bell.2': def(2, .14, [t('sine', 587, 0, .31, .43), t('sine', 1761, 0, .13, .13)]),
+  'festival.bell.3': def(2, .14, [t('sine', 659, 0, .33, .45), t('sine', 1977, 0, .14, .14)]),
+  'festival.open': def(2, .25, [t('triangle', 784, 0, .18, .29), t('sine', 880, .14, .24, .32)]),
+  'festival.creak': def(1, .1, [n('bandpass', 540, 0, .2, .36, 2), t('triangle', 92, 0, .12, .27, 69)]),
+  'festival.fuse': def(2, .3, [n('highpass', 3500, 0, .27, .19), n('lowpass', 480, .3, .33, .46), t('sine', 96, .3, .32, .44, 47)]),
   'festival.drop.1': def(1, .06, [t('triangle', 850, 0, .085, .24, 650), n('bandpass', 2500, 0, .024, .11, 2)]),
   'festival.drop.2': def(1, .06, [t('sine', 1175, 0, .13, .26), t('triangle', 1568, .065, .125, .13)]),
   'festival.drop.3': def(1, .08, [t('sine', 146, 0, .2, .48, 60), t('triangle', 1568, .064, .16, .19)]),
@@ -169,6 +175,7 @@ export const SIM_EVENT_POLICY: Record<SimEventType, 'sound' | 'silent'> = {
   prizeReachedCollection: 'sound',
   prizeTransformed: 'sound',
   shotStage: 'silent',
+  festival: 'sound',
 };
 
 const DEVICE_SOUND = {
@@ -195,6 +202,7 @@ const PART_SOUND = { hat: 'shop.hat', fan: 'shop.fan', body: 'shop.body', feet: 
 
 const NONE: readonly SoundRequest[] = [];
 
+const FESTIVAL_BELL_NOTES = ['festival.bell.1', 'festival.bell.2', 'festival.bell.3'] as const;
 const FESTIVAL_DROPS = ['festival.drop.1', 'festival.drop.2', 'festival.drop.3', 'festival.drop.4'] as const;
 
 export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly SoundRequest[] {
@@ -234,6 +242,17 @@ export function soundsForSimEvent(ev: SimEvent, festivalDropCount = 0): readonly
       return [req(festivalDropCount > 0 ? FESTIVAL_DROPS[Math.min(festivalDropCount, FESTIVAL_DROPS.length) - 1]! : 'collectDrop')];
     case 'prizeTransformed':
       return [req('transform')];
+    case 'festival':
+      switch (ev.mark) {
+        case 'bell': return [req(FESTIVAL_BELL_NOTES[(ev.amount ?? 1) - 1] ?? FESTIVAL_BELL_NOTES[0])];
+        case 'bell-open': return [req('festival.open')];
+        case 'bell-wrong': return [req('effect.neutral', .55)];
+        case 'giant-slide': return [req('festival.creak', Math.min(1.15, .28 + (ev.amount ?? 0) * 5))];
+        case 'giant-drop': return [req('take.taiko')];
+        case 'fuse': return [req('festival.fuse')];
+        case 'relay': case 'red-white': case 'daruma': case 'bell-prize': case 'encore': return [req('effect.good')];
+        default: return NONE;
+      }
     case 'projectileSpawned':
     case 'projectileEnded':
     case 'prizeDamaged':

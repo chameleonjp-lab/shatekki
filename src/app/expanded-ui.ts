@@ -25,3 +25,5 @@ export { aimFirstTranslator } from './aim-first-text';
 export { prizePortrait } from '../view/prize-portrait';
 export { miniShotPath, resultHighlight, resultPrizeShelf, recordBreak } from '../ui/festival-result';
 export { festivalChallengeCard } from '../ui/festival-challenge-card';
+
+export { mountFestivalEncore } from '../ui/festival-encore';

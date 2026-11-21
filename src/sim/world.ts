@@ -87,6 +87,7 @@ import { observePrizeContacts } from './prize-contacts';
 import { DETACH_IMPULSE_RATIO, damageFor, impulseFor, initialSpeed, reflectionLimitFor, splitChildMarks, type Projectile, type ProjectileExpanded } from './shot';
 import { planTransforms } from './transform-plan';
 import { launchAngles } from './launch-angles';
+import { FestivalShotTracker } from './festival-shot';
 
 let rapierReady: Promise<void> | null = null;
 function initRapier(): Promise<void> {
@@ -178,6 +179,7 @@ interface ActiveShot {
   contactLog: { readonly key: string; readonly contact: RepresentativeContact; readonly order: number }[];
   /** Only r008 tracks this sequence, separately for each cork. */
   festivalReflectors: Map<ProjectileId, 'fan' | 'fan-tray'> | null;
+  festival: FestivalShotTracker | null;
   exits: { readonly reason: ProjectileEndReason; readonly position: Vec3; readonly velocity: Vec3; readonly generation: number; readonly index: number }[];
 }
 
@@ -213,6 +215,7 @@ export interface ShotWorldOptions {
   readonly transformPolicy?: TransformPolicy;
   /** Report physical prize impacts for live sound and sparks. No effect on scoring. */
   readonly reportPrizeContacts?: boolean;
+  readonly festival?: boolean;
   readonly limits?: Pick<ExpansionLimits, 'reflections' | 'maxPowerMultiplier'>;
   /** Rules versions with A2-A4 (r003): the chime, the piggy-bank slot and the seesaw tray. */
   readonly rewardDevices?: RewardDeviceLayout;
@@ -231,7 +234,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
   world.timestep = fixedDt;
 
   const targets = new Map<number, Target>();
-  const prizeContacts = options.reportPrizeContacts ? observePrizeContacts(world, tuning.limits, handle => {
+  const prizeContacts = (options.reportPrizeContacts || options.festival) ? observePrizeContacts(world, tuning.limits, handle => {
     const target = targets.get(handle);
     if (target?.t === 'prize') return target.id;
     if (target?.t === 'surface' && target.id.startsWith('shelf-')) return null;
@@ -540,9 +543,15 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     emit((eventId, shotId) => ({ type: 'projectileEnded', eventId, shotId, projectileId: p.id, reason, position: p.position }));
   };
 
+  const festivalHome = (p: LivePrize): Vec3 => {
+    const base = slotById.get(p.src.homeSlot)?.spawnBase ?? p.src.pose.position;
+    return { ...base, y: base.y + .15 };
+  };
+
   const hitPrize = (a: ActiveShot, p: Projectile, lp: LivePrize, point: Vec3, speed: number, dir: Vec3): void => {
     const load: LoadResult = a.request.load;
     const damage = damageFor(speed, p, load, tuning);
+    a.festival?.direct(lp.src.instanceId);
     const hpBefore = lp.hp;
     lp.hp = Math.max(0, lp.hp - damage);
     const hpZero = lp.hp <= 0;
@@ -796,6 +805,14 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     );
   };
 
+  const moveProjectile = (a: ActiveShot, p: Projectile, time: number): void => {
+    const end = add(p.position, scale(p.velocity, time));
+    if (a.festival && time > 0) {
+      a.festival.sweep(p.position, end, p.x?.radius ?? tuning.cork.radius, p.reflections, impulseFor(len(p.velocity), p, a.request.load, tuning));
+    }
+    p.position = end;
+  };
+
   const stepProjectile = (a: ActiveShot, p: Projectile, dt: number): void => {
     if (a.elapsed - p.spawnedAtSec >= tuning.limits.maxFlightSec) return endProjectile(a, p, 'timeLimit');
     p.velocity = { ...p.velocity, y: p.velocity.y - (p.x ? p.x.gravity : GRAVITY * tuning.cork.gravityScale) * dt };
@@ -803,16 +820,16 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     for (let i = 0; i < MAX_HITS_PER_STEP && remaining > 1e-9 && !p.ended; i++) {
       const hit = world.castShape(p.position, IDENT, p.velocity, p.x ? ballFor(p.x.radius) : corkShape, 0, remaining, false);
       if (!hit) {
-        p.position = add(p.position, scale(p.velocity, remaining));
+        moveProjectile(a, p, remaining);
         remaining = 0;
         break;
       }
       const toi = Math.min(remaining, Math.max(0, hit.time_of_impact));
-      p.position = add(p.position, scale(p.velocity, toi));
+      moveProjectile(a, p, toi);
       remaining -= toi;
       const target = targets.get(hit.collider.handle);
       if (!target) {
-        p.position = add(p.position, scale(p.velocity, remaining));
+        moveProjectile(a, p, remaining);
         break;
       }
       onCorkHit(a, p, target, vec(hit.normal1), a.elapsed - remaining);
@@ -940,6 +957,7 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       ...(a.expanded && a.barrierId ? { barrierId: a.barrierId, appliedTransforms: a.applied, deferredTransforms: a.deferred } : {}),
       ...(a.expanded?.rewards ? { rewardContacts: { targetHit: a.targetHit, chimeAfterReflection: a.chimeAfterReflection, seesawInstances: [...a.seesaw], piggyDeposit: a.piggyDeposit } } : {}),
       ...(facedCells ? { facts: shotFacts(a) } : {}),
+      ...(a.festival ? { festival: a.festival.finish(a.collected.map(prize => prize.instanceId)) } : {}),
       ...(a.festivalReflectors ? { fanTrayProjectiles: [...a.festivalReflectors].flatMap(([id, seq]) => seq === 'fan-tray' ? [id] : []) } : {}),
     };
     outcomes.clear();
@@ -1167,7 +1185,12 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
     if (a) prizeContacts?.beforeStep(live.values());
     world.step(prizeContacts?.queue);
     if (a && active === a) {
-      prizeContacts?.afterStep(a.shotId, event => pending.push(event));
+      prizeContacts?.afterStep(a.shotId, event => {
+        pending.push(event);
+        if (!a.festival || !event.b) return;
+        const first = live.get(event.a), second = live.get(event.b);
+        if (first && second) a.festival.contact(event.a, event.b, festivalHome(first), festivalHome(second));
+      });
       // A3: record a pass through the tray BEFORE collection removes the prize (same step counts).
       detectTray(a);
       detectCollections(a);
@@ -1356,6 +1379,9 @@ export async function createShotWorld(layout: BoothLayout, catalog: RuntimeCatal
       seesaw: [],
       contactLog: [],
       festivalReflectors: context.expanded?.festivalChallenges ? new Map() : null,
+      festival: context.expanded?.festival ? new FestivalShotTracker(context.expanded.festival.progress, context.expanded.festival.seed, signal => {
+        emit((eventId, shotId) => ({ type: 'festival', eventId, shotId, ...signal }));
+      }) : null,
       exits: [],
     };
     active = a;
