@@ -206,6 +206,7 @@ export function cardBody(doc: Document, m: AimFirstCardModel, t: AimFirstCardTex
 }
 
 export interface AimFirstCardHandle {
+  readonly isVisible: boolean;
   show(model: AimFirstCardModel, opts: { readonly quiet: boolean; readonly path?: HTMLElement | null; readonly challenges?: HTMLElement | null }): void;
   hide(): void;
   destroy(): void;
@@ -277,6 +278,7 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t'], p
   const onResize = () => { if (!card.hidden) place(); };
   win.addEventListener('resize', onResize);
   return {
+    get isVisible() { return !card.hidden; },
     show(m, opts) {
       const parts = cardBody(doc, m, t, portrait);
       card.dataset.kind = m.kind;
@@ -287,7 +289,9 @@ export function mountAimFirstCard(root: HTMLElement, t: AimFirstCardText['t'], p
       card.hidden = false;
       watch();
       place();
-      if (timer !== null) win.clearTimeout(timer);
+      hold();
+      // A trajectory or a confirmed challenge stays available for review until dismissal or the next shot.
+      if (opts.path || opts.challenges) return;
       const rows = m.ammo.length + m.lines.length + m.parts.length + m.sets.length;
       timer = win.setTimeout(hide, (m.kind === 'set' ? 5200 : 3200) + Math.max(0, rows - 3) * 700);
     },

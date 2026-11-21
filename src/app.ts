@@ -603,7 +603,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (!c || !speech || !speechBubble || !expandedUi) return;
     const s = c.current;
     const view = c.viewState();
-    const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen &&
+    const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen && !afCard?.isVisible &&
       !view.expansion?.question && view.expansion?.rewards?.order?.status !== 'offered' && recovery.hidden && reasons.length === 0;
     const head = renderer?.projectShopkeeperHead?.() ?? null;
     const facts = { state: s, view, last: c.snapshot().lastSummary, maxBonusAmmo: tuning.maxBonusAmmoTotal, rewards: rewardCfg, mode, recorded: !atomic?.memory, shopkeeperVisible: head !== null };
