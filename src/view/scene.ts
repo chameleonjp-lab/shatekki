@@ -16,9 +16,12 @@ import { createRewardPickTargets } from './reward-props';
 import { buildBooth, type BoothBuild } from './booth';
 import { createBackgroundCells, type BackgroundCellsView } from './background-cells';
 import { createPrizeVisualFactory, type PrizeVisualFactory, type PrizeVisualSpec } from './prizes';
+import { createContactShadows } from './materials/contact-shadows';
+import { createStallTextures } from './materials/procedural-textures';
 
 export interface SceneGraphDeps {
   readonly illustratedRewards?: boolean;
+  readonly duskMaterials?: boolean;
   readonly layout: BoothLayout;
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
   /**
@@ -86,6 +89,7 @@ interface GraphInternals {
   /** The radius the graph was built with (restored when the view state carries none). */
   readonly basePickInflate: number;
   readonly factory: PrizeVisualFactory;
+  readonly contactShadows: ReturnType<typeof createContactShadows> | null;
   readonly flashes: Flash[];
   readonly handledEvents: Set<string>;
   readonly corkMaterials: Map<string, THREE.Material>;
@@ -124,11 +128,16 @@ function buildGun(): THREE.Group {
   return g;
 }
 
-function buildReticle(): THREE.Group {
+function buildReticle(duskMaterials = false): THREE.Group {
   const g = new THREE.Group();
   g.name = 'reticle';
   const mat = new THREE.MeshBasicMaterial({ color: 0xfff6c8, depthTest: false, transparent: true, opacity: 0.95 });
   const dark = new THREE.MeshBasicMaterial({ color: 0x2b2624, depthTest: false, transparent: true, opacity: 0.55 });
+  if (duskMaterials) {
+    // The aiming mark belongs to the interface. Keep its original contrast in the dusk scene.
+    mat.fog = dark.fog = false;
+    mat.toneMapped = dark.toneMapped = false;
+  }
   const ringBack = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.22, 20), dark);
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.88, 1.1, 20), mat);
   const dot = new THREE.Mesh(new THREE.CircleGeometry(0.16, 10), mat);
@@ -182,7 +191,10 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1d1424); // dusk indigo; the stall fills the view
   const pickInflate = deps.corkRadius ?? DEFAULT_PICK_CORK_RADIUS;
-  const booth = buildBooth(layout, pickInflate, deps.illustratedRewards);
+  const textures = deps.duskMaterials ? createStallTextures() : undefined;
+  const booth = buildBooth(layout, pickInflate, deps.illustratedRewards, textures);
+  const contactShadows = textures?.shadow ? createContactShadows(layout, textures.shadow) : null;
+  if (contactShadows) scene.add(contactShadows.mesh);
   scene.add(booth.group, booth.proxies);
   const cells = layout.backgroundCells && layout.backgroundCells.length > 0 ? createBackgroundCells(layout) : null;
   if (cells) scene.add(cells.group);
@@ -195,7 +207,7 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
   const effectsLayer = new THREE.Group();
   effectsLayer.name = 'effects';
   const gun = buildGun();
-  const reticle = buildReticle();
+  const reticle = buildReticle(deps.duskMaterials);
   scene.add(prizeLayer, projectileLayer, effectsLayer, gun, reticle);
 
   const proxyLayer = new THREE.Group();
@@ -210,7 +222,8 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
     rewardPick: deps.illustratedRewards ? createRewardPickTargets(proxyMaterial) : null,
     pickInflate,
     basePickInflate: pickInflate,
-    factory: createPrizeVisualFactory(),
+    factory: createPrizeVisualFactory(deps.duskMaterials),
+    contactShadows,
     flashes: buildFlashPool(effectsLayer),
     handledEvents: new Set(),
     corkMaterials: new Map(),
@@ -265,6 +278,8 @@ export function createSceneGraph(deps: SceneGraphDeps): SceneGraph {
       internals.rewardPick?.dispose();
       internals.proxyMaterial.dispose();
       internals.factory.dispose();
+      contactShadows?.dispose();
+      textures?.dispose();
       internals.corkGeo.dispose();
       internals.trailGeo.dispose();
       for (const m of internals.corkMaterials.values()) m.dispose();
@@ -329,6 +344,7 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
 
   // ---- prizes, keyed by instance id
   const seen = new Set<string>();
+  it.contactShadows?.beginFrame();
   for (const p of frame.prizes) {
     const id = p.instanceId as string;
     seen.add(id);
@@ -366,7 +382,9 @@ export function applyFrame(graph: SceneGraph, frame: SimulationFrame): FrameAppl
     const show = !p.collected;
     if (!show && m.visible) hidden++;
     m.visible = show;
+    if (show) it.contactShadows?.add(m);
   }
+  it.contactShadows?.endFrame();
   for (const [id, node] of graph.prizes) {
     if (!seen.has(id)) {
       graph.prizeLayer.remove(node.mesh);

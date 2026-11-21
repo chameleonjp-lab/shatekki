@@ -18,6 +18,7 @@ import { createEffects, type Effects, type EffectsHud } from './effects';
 import { createDomHud, type DomHud } from './hud';
 import { createExpandedView, type ExpandedView, type ExpandedViewModel } from './expanded-view';
 import { createExpandedOverlay, type ExpandedOverlay } from './expanded-overlay';
+import { createStallEnvironment } from './materials/procedural-textures';
 
 export interface ThreeRendererDeps {
   readonly resolvePrize: (typeId: PrizeTypeId) => PrizeVisualSpec;
@@ -39,6 +40,8 @@ export interface ThreeRendererDeps {
   readonly onSettled?: (cls: ShotClass, summary: ShotSummary) => void;
   /** Expanded rules only: cells, series outline and the FX093-FX100 hints. */
   readonly expanded?: ExpandedRendererDeps;
+  /** Opt-in presentation for the r007 internal candidate. */
+  readonly duskMaterials?: boolean;
 }
 
 /**
@@ -76,7 +79,19 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   webgl.shadowMap.enabled = false;
   webgl.outputColorSpace = THREE.SRGBColorSpace;
 
-  const graph = createSceneGraph({ layout, illustratedRewards: deps.expanded?.illustratedRewards, resolvePrize: deps.resolvePrize, ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}) });
+  const graph = createSceneGraph({
+    layout, illustratedRewards: deps.expanded?.illustratedRewards, resolvePrize: deps.resolvePrize,
+    duskMaterials: deps.duskMaterials,
+    ...(deps.corkRadius !== undefined ? { corkRadius: deps.corkRadius } : {}),
+  });
+  const environment = deps.duskMaterials ? createStallEnvironment() : null;
+  if (deps.duskMaterials) {
+    webgl.toneMapping = THREE.ACESFilmicToneMapping;
+    webgl.toneMappingExposure = 1.12;
+    graph.scene.fog = new THREE.FogExp2(0x1b1020, 0.085);
+    graph.scene.environment = environment; // Three.js builds and caches the prefiltered reflection map.
+    graph.scene.environmentIntensity = 0.8;
+  }
   const camera = new THREE.PerspectiveCamera(60, 0.5, 0.05, 30);
   let width = Math.max(1, canvas.clientWidth || 402);
   let height = Math.max(1, canvas.clientHeight || 874);
@@ -146,6 +161,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
       expandedView?.dispose();
       domHud?.dispose();
       graph.dispose();
+      environment?.dispose();
       webgl.dispose();
     },
     lastReticle: () => last,

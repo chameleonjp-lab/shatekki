@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOOTH_LAYOUT,
+  BOOTH_LAYOUT_V3,
   IDENTITY_QUAT,
   asPrizeTypeId,
   mintId,
@@ -19,6 +20,7 @@ import {
 import { aimDirection, aimTargetPosition, applyFrame, buildPrizeGeometry, cameraPose, computeReticle, createSceneGraph, fovForAspect, muzzlePosition, updateAim } from '../../src/view';
 import { PRIZE_RECIPES } from '../../src/view/assets/prize-recipes';
 import { triangleCount } from '../../src/view/assets/kit';
+import { createContactShadows } from '../../src/view/materials/contact-shadows';
 
 // ------------------------------------------------------------------ fixtures
 // Local shape fixtures: src/catalog is written in parallel and must not be imported.
@@ -79,6 +81,67 @@ const toBox = (b: { center: { x: number; y: number; z: number }; halfExtents: { 
     new THREE.Vector3(b.center.x - b.halfExtents.x - EPS, b.center.y - b.halfExtents.y - EPS, b.center.z - b.halfExtents.z - EPS),
     new THREE.Vector3(b.center.x + b.halfExtents.x + EPS, b.center.y + b.halfExtents.y + EPS, b.center.z + b.halfExtents.z + EPS),
   );
+
+describe('r007 dusk materials', () => {
+  it('keeps prize geometry and pick targets identical and builds without a canvas', () => {
+    const layout = BOOTH_LAYOUT_V3;
+    const plain = createSceneGraph({ layout, resolvePrize });
+    const dusk = createSceneGraph({ layout, resolvePrize, duskMaterials: true });
+    const prize = prizeFrame(1, 5, 0, 1.6, -2.09); // glass
+    try {
+      applyFrame(plain, frame([prize]));
+      applyFrame(dusk, frame([prize]));
+      const plainPrize = plain.prizes.get(prize.instanceId)!.mesh;
+      const duskPrize = dusk.prizes.get(prize.instanceId)!.mesh;
+      expect(plainPrize.material).toBeInstanceOf(THREE.MeshPhongMaterial);
+      expect(duskPrize.material).toBeInstanceOf(THREE.MeshPhysicalMaterial);
+      expect(worldBox(duskPrize)).toEqual(worldBox(plainPrize));
+      expect(dusk.pickTargets().map((object) => [object.name, worldBox(object)])).toEqual(
+        plain.pickTargets().map((object) => [object.name, worldBox(object)]),
+      );
+      expect(dusk.booth.group.getObjectByName('booth:wood-grain')).toBeDefined();
+      expect(plain.booth.group.getObjectByName('booth:wood-grain')).toBeUndefined();
+      expect(dusk.scene.getObjectByName('shelf-contact-shadows')).toBeUndefined();
+    } finally {
+      plain.dispose();
+      dusk.dispose();
+    }
+  });
+
+  it('projects contact shadows onto the current shelf only and drops stale instances', () => {
+    const layout = BOOTH_LAYOUT_V3;
+    const texture = new THREE.Texture();
+    const shadows = createContactShadows(layout, texture);
+    const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    geometry.computeBoundingBox();
+    const material = new THREE.MeshBasicMaterial();
+    const prize = new THREE.Mesh(geometry, material);
+    const tier = layout.tiers[1]!;
+    try {
+      shadows.beginFrame();
+      prize.position.set(tier.halfWidth - 0.03, tier.topY + 0.06, tier.centerZ);
+      prize.updateMatrixWorld();
+      shadows.add(prize);
+      shadows.endFrame();
+      expect(shadows.mesh.count).toBe(1);
+      const shadow = new THREE.Matrix4();
+      shadows.mesh.getMatrixAt(0, shadow);
+      expect(shadow.elements[0]).toBeCloseTo(0.06);
+      expect(shadow.elements[13]).toBeCloseTo(tier.topY + 0.0045);
+      shadows.beginFrame();
+      prize.position.y += 0.14;
+      prize.updateMatrixWorld();
+      shadows.add(prize);
+      shadows.endFrame();
+      expect(shadows.mesh.count).toBe(0);
+    } finally {
+      shadows.dispose();
+      geometry.dispose();
+      material.dispose();
+      texture.dispose();
+    }
+  });
+});
 
 // -------------------------------------------------------------------- booth
 

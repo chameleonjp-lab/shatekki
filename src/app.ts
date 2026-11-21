@@ -718,6 +718,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     try {
       renderer = view.createThreeRenderer(canvas, {
         layout,
+        duskMaterials: bundle.key === 'expanded-aim-first',
         ...(expansion ? { expanded: { catalog, expansion, illustratedRewards, translate: expText, prizeName: (typeId) => prizeName(i18n.locale, typeId) } } : {}),
         corkRadius: tuning.cork.radius,
         translate: (key, params) => (key in UI_KEYS ? i18n.t(key as UiKey, params) : key),
