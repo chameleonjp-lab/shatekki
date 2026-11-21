@@ -1,3 +1,4 @@
+import { ShotReplayRecorder } from './shot-replay';
 /**
  * WebGL renderer implementing the `Renderer` port (Task 11, owner: Visual).
  *
@@ -65,6 +66,7 @@ export interface ThreeRenderer extends Renderer {
   beginFestivalShot(shotId: ShotId, perfect: boolean): void;
   presentFestivalShot(summary: ShotSummary, freshSets: number, ammoBefore: number, quiet: boolean): void;
   clearFestival(): void;
+  readonly shotReplay: ShotReplayRecorder | null;
   /** Reticle ray of the last render() (null before the first one). */
   lastReticle(): ReticleResult | null;
   /** What the expanded overlay showed in the last render() (null for rules-v1). */
@@ -125,6 +127,7 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const festival = deps.duskMaterials
     ? createShotFestival(canvas, graph.effectsLayer, layout, graph.booth.group.getObjectByName('booth:washi'))
     : null;
+  const shotReplay = festival ? new ShotReplayRecorder() : null;
   const reflections = new Map<string, number>();
   let festivalShot: ShotId | null = null;
   let perfect = false;
@@ -132,14 +135,17 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
   const reduceMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
   return {
     graph,
+    shotReplay,
     beginFestivalShot(shotId, isPerfect) {
       festivalShot = shotId;
+      shotReplay?.begin(shotId);
       perfect = isPerfect;
       reflections.clear();
       kickStart = -Infinity;
       festival?.begin(shotId, isPerfect && !reduceMotion.matches);
     },
     presentFestivalShot(summary, freshSets, ammoBefore, quiet) {
+      shotReplay?.confirm(summary);
       const still = quiet || reduceMotion.matches;
       festival?.settle(summary, freshSets, ammoBefore, still);
       if (festival && !still) {
@@ -154,12 +160,14 @@ export function createThreeRenderer(canvas: HTMLCanvasElement, deps: ThreeRender
     },
     clearFestival() {
       festivalShot = null;
+      shotReplay?.clear();
       reflections.clear();
       festival?.clear();
       graph.cells?.clearCelebration();
     },
     render(frame: SimulationFrame, view: ViewState): void {
       if (disposed) return;
+      shotReplay?.capture(frame);
       applyFrame(graph, frame);
       applyCameraPose(camera, cameraPose(layout, view.standX, width / height, view.aimFirst?.aim), width / height);
       last = updateAim(graph, view);

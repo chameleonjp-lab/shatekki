@@ -603,7 +603,7 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
     if (!c || !speech || !speechBubble || !expandedUi) return;
     const s = c.current;
     const view = c.viewState();
-    const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen &&
+    const calm = s.phase === 'aiming' && s.pauseReasons.length === 0 && !c.persistencePending && !talkPanel?.isOpen && !afCard?.isVisible &&
       !view.expansion?.question && view.expansion?.rewards?.order?.status !== 'offered' && recovery.hidden && reasons.length === 0;
     const head = renderer?.projectShopkeeperHead?.() ?? null;
     const facts = { state: s, view, last: c.snapshot().lastSummary, maxBonusAmmo: tuning.maxBonusAmmoTotal, rewards: rewardCfg, mode, recorded: !atomic?.memory, shopkeeperVisible: head !== null };
@@ -687,7 +687,14 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
                   { summary: event.summary, freshSets: event.freshSets, ammoBeforeShot: event.ammoBeforeShot, effectLines, nextLine: nextLineOf(controller?.current) },
                   { t: expText, prizeName: (id) => prizeName(i18n.locale, id), setName: (id) => setDisplayName(i18n.locale, String(id), expText) || String(id), setMembers: (id) => catalog.sets.get(id)?.requiredTypeIds ?? [] },
                 );
-                afCard.show(model, { quiet: event.replayed || event.reducedMotion });
+                const bankShot = event.summary.prizeOutcomes.some(prize => prize.collected && prize.hits.some(hit => hit.reflectionIndex > 0));
+                const replay = !event.replayed && bankShot
+                  ? renderer?.shotReplay?.latest(event.summary.runId, event.summary.shotId)
+                  : null;
+                afCard.show(model, {
+                  quiet: event.replayed || event.reducedMotion,
+                  path: replay ? expandedUi.miniShotPath(doc, replay, i18n.locale, event.reducedMotion) : null,
+                });
                 return;
               }
               effectResults?.show(event.summary);
@@ -1204,11 +1211,16 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
   const showResult = (result: FinalResult, selfBestBefore: number | null, newBest = false, lastShot: LastShotInput | null = null, readOnly = false) => {
     clearScreen();
     setScreen('result');
+    afCard?.hide();
+    speechBubble?.hide();
     // A result reopened after a reload is read only: no sounds or celebration again (plan T2).
     if (!readOnly) {
       cue('resultShow');
       if (newBest) cue('newBest');
     }
+    const replay = result.status === 'completed' ? renderer?.shotReplay?.highlight(result.runId) : null;
+    const quietResult = readOnly || (win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+    const resultPrizeName = (id: string) => prizeName(i18n.locale, id);
     const handle = mountResult(
       screens,
       {
@@ -1223,6 +1235,12 @@ export function createApp(root: HTMLElement, win: Window, bundle: GameplayBundle
             doc, { ...set, members: catalog.sets.get(set.setId)?.requiredTypeIds ?? [] },
             id => prizeName(i18n.locale, id), expText('reward.set.seal'),
           ),
+        } : {}),
+        ...(festivalPreview && expandedUi ? {
+          renderPrizeShelf: saved => expandedUi.resultPrizeShelf(doc, saved, catalog, i18n.locale, resultPrizeName, quietResult),
+          ...(replay ? { highlight: expandedUi.resultHighlight(doc, replay, i18n.locale, quietResult, resultPrizeName) } : {}),
+          ...(newBest && selfBestBefore !== null && result.score > selfBestBefore
+            ? { recordBreak: expandedUi.recordBreak(doc, selfBestBefore, result.score, i18n.locale, quietResult) } : {}),
         } : {}),
         ...(resultText ? { text: resultText } : {}),
       },

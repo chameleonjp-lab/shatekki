@@ -1,0 +1,104 @@
+.festival-mini-path {
+  display: flex;
+  height: 46px;
+  margin-top: 5px;
+  border: 1px solid #94662f;
+  border-radius: 5px;
+  background: repeating-linear-gradient(0deg, #2b1722, #2b1722 10px, #4c3041 11px);
+}
+.festival-path { display: block; width: 100%; height: 100%; }
+.festival-path polyline {
+  fill: none;
+  stroke: #ffe8a2;
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.festival-path polyline.branch { stroke: #69dfff; }
+.festival-path circle { fill: #ff606e; stroke: #fff3b8; stroke-width: 1px; }
+.festival-highlight,
+.sec.festival-highlight {
+  background: radial-gradient(ellipse at 50% 0%, #793527 0%, #371621 72%);
+  border: 1px solid #e9aa51;
+  box-shadow: inset 0 0 0 3px #e9aa5133;
+  text-align: center;
+}
+.festival-highlight h3 { color: #fff0b2; font-size: 1.45rem; }
+.festival-highlight p { margin: 0 0 5px; color: #ffd17b; font-weight: 800; }
+.festival-highlight-picture {
+  height: 134px;
+  margin: 0 0 8px;
+  border: 1px solid #e9aa5180;
+  border-radius: 8px;
+  background: repeating-linear-gradient(0deg, #271725, #271725 21px, #513747 22px);
+}
+.festival-highlight-prizes,
+.festival-prize-shelf { padding: 0; margin: 0; list-style: none; }
+.festival-highlight-prizes { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.festival-highlight-prizes li { display: flex; align-items: center; gap: 4px; font-size: .8rem; }
+.festival-prize-shelf { display: grid; width: 100%; grid-template-columns: repeat(auto-fit,minmax(84px,1fr)); gap: 6px; }
+.festival-prize {
+  display: grid;
+  align-content: end;
+  justify-items: center;
+  gap: 3px;
+  padding: 6px 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: .8rem;
+  border: 1px solid #745337;
+  border-bottom: 4px solid #8a4d2e;
+  border-radius: 5px;
+  background: linear-gradient(#362238,#211423);
+}
+.festival-prize.in-set { border-color: #77dac7; box-shadow: inset 0 0 12px #77dac744; }
+.festival-prize.featured {
+  background: radial-gradient(ellipse at 50% 37%, #a3642b, #3c2030 68%);
+  color: #fff0c0;
+  border-color: #ffce69;
+}
+.festival-prize.featured b { font-size: .72rem; }
+.festival-record { position: relative; margin: 4px auto; width: fit-content; min-width: 5.5rem; }
+.festival-record strong,
+.festival-record-half {
+  display: block;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.festival-record strong { font-size: 1.35rem; color: #ffdc75; border: 1px solid #be863a; }
+.festival-record-half { position: absolute; inset: 0; display: grid; place-items: center; color: #fff1cc; background: #80502c; border: 1px solid #b58148; }
+.festival-record-half.left { clip-path: polygon(0 0, 56% 0, 46% 42%, 53% 52%, 45% 100%, 0 100%); --peel: -1; }
+.festival-record-half.right { clip-path: polygon(56% 0, 100% 0, 100% 100%, 45% 100%, 53% 52%, 46% 42%); --peel: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .festival-path.is-playing polyline { animation: festival-draw .7s ease-out both; animation-delay: calc(var(--branch) * .09s); }
+  .festival-path.is-playing circle { animation: festival-contacts .3s .57s both; }
+  .festival-record-half { animation: festival-record-peel .65s .15s ease-out both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .festival-record-half { display: none; }
+}
+@keyframes festival-draw {
+  0% { stroke-dasharray: 1 1; stroke-dashoffset: 1; }
+  99% { stroke-dasharray: 1 1; stroke-dashoffset: 0; }
+  100% { stroke-dasharray: none; stroke-dashoffset: 0; }
+}
+@keyframes festival-contacts { from { opacity: 0; } to { opacity: 1; } }
+@keyframes festival-record-peel {
+  0% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(calc(var(--peel) * 36px)) translateY(-8px) rotate(calc(var(--peel) * 20deg)); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .festival-mini-path .festival-path.is-playing polyline { animation-duration: .25s; animation-delay: 0s; }
+  .festival-mini-path .festival-path.is-playing circle { animation-delay: .15s; }
+  .festival-prize-shelf.is-revealing .festival-prize {
+    animation: festival-shelf-arrive .25s var(--arrival) both;
+  }
+}
+@keyframes festival-shelf-arrive {
+  from { transform: translateY(4px); }
+  to { transform: translateY(0); }
+}

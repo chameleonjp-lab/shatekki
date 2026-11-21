@@ -23,3 +23,4 @@ export { speechConditions } from '../ui/speech-conditions';
 export { effectKeyOverrides } from '../i18n/effect-keys';
 export { aimFirstTranslator } from './aim-first-text';
 export { prizePortrait } from '../view/prize-portrait';
+export { miniShotPath, resultHighlight, resultPrizeShelf, recordBreak } from '../ui/festival-result';

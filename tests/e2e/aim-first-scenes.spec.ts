@@ -71,6 +71,9 @@ for (const name of ['fan-take', 'tray-take'] as const) {
     await aimAndFire(page, sc);
     await settle(page);
     await expect(page.getByTestId('shot-card')).toBeVisible();
+    const path = page.getByTestId('shot-mini-path');
+    await expect(path.getByRole('img')).toBeVisible();
+    expect(await path.locator('circle').count()).toBeGreaterThanOrEqual(2);
     await expectCardClear(page);
     await shot(page, info, `scene-${name}-card`);
     const summary = (await readRecordedRun(page)).lastSummary!;
@@ -132,4 +135,38 @@ test('T06 frame intervals while aiming and during a real shot (recorded, not a d
   expect(flying.frames).toBeGreaterThan(10);
   // the shot still settled to the same confirmed result as without the measurement
   expect((await readRecordedRun(page)).lastSummary!.touchedFirstHitTargets).toEqual(['shopkeeper:fan']);
+});
+
+test('T20 the last cork earns a replay and a prize shelf that survives a reload', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  const sc = scene('fan-take');
+  await page.clock.install();
+  // Start with one cork and the full bonus already spent. Keep the saved ammo equation valid.
+  const beforeFire = { ...sc.state, ammo: 1, bonusAmmoTotal: 10, ammoLostTotal: 19 };
+  await restoreShotStart(page, { beforeFire, gameTick: 0 }, sc.discovered, 1);
+  await aimAndFire(page, sc);
+  await page.getByTestId('shopq-choice-A').click({ timeout: 25_000 });
+  await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('shot-card')).toBeHidden();
+  const recorded = await readRecordedRun(page);
+  expect(recorded.result?.collected.length).toBeGreaterThan(0);
+  expect(recorded.selfBestBefore).toBe(1);
+  const record = page.getByTestId('festival-record');
+  await expect(record).toContainText(`+${recorded.result!.score - 1}`);
+  await expect(record.locator('.festival-record-half')).toHaveCount(2);
+  const highlight = page.getByTestId('festival-highlight');
+  await expect(highlight.getByRole('img')).toBeVisible();
+  await expect(highlight.locator('polyline')).not.toHaveCount(0);
+  await highlight.getByRole('button').click();
+  await expect(highlight.getByRole('img')).toHaveClass(/is-playing/);
+  const shelf = page.getByTestId('festival-prize-shelf');
+  await expect(shelf.locator('.featured')).toHaveCount(1);
+  const prizeTypes = new Set(recorded.result?.collected.map(prize => prize.typeId));
+  await expect(shelf.locator('.rwd-portrait')).toHaveCount(prizeTypes.size);
+  await shot(page, info, 'result-highlight');
+  await page.reload();
+  await expect(page.getByTestId('result-score')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('festival-highlight')).toHaveCount(0);
+  await expect(record.locator('.festival-record-half')).toHaveCount(0);
+  await expect(shelf.locator('.rwd-portrait')).toHaveCount(prizeTypes.size);
 });
