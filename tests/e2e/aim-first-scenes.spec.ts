@@ -28,8 +28,8 @@ for (const name of ['pair-first', 'pair-again', 'trio-first', 'pair-and-trio', '
     if (name === 'pair-and-trio') {
       await expect(page.locator('.shot-festival-border')).toHaveAttribute('data-tier', '4');
     }
-    await shot(page, info, `scene-${name}`);
     await expectCardClear(page);
+    await shot(page, info, `scene-${name}`);
     const record = await readRecordedRun(page);
     const summary = record.lastSummary!;
     expect([...summary.newlyCompletedSets].sort()).toEqual([...sc.expect.sets!].sort());
@@ -71,8 +71,8 @@ for (const name of ['fan-take', 'tray-take'] as const) {
     await aimAndFire(page, sc);
     await settle(page);
     await expect(page.getByTestId('shot-card')).toBeVisible();
-    await shot(page, info, `scene-${name}-card`);
     await expectCardClear(page);
+    await shot(page, info, `scene-${name}-card`);
     const summary = (await readRecordedRun(page)).lastSummary!;
     expect(summary.collected.length).toBeGreaterThanOrEqual(1);
     expect(summary.ledger.items.some((i) => i.kind === 'trick')).toBe(true); // the existing reflection-take points

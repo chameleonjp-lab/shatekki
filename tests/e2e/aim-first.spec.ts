@@ -272,6 +272,7 @@ test('a normal shot at the fan face: one fan contact, a question, and the card n
 
 test('today\'s stall (daily) uses the same aim-first rules, its own record, and resumes after a reload', async ({ page }, info) => {
   test.setTimeout(90_000);
+  await page.clock.install();
   await page.goto('/?e2e=1');
   await page.getByTestId('home-daily-start').click();
   await expect(page.getByTestId('controls')).toHaveAttribute('data-mode', 'aiming');

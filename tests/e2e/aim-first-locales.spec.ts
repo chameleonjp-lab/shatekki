@@ -24,13 +24,13 @@ for (const locale of LOCALES) {
       await aimAndFire(page, sc);
       const card = page.getByTestId('shot-card');
       await expect(card).toHaveAttribute('data-kind', 'set', { timeout: 30_000 });
+      await expectCardClear(page);
       if (process.env.SHATEKKI_EVIDENCE === '1') {
         mkdirSync('test-results/aim-first', { recursive: true });
         await page.screenshot({ path: `test-results/aim-first/locale-${locale}.png` });
       }
       const text = (await card.innerText()).trim();
       expect(text).not.toMatch(/\baf\.[a-z]|\bset\.[A-Z]|\bprize\.[A-Z]|\{[a-z]+\}/);
-      await expectCardClear(page);
       // nothing in the card is cut off sideways
       expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     } finally {
